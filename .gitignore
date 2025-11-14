@@ -1,0 +1,35 @@
+# Node modules
+node_modules/
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+
+# Docker volumes
+postgres_data/
+n8n_data/
+redis_data/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Build outputs
+frontend/build/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
