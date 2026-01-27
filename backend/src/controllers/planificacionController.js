@@ -158,6 +158,19 @@ exports.subirPlanificacion = async (req, res) => {
       });
     }
 
+    // ==========================================
+    // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
+    // ==========================================
+    const { Clase } = require('../models');
+    
+    console.log(`🗑️ Eliminando clases antiguas de ${nombreCarrera}...`);
+    const clasesEliminadas = await Clase.destroy({
+      where: { carrera_id: carrera_id },
+      transaction
+    });
+    
+    console.log(`   ✅ ${clasesEliminadas} clases antiguas eliminadas`);
+
     let clasesGuardadas = 0;
     let errores = [];
 
@@ -218,8 +231,8 @@ exports.subirPlanificacion = async (req, res) => {
         const aulaOriginal = colAula ? row[colAula] : '';
 
         // Guardar en base de datos
-        const { Clase } = require('../models');
         await Clase.create({
+          carrera_id: carrera_id,
           carrera: nombreCarrera,
           materia: String(materia).trim(),
           ciclo: String(ciclo || '').trim(),
