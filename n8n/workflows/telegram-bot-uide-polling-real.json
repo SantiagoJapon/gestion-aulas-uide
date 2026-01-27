@@ -1,0 +1,88 @@
+{
+    "name": "Telegram Bot UIDE - Mínimo",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "seconds",
+                "secondsInterval": 10
+              }
+            ]
+          }
+        },
+        "id": "1",
+        "name": "Cada 10 segundos",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [240, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "// TOKEN DE TU BOT\nconst TOKEN = '8524499239:AAEgU7QiBZMwJ1YPErkHVGJ23CT5IzWUMGw';\n\n// Obtener último mensaje procesado\nif (!$workflow.staticData.offset) {\n  $workflow.staticData.offset = 0;\n}\n\ntry {\n  // Pedir actualizaciones a Telegram\n  const response = await fetch(\n    `https://api.telegram.org/bot${TOKEN}/getUpdates?offset=${$workflow.staticData.offset}&timeout=5`,\n    { method: 'GET' }\n  );\n  \n  const data = await response.json();\n  \n  // Si no hay mensajes, terminar\n  if (!data.result || data.result.length === 0) {\n    return [];\n  }\n  \n  // Procesar cada mensaje\n  const mensajes = [];\n  \n  for (const update of data.result) {\n    // Actualizar offset para no procesar el mismo mensaje dos veces\n    $workflow.staticData.offset = update.update_id + 1;\n    \n    // Solo procesar si tiene mensaje de texto\n    if (update.message && update.message.text) {\n      mensajes.push({\n        json: {\n          chat_id: update.message.chat.id,\n          texto: update.message.text,\n          usuario: update.message.from.first_name || 'Usuario',\n          token: TOKEN\n        }\n      });\n    }\n  }\n  \n  return mensajes;\n  \n} catch (error) {\n  console.error('Error obteniendo mensajes:', error);\n  return [];\n}"
+        },
+        "id": "2",
+        "name": "Obtener Mensajes",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [460, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const chatId = $input.item.json.chat_id;\nconst texto = $input.item.json.texto;\nconst usuario = $input.item.json.usuario;\nconst token = $input.item.json.token;\n\n// Decidir qué responder según el comando\nlet respuesta = '';\n\nif (texto === '/start') {\n  respuesta = `🎉 ¡Hola ${usuario}!\n\n✨ Soy el Bot de Gestión de Aulas UIDE.\n\n📝 Comandos disponibles:\n• /start - Mensaje de bienvenida\n• /ayuda - Ver ayuda\n• /estado - Ver estado del sistema\n• /info - Información del bot\n\n¡Escribe un comando para comenzar!`;\n\n} else if (texto === '/ayuda' || texto === '/help') {\n  respuesta = `📚 AYUDA DEL BOT\n\n🔹 /start - Inicia el bot\n🔹 /ayuda - Muestra esta ayuda\n🔹 /estado - Estado del sistema\n🔹 /info - Información del bot\n\n💡 Tip: Todos los comandos empiezan con /`;\n\n} else if (texto === '/estado') {\n  const ahora = new Date().toLocaleString('es-EC');\n  respuesta = `📊 ESTADO DEL SISTEMA\n\n✅ Bot: Operativo\n✅ Conexión: Activa\n🕐 Hora: ${ahora}\n\n✨ Todo funcionando correctamente!`;\n\n} else if (texto === '/info') {\n  respuesta = `ℹ️ INFORMACIÓN\n\n🤖 Bot: Gestión Aulas UIDE\n📍 Modo: Local (Polling)\n⚡ Versión: 1.0.0\n🔄 Actualización: Cada 10 seg\n\nDesarrollado para UIDE 🎓`;\n\n} else {\n  respuesta = `🤔 No entiendo \"${texto}\"\n\nPrueba con:\n• /start\n• /ayuda\n• /estado\n• /info`;\n}\n\n// Enviar respuesta\ntry {\n  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      chat_id: chatId,\n      text: respuesta\n    })\n  });\n  \n  return [{ json: { enviado: true, comando: texto } }];\n  \n} catch (error) {\n  return [{ json: { enviado: false, error: error.message } }];\n}"
+        },
+        "id": "3",
+        "name": "Responder",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [680, 300]
+      }
+    ],
+    "connections": {
+      "Cada 10 segundos": {
+        "main": [
+          [
+            {
+              "node": "Obtener Mensajes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obtener Mensajes": {
+        "main": [
+          [
+            {
+              "node": "Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": {
+      "offset": 0
+    },
+    "tags": [],
+    "triggerCount": 0,
+    "updatedAt": "2025-12-04T00:00:00.000Z",
+    "versionId": "1"
+  }
+
+
+
+
+
+
+
+
+
+
+

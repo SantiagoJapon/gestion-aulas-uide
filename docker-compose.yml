@@ -1,21 +1,148 @@
+version: '3.8'
+
 services:
+  # Base de Datos PostgreSQL
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15
     container_name: gestion_aulas_db
+    restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-      POSTGRES_DB: ${POSTGRES_DB:-gestion_aulas}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gestion_aulas
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gestion_aulas"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # Redis - Para n8n en modo queue
+  redis:
+    image: redis:7-alpine
+    container_name: gestion_aulas_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend - Node.js API
+  backend:
+    build: ./backend
+    container_name: gestion_aulas_backend
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3000
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/gestion_aulas
+      - JWT_SECRET=${JWT_SECRET:-supersecreto123}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: always
+
+  # Frontend - React + Vite
+  frontend:
+    build: ./frontend
+    container_name: gestion_aulas_frontend
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - app_network
+    restart: always
+
+  # n8n - Workflow Automation
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: gestion_aulas_n8n
+    environment:
+      # Autenticación básica (desactivada temporalmente)
+      - N8N_BASIC_AUTH_ACTIVE=false
+      # - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      # - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin123}
+
+      # Configuración general
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=America/Guayaquil
+
+      # Base de datos para n8n
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_db
+      - DB_POSTGRESDB_USER=postgres
+      - DB_POSTGRESDB_PASSWORD=postgres
+
+      # Redis para modo queue (opcional, mejora rendimiento)
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+
+      # API Keys para servicios externos
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+
+      # URLs de servicios
+      - N8N_EDITOR_BASE_URL=http://localhost:5678
+
+      # Para desarrollo
+      - NODE_ENV=${NODE_ENV:-development}
+
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+      - ./n8n/credentials:/home/node/.n8n/credentials
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: always
+
 volumes:
   postgres_data:
+  n8n_data:
+
+networks:
+  app_network:
+    driver: bridge
 

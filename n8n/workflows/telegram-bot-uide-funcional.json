@@ -1,0 +1,149 @@
+{
+  "name": "Telegram Bot UIDE - Funcional",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule - Cada 10 segundos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener token de credenciales\nconst token = $credentials.telegramApi.accessToken;\n\nif (!token) {\n  throw new Error('Token de Telegram no configurado. Verifica las credenciales.');\n}\n\n// Inicializar offset si no existe\nif (!$workflow.staticData.offset) {\n  $workflow.staticData.offset = 0;\n}\n\nconst offset = $workflow.staticData.offset;\n\nconsole.log(`[Telegram] Obteniendo updates con offset: ${offset}`);\n\ntry {\n  // Pedir actualizaciones a Telegram\n  const response = await fetch(\n    `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=5&allowed_updates=[\"message\"]`,\n    { \n      method: 'GET',\n      headers: {\n        'Content-Type': 'application/json'\n      }\n    }\n  );\n  \n  if (!response.ok) {\n    throw new Error(`HTTP ${response.status}: ${response.statusText}`);\n  }\n  \n  const data = await response.json();\n  \n  if (!data.ok) {\n    throw new Error(`Telegram API Error: ${data.description || 'Unknown error'}`);\n  }\n  \n  // Si no hay mensajes, retornar vacío\n  if (!data.result || data.result.length === 0) {\n    console.log('[Telegram] No hay nuevos mensajes');\n    return [];\n  }\n  \n  console.log(`[Telegram] Recibidos ${data.result.length} updates`);\n  \n  // Procesar cada mensaje\n  const mensajes = [];\n  let maxUpdateId = offset;\n  \n  for (const update of data.result) {\n    // Actualizar offset para no procesar el mismo mensaje dos veces\n    if (update.update_id > maxUpdateId) {\n      maxUpdateId = update.update_id;\n    }\n    \n    // Solo procesar si tiene mensaje de texto\n    if (update.message && update.message.text) {\n      mensajes.push({\n        json: {\n          update_id: update.update_id,\n          chat_id: update.message.chat.id,\n          texto: update.message.text,\n          usuario: update.message.from.first_name || 'Usuario',\n          usuario_id: update.message.from.id,\n          message_id: update.message.message_id\n        }\n      });\n      \n      console.log(`[Telegram] Mensaje recibido: ${update.message.text} de ${update.message.from.first_name}`);\n    }\n  }\n  \n  // Guardar el último update_id procesado\n  if (maxUpdateId > offset) {\n    $workflow.staticData.offset = maxUpdateId + 1;\n    console.log(`[Telegram] Offset actualizado a: ${$workflow.staticData.offset}`);\n  }\n  \n  return mensajes;\n  \n} catch (error) {\n  console.error('[Telegram] Error obteniendo mensajes:', error.message);\n  // No lanzar error, solo retornar vacío para que el workflow continúe\n  return [];\n}"
+      },
+      "id": "code-get-updates",
+      "name": "Code - Obtener Mensajes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram Bot - UIDE"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.texto }}",
+              "operation": "startsWith",
+              "value2": "/"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-es-comando",
+      "name": "IF - Es Comando",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $input.item.json.chat_id;\nconst texto = $input.item.json.texto;\nconst usuario = $input.item.json.usuario;\nconst token = $credentials.telegramApi.accessToken;\n\nif (!token) {\n  throw new Error('Token de Telegram no configurado');\n}\n\n// Decidir qué responder según el comando\nlet respuesta = '';\n\nif (texto === '/start' || texto.startsWith('/start')) {\n  respuesta = `🎉 ¡Hola ${usuario}!\n\n✨ Soy el Bot de Gestión de Aulas UIDE.\n\n📝 Comandos disponibles:\n• /start - Mensaje de bienvenida\n• /ayuda - Ver ayuda\n• /estado - Ver estado del sistema\n• /info - Información del bot\n\n¡Escribe un comando para comenzar!`;\n\n} else if (texto === '/ayuda' || texto === '/help' || texto.startsWith('/ayuda') || texto.startsWith('/help')) {\n  respuesta = `📚 AYUDA DEL BOT\n\n🔹 /start - Inicia el bot\n🔹 /ayuda - Muestra esta ayuda\n🔹 /estado - Estado del sistema\n🔹 /info - Información del bot\n\n💡 Tip: Todos los comandos empiezan con /`;\n\n} else if (texto === '/estado' || texto.startsWith('/estado')) {\n  const ahora = new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });\n  respuesta = `📊 ESTADO DEL SISTEMA\n\n✅ Bot: Operativo\n✅ Conexión: Activa\n🕐 Hora: ${ahora}\n\n✨ Todo funcionando correctamente!`;\n\n} else if (texto === '/info' || texto.startsWith('/info')) {\n  respuesta = `ℹ️ INFORMACIÓN\n\n🤖 Bot: Gestión Aulas UIDE\n📍 Modo: Local (Polling)\n⚡ Versión: 1.0.0\n🔄 Actualización: Cada 10 seg\n\nDesarrollado para UIDE 🎓`;\n\n} else {\n  respuesta = `🤔 No entiendo \"${texto}\"\n\nPrueba con:\n• /start\n• /ayuda\n• /estado\n• /info`;\n}\n\n// Enviar respuesta\nconsole.log(`[Telegram] Enviando respuesta a chat ${chatId}: ${respuesta.substring(0, 50)}...`);\n\ntry {\n  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {\n    method: 'POST',\n    headers: { \n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify({\n      chat_id: chatId,\n      text: respuesta,\n      parse_mode: 'Markdown'\n    })\n  });\n  \n  const result = await response.json();\n  \n  if (!result.ok) {\n    console.error(`[Telegram] Error enviando mensaje: ${result.description}`);\n    return [{ json: { enviado: false, error: result.description } }];\n  }\n  \n  console.log(`[Telegram] Mensaje enviado exitosamente a chat ${chatId}`);\n  return [{ json: { enviado: true, comando: texto, chat_id: chatId } }];\n  \n} catch (error) {\n  console.error(`[Telegram] Error: ${error.message}`);\n  return [{ json: { enviado: false, error: error.message } }];\n}"
+      },
+      "id": "code-responder",
+      "name": "Code - Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram Bot - UIDE"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Responder a mensajes que no son comandos\nconst chatId = $input.item.json.chat_id;\nconst texto = $input.item.json.texto;\nconst token = $credentials.telegramApi.accessToken;\n\nconst respuesta = `💬 Recibí tu mensaje: \"${texto}\"\n\nPero solo respondo a comandos que empiezan con /\n\nPrueba con:\n• /start\n• /ayuda\n• /estado`;\n\ntry {\n  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      chat_id: chatId,\n      text: respuesta\n    })\n  });\n  \n  return [{ json: { procesado: true } }];\n} catch (error) {\n  return [{ json: { procesado: false, error: error.message } }];\n}"
+      },
+      "id": "code-respuesta-default",
+      "name": "Code - Respuesta Default",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram Bot - UIDE"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule - Cada 10 segundos": {
+      "main": [
+        [
+          {
+            "node": "Code - Obtener Mensajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Obtener Mensajes": {
+      "main": [
+        [
+          {
+            "node": "IF - Es Comando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Es Comando": {
+      "main": [
+        [
+          {
+            "node": "Code - Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Respuesta Default",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "offset": 0
+  },
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-18T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+

@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version:*)",
+      "Bash(docker info:*)",
+      "Bash(findstr:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(node:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(ping:*)",
+      "Bash(nul)",
+      "Bash(docker run:*)",
+      "Bash(docker restart:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker port:*)",
+      "Bash(Get-Process -Name postgres 2)",
+      "Bash($null)",
+      "Bash(Select-Object -Property Id,Name,Path)",
+      "Bash(tasklist:*)",
+      "Bash(npm run seed:*)",
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(if exist database.sqlite del database.sqlite)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)",
+      "Bash(taskkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

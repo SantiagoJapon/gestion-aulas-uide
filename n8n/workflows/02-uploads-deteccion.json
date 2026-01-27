@@ -1,0 +1,340 @@
+{
+  "name": "02 - Uploads y Detección",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "uploads",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": true,
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "webhook-1",
+      "name": "Webhook - Recibir Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "uploads-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrae metadata del upload\nconst body = $input.item.json.body || {};\nconst binaryData = $input.item.binary;\n\nif (!binaryData || !binaryData.data) {\n  throw new Error('No se recibió archivo');\n}\n\nconst carrera = String(body.carrera || '').trim().toUpperCase();\n\nif (!carrera) {\n  throw new Error('Falta especificar la carrera');\n}\n\n// Genera nombre único para el archivo\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst fileName = `${carrera}_${timestamp}.xlsx`;\n\nreturn {\n  json: {\n    carrera: carrera,\n    fileName: fileName,\n    uploadDate: new Date().toISOString()\n  },\n  binary: binaryData\n};"
+      },
+      "id": "code-validate-1",
+      "name": "Code - Validar Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/tmp/uploads/{{ $json.fileName }}",
+        "options": {}
+      },
+      "id": "write-binary-1",
+      "name": "Write Binary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": {
+          "__rl": true,
+          "value": "uploads",
+          "mode": "list",
+          "cachedResultName": "uploads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "carrera": "={{ $json.carrera }}",
+            "file_path": "=/tmp/uploads/{{ $json.fileName }}",
+            "file_name": "={{ $json.fileName }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "postgres-insert-1",
+      "name": "Postgres - Guardar Upload",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-credential",
+          "name": "PostgreSQL - gestion_aulas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(DISTINCT carrera) as total_carreras,\n  (SELECT valor FROM config WHERE clave = 'num_carreras_esperadas')::int as esperadas\nFROM uploads\nWHERE timestamp > CURRENT_DATE - INTERVAL '30 days';",
+        "options": {}
+      },
+      "id": "postgres-count-1",
+      "name": "Postgres - Contar Uploads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-credential",
+          "name": "PostgreSQL - gestion_aulas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.total_carreras }}",
+              "operation": "largerEqual",
+              "value2": "={{ $json.esperadas }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-completo-1",
+      "name": "IF - Completitud",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "source": "database",
+        "options": {}
+      },
+      "id": "execute-workflow-1",
+      "name": "Execute Workflow - Procesar",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"upload_recibido\",\n  \"carrera\": \"{{ $('Code - Validar Upload').item.json.carrera }}\",\n  \"total_uploads\": \"{{ $json.total_carreras }}\",\n  \"esperados\": \"{{ $json.esperadas }}\",\n  \"mensaje\": \"Planificación recibida. Pendientes: {{ $json.esperadas - $json.total_carreras }}\"\n}",
+        "options": {}
+      },
+      "id": "respond-webhook-1",
+      "name": "Respond - Pendiente",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"completo\",\n  \"carrera\": \"{{ $('Code - Validar Upload').item.json.carrera }}\",\n  \"total_uploads\": \"{{ $json.total_carreras }}\",\n  \"esperados\": \"{{ $json.esperadas }}\",\n  \"mensaje\": \"Todas las planificaciones recibidas. Iniciando distribución...\"\n}",
+        "options": {}
+      },
+      "id": "respond-webhook-2",
+      "name": "Respond - Completo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-1",
+      "name": "Schedule - Recordatorio Diario",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT valor FROM config WHERE clave = 'fecha_limite')::date as limite,\n  CURRENT_DATE as hoy,\n  COUNT(DISTINCT carrera) as total_uploads,\n  (SELECT valor FROM config WHERE clave = 'num_carreras_esperadas')::int as esperadas\nFROM uploads\nWHERE timestamp > (SELECT valor FROM config WHERE clave = 'fecha_limite')::date - INTERVAL '30 days';",
+        "options": {}
+      },
+      "id": "postgres-check-1",
+      "name": "Postgres - Chequear Fecha Límite",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 500],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-credential",
+          "name": "PostgreSQL - gestion_aulas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "dateTime": [
+            {
+              "value1": "={{ $json.hoy }}",
+              "operation": "after",
+              "value2": "={{ $json.limite }}"
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{ $json.total_uploads }}",
+              "operation": "smaller",
+              "value2": "={{ $json.esperadas }}"
+            }
+          ]
+        },
+        "combineOperation": "all",
+        "options": {}
+      },
+      "id": "if-recordatorio-1",
+      "name": "IF - Enviar Recordatorio",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 500]
+    }
+  ],
+  "connections": {
+    "Webhook - Recibir Upload": {
+      "main": [
+        [
+          {
+            "node": "Code - Validar Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Validar Upload": {
+      "main": [
+        [
+          {
+            "node": "Write Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Binary File": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Guardar Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Guardar Upload": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Contar Uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Contar Uploads": {
+      "main": [
+        [
+          {
+            "node": "IF - Completitud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Completitud": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow - Procesar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow - Procesar": {
+      "main": [
+        [
+          {
+            "node": "Respond - Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Recordatorio Diario": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Chequear Fecha Límite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Chequear Fecha Límite": {
+      "main": [
+        [
+          {
+            "node": "IF - Enviar Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-18T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+

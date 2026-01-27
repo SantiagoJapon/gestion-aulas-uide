@@ -1,35 +1,55 @@
-# Node modules
+# Dependencies
 node_modules/
-npm-debug.log*
+backend/node_modules/
+frontend/node_modules/
+telegram-bot-aulas/node_modules/
 
 # Environment variables
 .env
 .env.local
+.env.production
+backend/.env
+frontend/.env
 
-# Docker volumes
-postgres_data/
-n8n_data/
-redis_data/
+# Database
+*.sqlite
+*.sqlite3
+database.sqlite
+backend/database.sqlite
 
 # Uploads
-backend/uploads/*
-!backend/uploads/.gitkeep
+uploads/
+backend/uploads/
 
-# Build outputs
-frontend/build/
-frontend/dist/
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS
-.DS_Store
-Thumbs.db
+# Build
+dist/
+build/
+frontend/dist/
+frontend/build/
 
-# Logs
-*.log
-logs/
+# Test
+coverage/
+.nyc_output/
 
+# Temporary
+tmp/
+temp/
+*.tmp
+nul
+**/nul
