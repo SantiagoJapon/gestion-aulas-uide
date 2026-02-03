@@ -11,12 +11,6 @@ telegram-bot-aulas/node_modules/
 backend/.env
 frontend/.env
 
-# Database
-*.sqlite
-*.sqlite3
-database.sqlite
-backend/database.sqlite
-
 # Uploads
 uploads/
 backend/uploads/

@@ -11,7 +11,7 @@ const Clase = sequelize.define('Clase', {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
-      model: 'carreras',
+      model: 'uploads_carreras',
       key: 'id'
     }
   },
@@ -52,8 +52,40 @@ const Clase = sequelize.define('Clase', {
     allowNull: true
   },
   aula_asignada: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,  // Cambiado de INTEGER a STRING para almacenar código de aula (ej: "A-01")
     allowNull: true
+  },
+  aula_sugerida: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  nombre_archivo: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  periodo_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'periodos',
+      key: 'id'
+    }
+  },
+  docente_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'docentes',
+      key: 'id'
+    }
+  },
+  materia_catalogo_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'materias_catalogo',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'clases',

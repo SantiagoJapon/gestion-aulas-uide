@@ -3,6 +3,7 @@
 // ============================================
 
 const { sequelize } = require('../config/database');
+const { QueryTypes } = require('sequelize');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const axios = require('axios');
@@ -21,7 +22,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // Configurar multer
 const storage = multer.memoryStorage();
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
@@ -44,7 +45,7 @@ exports.uploadMiddleware = upload.single('archivo');
 // ============================================
 exports.subirPlanificacion = async (req, res) => {
   const transaction = await sequelize.transaction();
-  
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -84,13 +85,13 @@ exports.subirPlanificacion = async (req, res) => {
     const data = XLSX.utils.sheet_to_json(sheet);
 
     console.log(`📚 ${data.length} filas en el Excel`);
-    
+
     // ==========================================
     // 🤖 ANÁLISIS INTELIGENTE DE COLUMNAS
     // ==========================================
     const columnas = data.length > 0 ? Object.keys(data[0]) : [];
     console.log('📋 Columnas encontradas:', columnas);
-    
+
     // Función para buscar columna por palabras clave (case-insensitive, con similitud)
     const buscarColumna = (palabrasClave) => {
       const columnaNormalizada = columnas.find(col => {
@@ -99,7 +100,7 @@ exports.subirPlanificacion = async (req, res) => {
       });
       return columnaNormalizada || null;
     };
-    
+
     // Detectar automáticamente las columnas relevantes
     const colMateria = buscarColumna(['materia', 'asignatura', 'curso', 'subject']);
     const colCiclo = buscarColumna(['ciclo', 'nivel', 'semestre', 'year']);
@@ -111,7 +112,7 @@ exports.subirPlanificacion = async (req, res) => {
     const colEstudiantes = buscarColumna(['estudiante', 'alumno', 'student', 'nro', 'num', 'cantidad']);
     const colDocente = buscarColumna(['docente', 'profesor', 'teacher', 'instructor']);
     const colAula = buscarColumna(['aula', 'salon', 'lab', 'classroom', 'room']);
-    
+
     console.log('🔍 Mapeo de columnas detectado:');
     console.log('  - Materia:', colMateria || 'NO ENCONTRADA');
     console.log('  - Ciclo:', colCiclo || 'no encontrada');
@@ -123,17 +124,133 @@ exports.subirPlanificacion = async (req, res) => {
     console.log('  - Estudiantes:', colEstudiantes || 'no encontrada');
     console.log('  - Docente:', colDocente || 'no encontrada');
     console.log('  - Aula:', colAula || 'no encontrada');
-    
+
     if (!colMateria) {
       console.log('⚠️  No se encontró columna de MATERIA con detección automática.');
+
+      // Intentar con ChatGPT antes de guardar para revisión manual
+      if (esOpenAIConfigurado()) {
+        console.log('🤖 Intentando análisis con ChatGPT...');
+
+        try {
+          const resultadoIA = await analizarExcelConIA(data, nombreCarrera);
+
+          if (resultadoIA && resultadoIA.clases && resultadoIA.clases.length > 0) {
+            console.log(`✅ ChatGPT detectó ${resultadoIA.clases.length} clases exitosamente`);
+
+            // Eliminar clases antiguas
+            const { Clase } = require('../models');
+            const clasesEliminadas = await Clase.destroy({
+              where: { carrera_id: carrera_id },
+              transaction
+            });
+            console.log(`✅ ${clasesEliminadas} clases antiguas eliminadas`);
+
+            // Guardar clases detectadas por IA
+            let clasesGuardadas = 0;
+            for (const claseIA of resultadoIA.clases) {
+              // Si el excel trae un aula sugerida, intentar buscar el código correspondiente
+              let aulaCodigo = null;
+              if (claseIA.aula) {
+                const { Aula } = require('../models');
+                // Buscar aula por nombre o código
+                const aulaEncontrada = await Aula.findOne({
+                  where: sequelize.where(
+                    sequelize.fn('LOWER', sequelize.col('nombre')),
+                    'LIKE',
+                    `%${String(claseIA.aula).toLowerCase().trim()}%`
+                  )
+                });
+                if (aulaEncontrada) {
+                  aulaCodigo = aulaEncontrada.codigo;
+                  console.log(`   ✅ Aula "${claseIA.aula}" → ${aulaCodigo}`);
+                } else {
+                  console.log(`   ⚠️  Aula "${claseIA.aula}" no encontrada en BD`);
+                }
+              }
+
+              await Clase.create({
+                carrera_id: carrera_id,
+                carrera: nombreCarrera,
+                materia: String(claseIA.materia || '').trim(),
+                ciclo: String(claseIA.ciclo || '').trim(),
+                paralelo: String(claseIA.paralelo || 'A').trim(),
+                dia: String(claseIA.dia || '').trim(),
+                hora_inicio: String(claseIA.hora_inicio || '').trim(),
+                hora_fin: String(claseIA.hora_fin || '').trim(),
+                num_estudiantes: claseIA.num_estudiantes || 0,
+                docente: String(claseIA.docente || '').trim(),
+                aula_asignada: aulaCodigo  // Guardar aula si se encontró en BD
+              }, { transaction });
+              clasesGuardadas++;
+            }
+
+            // Guardar archivo
+            const { PlanificacionSubida } = require('../models');
+            const timestamp = Date.now();
+            const nombreArchivoGuardado = `${timestamp}-${carrera_id}-${req.file.originalname}`;
+            const rutaArchivo = path.join(UPLOADS_DIR, nombreArchivoGuardado);
+            fs.writeFileSync(rutaArchivo, req.file.buffer);
+
+            await PlanificacionSubida.create({
+              carrera_id: carrera_id,
+              usuario_id: usuario_id,
+              nombre_archivo_original: req.file.originalname,
+              nombre_archivo_guardado: nombreArchivoGuardado,
+              ruta_archivo: rutaArchivo,
+              total_clases: clasesGuardadas,
+              estado: 'procesado'
+            }, { transaction });
+
+            await transaction.commit();
+
+            // Disparar distribución automática
+            try {
+              await axios.post(
+                process.env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook/maestro',
+                {
+                  accion: 'distribuir_aulas',
+                  carrera_id: carrera_id,
+                  trigger: 'auto',
+                  origen: 'nueva_planificacion_ia'
+                },
+                { timeout: 120000 }
+              );
+
+              return res.json({
+                success: true,
+                mensaje: 'Excel analizado con IA y procesado exitosamente',
+                resultado: {
+                  clases_guardadas: clasesGuardadas,
+                  metodo: 'chatgpt',
+                  distribucion: { estado: 'en_progreso' }
+                }
+              });
+            } catch (n8nError) {
+              return res.json({
+                success: true,
+                mensaje: 'Excel procesado con IA. Distribución debe ejecutarse manualmente',
+                resultado: {
+                  clases_guardadas: clasesGuardadas,
+                  metodo: 'chatgpt',
+                  distribucion: { estado: 'pendiente' }
+                }
+              });
+            }
+          }
+        } catch (iaError) {
+          console.error('❌ Error en análisis con ChatGPT:', iaError.message);
+          // Continuar con guardado para revisión manual
+        }
+      }
+
+      // Si ChatGPT no está configurado o falló, guardar para revisión manual
       console.log('📁 Guardando archivo Excel para revisión manual del administrador...');
-      
-      // Guardar el archivo para que el admin lo descargue después
+
       const fileName = `${Date.now()}-${req.file.originalname}`;
       const filePath = path.join(UPLOADS_DIR, fileName);
       fs.writeFileSync(filePath, req.file.buffer);
-      
-      // Guardar registro en base de datos SIN clases procesadas
+
       const { PlanificacionSubida } = require('../models');
       await PlanificacionSubida.create({
         usuario_id,
@@ -144,11 +261,11 @@ exports.subirPlanificacion = async (req, res) => {
         total_clases: 0,
         estado: 'pendiente'
       }, { transaction });
-      
+
       await transaction.commit();
-      
+
       console.log('✅ Archivo guardado para revisión manual');
-      
+
       return res.status(200).json({
         success: true,
         mensaje: 'Excel guardado. Requiere revisión manual del administrador.',
@@ -162,13 +279,13 @@ exports.subirPlanificacion = async (req, res) => {
     // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
     // ==========================================
     const { Clase } = require('../models');
-    
+
     console.log(`🗑️ Eliminando clases antiguas de ${nombreCarrera}...`);
     const clasesEliminadas = await Clase.destroy({
       where: { carrera_id: carrera_id },
       transaction
     });
-    
+
     console.log(`   ✅ ${clasesEliminadas} clases antiguas eliminadas`);
 
     let clasesGuardadas = 0;
@@ -177,7 +294,7 @@ exports.subirPlanificacion = async (req, res) => {
     // Procesar cada clase
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      
+
       try {
         // Debug: Ver las primeras filas completas
         if (i < 3) {
@@ -190,7 +307,7 @@ exports.subirPlanificacion = async (req, res) => {
 
         // Extraer valores usando las columnas detectadas
         const materia = colMateria ? row[colMateria] : '';
-        
+
         // Validar campos mínimos requeridos
         if (!materia || String(materia).trim().length === 0) {
           continue;
@@ -199,18 +316,18 @@ exports.subirPlanificacion = async (req, res) => {
         const ciclo = colCiclo ? row[colCiclo] : '';
         const paralelo = colParalelo ? row[colParalelo] : 'A';
         const dia = colDia ? row[colDia] : '';
-        
+
         // Número de estudiantes - extraer números de cualquier formato
         let numEstudiantes = 0;
         if (colEstudiantes && row[colEstudiantes]) {
           const estudiantesStr = String(row[colEstudiantes]).replace(/\D/g, '');
           numEstudiantes = parseInt(estudiantesStr) || 0;
         }
-        
+
         // HORA - manejar múltiples formatos
         let horaInicio = '';
         let horaFin = '';
-        
+
         if (colHoraInicio && colHoraFin) {
           // Formato separado
           horaInicio = String(row[colHoraInicio] || '').trim();
@@ -226,9 +343,28 @@ exports.subirPlanificacion = async (req, res) => {
             }
           }
         }
-        
+
         const docente = colDocente ? row[colDocente] : '';
         const aulaOriginal = colAula ? row[colAula] : '';
+
+        // Si el excel trae un aula, buscar su código en la BD
+        let aulaCodigo = null;
+        if (aulaOriginal && String(aulaOriginal).trim().length > 0) {
+          const { Aula } = require('../models');
+          const aulaEncontrada = await Aula.findOne({
+            where: sequelize.where(
+              sequelize.fn('LOWER', sequelize.col('nombre')),
+              'LIKE',
+              `%${String(aulaOriginal).toLowerCase().trim()}%`
+            )
+          });
+          if (aulaEncontrada) {
+            aulaCodigo = aulaEncontrada.codigo;
+            if (i < 3) {
+              console.log(`  Aula: "${aulaOriginal}" → ${aulaCodigo}`);
+            }
+          }
+        }
 
         // Guardar en base de datos
         await Clase.create({
@@ -242,11 +378,11 @@ exports.subirPlanificacion = async (req, res) => {
           hora_fin: String(horaFin || '').trim(),
           num_estudiantes: numEstudiantes,
           docente: String(docente || '').trim(),
-          aula_asignada: null  // Se asignará después en la distribución
+          aula_asignada: aulaCodigo  // Guarda el código si se encontró, null si no
         }, { transaction });
 
         clasesGuardadas++;
-        
+
         // Log detallado cada 10 clases
         if (clasesGuardadas % 10 === 0) {
           console.log(`   ✅ ${clasesGuardadas} clases procesadas...`);
@@ -264,7 +400,7 @@ exports.subirPlanificacion = async (req, res) => {
     const timestamp = Date.now();
     const nombreArchivoGuardado = `${timestamp}-${carrera_id}-${req.file.originalname}`;
     const rutaArchivo = path.join(UPLOADS_DIR, nombreArchivoGuardado);
-    
+
     // Guardar archivo
     fs.writeFileSync(rutaArchivo, req.file.buffer);
 
@@ -287,7 +423,7 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     // 🚀 TRIGGER AUTOMÁTICO: Ejecutar distribución
     // ==========================================
-    
+
     eventEmitter.emit('nueva_planificacion', {
       carrera_id: carrera_id,
       total_clases: clasesGuardadas,
@@ -298,7 +434,7 @@ exports.subirPlanificacion = async (req, res) => {
     // Llamar a n8n para distribución automática
     try {
       console.log('🤖 Activando distribución automática en n8n...');
-      
+
       const n8nResponse = await axios.post(
         process.env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook/maestro',
         {
@@ -327,7 +463,7 @@ exports.subirPlanificacion = async (req, res) => {
 
     } catch (n8nError) {
       console.warn('⚠️ No se pudo activar distribución automática:', n8nError.message);
-      
+
       res.json({
         success: true,
         mensaje: 'Planificación subida exitosamente',
@@ -345,7 +481,7 @@ exports.subirPlanificacion = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error('❌ Error:', error);
-    
+
     res.status(500).json({
       success: false,
       mensaje: 'Error al procesar planificación',
@@ -403,14 +539,14 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
 
     const result = await sequelize.query(query, {
       replacements,
-      type: sequelize.QueryTypes.SELECT
+      type: QueryTypes.SELECT
     });
 
     const stats = {
       total: result.length,
       asignadas: result.filter(c => c.aula_asignada !== null).length,
       pendientes: result.filter(c => c.aula_asignada === null).length,
-      porcentaje: result.length > 0 
+      porcentaje: result.length > 0
         ? ((result.filter(c => c.aula_asignada !== null).length / result.length) * 100).toFixed(2)
         : 0
     };
@@ -495,7 +631,7 @@ exports.detectarConflictos = async (req, res) => {
       ORDER BY c1.horario_dia, c1.horario_inicio
     `, {
       replacements: { carrera_id },
-      type: sequelize.QueryTypes.SELECT
+      type: QueryTypes.SELECT
     });
 
     res.json({
@@ -520,7 +656,7 @@ exports.listarPlanificaciones = async (req, res) => {
   try {
     const { PlanificacionSubida, Carrera, User } = require('../models');
     const usuario = req.usuario;
-    
+
     // Construir filtro según rol
     const whereClause = {};
     if (usuario.rol === 'director' && usuario.carrera_director) {
@@ -534,7 +670,7 @@ exports.listarPlanificaciones = async (req, res) => {
         {
           model: Carrera,
           as: 'carrera',
-          attributes: ['id', 'carrera'] // Quitamos 'normalizada' que no existe en SQLite
+          attributes: ['id', 'carrera']
         },
         {
           model: User,
@@ -579,8 +715,8 @@ exports.descargarPlanificacion = async (req, res) => {
     }
 
     // Verificar permisos: Admin ve todas, director solo las de su carrera
-    if (usuario.rol === 'director' && 
-        usuario.carrera_director !== planificacion.carrera_id) {
+    if (usuario.rol === 'director' &&
+      usuario.carrera_director !== planificacion.carrera_id) {
       return res.status(403).json({
         success: false,
         mensaje: 'No tiene permisos para descargar esta planificación'
@@ -597,7 +733,7 @@ exports.descargarPlanificacion = async (req, res) => {
 
     // Descargar archivo
     res.download(
-      planificacion.ruta_archivo, 
+      planificacion.ruta_archivo,
       planificacion.nombre_archivo_original,
       (err) => {
         if (err) {

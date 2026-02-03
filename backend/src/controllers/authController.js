@@ -1,5 +1,4 @@
 const User = require('../models/User');
-const { Carrera } = require('../models');
 const { generarToken } = require('../utils/jwt');
 const { fixEncoding } = require('../utils/encoding');
 
@@ -112,15 +111,7 @@ const loginUsuario = async (req, res) => {
     // Buscar usuario por email (incluir password para verificación)
     const usuario = await User.findOne({
       where: { email },
-      attributes: { include: ['password'] },
-      include: [
-        {
-          model: Carrera,
-          as: 'Carrera',
-          attributes: ['id', 'carrera', 'carrera_normalizada'],
-          required: false
-        }
-      ]
+      attributes: { include: ['password'] }
     });
 
     if (!usuario) {
@@ -158,13 +149,6 @@ const loginUsuario = async (req, res) => {
       rol: usuario.rol
     });
 
-    // Preparar información de carrera si es director
-    const carreraInfo = usuario.Carrera ? {
-      id: usuario.Carrera.id,
-      nombre: usuario.Carrera.carrera,
-      normalizada: usuario.Carrera.carrera_normalizada
-    } : null;
-
     res.json({
       mensaje: 'Login exitoso',
       usuario: {
@@ -176,7 +160,6 @@ const loginUsuario = async (req, res) => {
         cedula: usuario.cedula,
         telefono: usuario.telefono,
         carrera_director: usuario.carrera_director,
-        carrera: carreraInfo,
         estado: usuario.estado
       },
       token
@@ -196,29 +179,13 @@ const loginUsuario = async (req, res) => {
  */
 const obtenerPerfil = async (req, res) => {
   try {
-    const usuario = await User.findByPk(req.usuarioId, {
-      include: [
-        {
-          model: Carrera,
-          as: 'Carrera',
-          attributes: ['id', 'carrera', 'carrera_normalizada'],
-          required: false
-        }
-      ]
-    });
+    const usuario = await User.findByPk(req.usuarioId);
 
     if (!usuario) {
       return res.status(404).json({
         error: 'Usuario no encontrado'
       });
     }
-
-    // Preparar información de carrera si es director
-    const carreraInfo = usuario.Carrera ? {
-      id: usuario.Carrera.id,
-      nombre: usuario.Carrera.carrera,
-      normalizada: usuario.Carrera.carrera_normalizada
-    } : null;
 
     res.json({
       usuario: {
@@ -231,7 +198,6 @@ const obtenerPerfil = async (req, res) => {
         telefono: usuario.telefono,
         estado: usuario.estado,
         carrera_director: usuario.carrera_director,
-        carrera: carreraInfo,
         createdAt: usuario.createdAt,
         updatedAt: usuario.updatedAt
       }

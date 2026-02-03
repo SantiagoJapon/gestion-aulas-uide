@@ -100,12 +100,8 @@ const User = sequelize.define('User', {
     }
   },
   carrera_director: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'carreras',
-      key: 'id'
-    }
+    type: DataTypes.STRING(100),
+    allowNull: true
   },
   estado: {
     type: DataTypes.ENUM('activo', 'inactivo'),
@@ -148,15 +144,6 @@ User.prototype.toJSON = function() {
 // Método estático para obtener nombre completo
 User.prototype.getNombreCompleto = function() {
   return `${this.nombre} ${this.apellido}`;
-};
-
-// Definir asociaciones
-User.associate = function(models) {
-  // Un usuario (director) pertenece a una carrera
-  User.belongsTo(models.Carrera, {
-    foreignKey: 'carrera_director',
-    as: 'Carrera'
-  });
 };
 
 module.exports = User;

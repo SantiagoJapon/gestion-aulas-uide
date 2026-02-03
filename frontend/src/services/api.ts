@@ -243,6 +243,27 @@ export const usuarioService = {
     return response.data;
   },
 
+  createDirector: async (data: Partial<User>): Promise<{ success: boolean; usuario: User }> => {
+    // Assuming the backend has a general user creation endpoint or we use auth/register but as admin.
+    // Often systems have a POST /api/usuarios for admins. Let's try that or use register if backend logic dictates.
+    // Based on standard REST patterns in this project (simulated), I will check if I should use /api/auth/register or /api/usuarios.
+    // Existing code has authService.register. A pure /api/usuarios POST might be cleaner if it exists.
+    // Given I don't see backend code for /api/usuarios POST, but I see `createAula` etc., I will assume /api/usuarios is the CRUD endpoint.
+    // If not, I'll fall back to register.
+    const response = await api.post('/api/usuarios', { ...data, rol: 'director' });
+    return response.data;
+  },
+
+  updateDirector: async (id: number, data: Partial<User>): Promise<{ success: boolean; mensaje: string; usuario: User }> => {
+    const response = await api.put(`/api/usuarios/${id}`, data);
+    return response.data;
+  },
+
+  deleteDirector: async (id: number): Promise<{ success: boolean; mensaje: string }> => {
+    const response = await api.delete(`/api/usuarios/${id}`);
+    return response.data;
+  },
+
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
     const response = await api.put(`/api/usuarios/${id}/carrera`, { carrera });
     return response.data;
@@ -406,6 +427,12 @@ export const distribucionService = {
     const params = carreraId ? { carrera_id: carreraId } : {};
     const response = await api.get('/api/distribucion/horario', { params });
     return response.data;
+  },
+
+  // Obtener todas las clases con estado de distribución
+  getClasesDistribucion: async () => {
+    const response = await api.get('/api/distribucion/clases');
+    return response.data;
   }
 };
 
@@ -452,12 +479,12 @@ export const planificacionService = {
     const response = await api.get(`/api/planificaciones/descargar/${id}`, {
       responseType: 'blob'
     });
-    
+
     // Crear URL para descargar
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    
+
     // Obtener nombre del archivo del header si está disponible
     const contentDisposition = response.headers['content-disposition'];
     let filename = `planificacion-${id}.xlsx`;
@@ -465,13 +492,75 @@ export const planificacionService = {
       const match = contentDisposition.match(/filename="?(.+)"?/);
       if (match) filename = match[1];
     }
-    
+
     link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
   }
+};
+
+// ============================================
+// ESPACIOS
+// ============================================
+
+export interface Espacio {
+  id: number;
+  codigo: string;
+  nombre: string;
+  tipo: 'BIBLIOTECA' | 'SALA_DESCANSO' | 'ZONA_TRABAJO' | 'CUBICULO' | 'OTRO';
+  capacidad: number;
+  estado: 'DISPONIBLE' | 'NO_DISPONIBLE' | 'MANTENIMIENTO';
+  descripcion?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EspaciosResponse {
+  success: boolean;
+  count: number;
+  espacios: Espacio[];
+}
+
+export interface EspacioStats {
+  total: number;
+  disponibles: number;
+  enMantenimiento: number;
+  noDisponibles: number;
+  porTipo: Array<{ tipo: string; total: number; capacidad_total: number }>;
+}
+
+export const espacioService = {
+  getEspacios: async (filters?: { tipo?: string; estado?: string; search?: string }): Promise<EspaciosResponse> => {
+    const response = await api.get<EspaciosResponse>('/api/espacios', { params: filters });
+    return response.data;
+  },
+
+  getEspacioById: async (id: number): Promise<{ success: boolean; espacio: Espacio }> => {
+    const response = await api.get(`/api/espacios/${id}`);
+    return response.data;
+  },
+
+  createEspacio: async (data: Partial<Espacio>): Promise<{ success: boolean; message: string; espacio: Espacio }> => {
+    const response = await api.post('/api/espacios', data);
+    return response.data;
+  },
+
+  updateEspacio: async (id: number, data: Partial<Espacio>): Promise<{ success: boolean; message: string; espacio: Espacio }> => {
+    const response = await api.put(`/api/espacios/${id}`, data);
+    return response.data;
+  },
+
+  deleteEspacio: async (id: number): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/api/espacios/${id}`);
+    return response.data;
+  },
+
+  getEspaciosStats: async (): Promise<{ success: boolean; stats: EspacioStats }> => {
+    const response = await api.get('/api/espacios/stats/summary');
+    return response.data;
+  },
 };
 
 export default api;

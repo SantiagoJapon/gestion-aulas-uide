@@ -1,4 +1,18 @@
 const { User, Carrera, sequelize } = require('../models');
+const { QueryTypes } = require('sequelize');
+
+/**
+ * Función centralizada para loggeo de errores 500
+ */
+const handle500 = (res, error, context) => {
+  console.error(`❌ [500] Error en ${context}:`, error);
+  res.status(500).json({
+    success: false,
+    error: `Error en ${context}`,
+    message: error.message,
+    stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+  });
+};
 
 const normalizeCarreraKey = (value) =>
   value
@@ -67,12 +81,7 @@ const getUsuarios = async (req, res) => {
       })
     });
   } catch (error) {
-    console.error('Error al obtener usuarios:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error al obtener usuarios',
-      message: error.message
-    });
+    handle500(res, error, 'getUsuarios');
   }
 };
 
@@ -105,21 +114,21 @@ const updateDirectorCarrera = async (req, res) => {
       });
     }
 
-    // Buscar en carreras_configuracion - primero búsqueda exacta, luego parcial
+    // Buscar en uploads_carreras - primero búsqueda exacta, luego parcial
     let carreraResult = await sequelize.query(
-      `SELECT id, nombre_carrera FROM carreras_configuracion
-       WHERE nombre_carrera = $1 AND estado = 'activa'
+      `SELECT id, carrera FROM uploads_carreras
+       WHERE carrera = $1 AND activa = true
        LIMIT 1`,
-      { bind: [carrera], type: sequelize.QueryTypes.SELECT }
+      { bind: [carrera], type: QueryTypes.SELECT }
     );
 
     // Si no encuentra, intentar búsqueda por ID
     if (!carreraResult.length && !isNaN(carrera)) {
       carreraResult = await sequelize.query(
-        `SELECT id, nombre_carrera FROM carreras_configuracion
-         WHERE id = $1 AND estado = 'activa'
+        `SELECT id, carrera FROM uploads_carreras
+         WHERE id = $1 AND activa = true
          LIMIT 1`,
-        { bind: [parseInt(carrera)], type: sequelize.QueryTypes.SELECT }
+        { bind: [parseInt(carrera)], type: QueryTypes.SELECT }
       );
     }
 
@@ -127,13 +136,11 @@ const updateDirectorCarrera = async (req, res) => {
     if (!carreraResult.length) {
       const carreraNormalizada = normalizeCarreraKey(carrera);
       carreraResult = await sequelize.query(
-        `SELECT id, nombre_carrera FROM carreras_configuracion
-         WHERE LOWER(TRANSLATE(nombre_carrera, 
-           'áéíóúÁÉÍÓÚñÑ', 
-           'aeiouAEIOUnN')) LIKE $1 
-         AND estado = 'activa'
+        `SELECT id, carrera FROM uploads_carreras
+         WHERE (LOWER(carrera) LIKE $1 OR carrera_normalizada LIKE $1)
+         AND activa = true
          LIMIT 1`,
-        { bind: [`%${carreraNormalizada}%`], type: sequelize.QueryTypes.SELECT }
+        { bind: [`%${carreraNormalizada}%`], type: QueryTypes.SELECT }
       );
     }
 
@@ -145,7 +152,7 @@ const updateDirectorCarrera = async (req, res) => {
       });
     }
 
-    await usuario.update({ carrera_director: carreraResult[0].nombre_carrera });
+    await usuario.update({ carrera_director: carreraResult[0].carrera });
 
     res.json({
       success: true,
@@ -153,16 +160,46 @@ const updateDirectorCarrera = async (req, res) => {
       usuario: usuario.toJSON()
     });
   } catch (error) {
-    console.error('Error al asignar carrera:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error al asignar carrera',
-      message: error.message
+    handle500(res, error, 'updateDirectorCarrera');
+  }
+};
+
+const createUsuario = async (req, res) => {
+  try {
+    const { nombre, apellido, email, password, rol, carrera_director } = req.body;
+
+    // Verificar si el usuario ya existe
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'El email ya está registrado'
+      });
+    }
+
+    // Crear el usuario (el password se hashea en el hook beforeCreate)
+    const newUsuario = await User.create({
+      nombre,
+      apellido,
+      email,
+      password,
+      rol: rol || 'director',
+      carrera_director,
+      estado: 'activo'
     });
+
+    res.status(201).json({
+      success: true,
+      mensaje: 'Usuario creado exitosamente',
+      usuario: newUsuario.toJSON()
+    });
+  } catch (error) {
+    handle500(res, error, 'createUsuario');
   }
 };
 
 module.exports = {
   getUsuarios,
-  updateDirectorCarrera
+  updateDirectorCarrera,
+  createUsuario
 };

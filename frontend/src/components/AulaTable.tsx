@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { aulaService, Aula } from '../services/api';
-import { FaBuilding, FaUsers, FaTools, FaBan, FaChartBar, FaFilter, FaPlus, FaEdit, FaTrash, FaDoorOpen } from 'react-icons/fa';
+import { FaBuilding, FaUsers, FaTools, FaBan, FaChartBar, FaPlus, FaEdit, FaTrash, FaDoorOpen, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 interface AulaFilters {
   edificio: string;
@@ -31,6 +31,9 @@ const AulaTable: React.FC = () => {
     estado: '',
     piso: '',
   });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [modalOpen, setModalOpen] = useState(false);
   const [currentAula, setCurrentAula] = useState<Aula | null>(null);
   const [formData, setFormData] = useState<{
@@ -196,267 +199,301 @@ const AulaTable: React.FC = () => {
     }
   };
 
-  const getEstadoColor = (estado: string) => {
+  const getEstadoDot = (estado: string) => {
     const estadoUpper = estado.toUpperCase();
     switch (estadoUpper) {
       case 'DISPONIBLE':
-        return 'bg-green-100 text-green-800';
+        return { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Disponible' };
       case 'MANTENIMIENTO':
-        return 'bg-yellow-100 text-yellow-800';
+        return { dot: 'bg-amber-500', text: 'text-amber-700', label: 'Mantenimiento' };
       case 'NO_DISPONIBLE':
       case 'NO DISPONIBLE':
-        return 'bg-red-100 text-red-800';
+        return { dot: 'bg-red-500', text: 'text-red-700', label: 'No disponible' };
+      case 'OCUPADA':
+        return { dot: 'bg-blue-500', text: 'text-blue-700', label: 'Ocupada' };
       default:
-        return 'bg-gray-100 text-gray-800';
+        return { dot: 'bg-gray-400', text: 'text-gray-600', label: estado };
     }
   };
-  
+
+  const getTipoBadge = (tipo: string) => {
+    switch (tipo?.toUpperCase()) {
+      case 'LABORATORIO':
+        return 'bg-violet-100 text-violet-700 border-violet-200';
+      case 'AUDITORIO':
+        return 'bg-rose-100 text-rose-700 border-rose-200';
+      case 'SALA_ESPECIAL':
+        return 'bg-cyan-100 text-cyan-700 border-cyan-200';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  // Filtrar por búsqueda local
+  const filteredAulas = aulas.filter((aula) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (aula.codigo?.toLowerCase().includes(term)) ||
+      (aula.nombre?.toLowerCase().includes(term)) ||
+      (aula.tipo?.toLowerCase().includes(term))
+    );
+  });
+
+  // Paginación
+  const totalPages = Math.ceil(filteredAulas.length / itemsPerPage);
+  const paginatedAulas = filteredAulas.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const limpiarFiltros = () => {
-    setFilters({
-      edificio: '',
-      tipo: '',
-      estado: '',
-      piso: '',
-    });
+    setFilters({ edificio: '', tipo: '', estado: '', piso: '' });
+    setSearchTerm('');
+    setCurrentPage(1);
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-foreground flex items-center gap-2">
-            <FaDoorOpen className="text-primary" />
-            Gestión de Aulas
+          <h2 className="text-2xl font-bold text-foreground">
+            Inventario de Aulas y Capacidad
           </h2>
-          <p className="text-muted-foreground mt-1">Administra las aulas de la institución</p>
+          <p className="text-muted-foreground mt-1">Gestiona las aulas y espacios del campus UIDE.</p>
         </div>
         <button
           onClick={openCreate}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-6 rounded-lg transition flex items-center gap-2 shadow-lg"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 px-5 rounded-lg transition flex items-center gap-2 shadow-sm"
         >
-          <FaPlus />
-          Nueva Aula
+          <FaPlus className="text-sm" />
+          Agregar Aula
         </button>
       </div>
 
       {/* Estadísticas */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-lg shadow-md border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-700 font-medium">Total Aulas</p>
-                <p className="text-3xl font-bold text-blue-900">{stats.total}</p>
-                <p className="text-xs text-blue-600 mt-1">{stats.totalEdificios} edificios</p>
-              </div>
-              <FaBuilding className="text-blue-500 text-4xl" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Total Aulas</p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-lg shadow-md border border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-700 font-medium">Disponibles</p>
-                <p className="text-3xl font-bold text-green-900">{stats.disponibles}</p>
-                <p className="text-xs text-green-600 mt-1">Listas para usar</p>
-              </div>
-              <FaUsers className="text-green-500 text-4xl" />
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Capacidad Total</p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <p className="text-3xl font-bold text-gray-900">{stats.capacidadTotal}</p>
+              <span className="text-sm text-gray-500">estudiantes</span>
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-5 rounded-lg shadow-md border border-yellow-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-yellow-700 font-medium">Mantenimiento</p>
-                <p className="text-3xl font-bold text-yellow-900">{stats.enMantenimiento}</p>
-                <p className="text-xs text-yellow-600 mt-1">En reparación</p>
-              </div>
-              <FaTools className="text-yellow-500 text-4xl" />
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-5 rounded-lg shadow-md border border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-700 font-medium">Capacidad Total</p>
-                <p className="text-3xl font-bold text-purple-900">{stats.capacidadTotal}</p>
-                <p className="text-xs text-purple-600 mt-1">Estudiantes</p>
-              </div>
-              <FaChartBar className="text-purple-500 text-4xl" />
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Capacidad Promedio</p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <p className="text-3xl font-bold text-gray-900">
+                {stats.total > 0 ? Math.round(stats.capacidadTotal / stats.total) : 0}
+              </p>
+              <span className="text-sm text-gray-500">por aula</span>
             </div>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="bg-destructive/10 border-l-4 border-destructive text-destructive p-4 mb-4 rounded-lg animate-fade-in">
-          <p className="font-medium flex items-center gap-2">
-            <FaBan />
-            Error
-          </p>
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-xl flex items-center gap-3">
+          <FaBan className="text-red-400 flex-shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="bg-card p-4 rounded-lg shadow-md border border-border mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <FaFilter className="text-primary" />
-          <h3 className="font-semibold text-foreground">Filtros</h3>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          <select
-            value={filters.edificio}
-            onChange={(e) => setFilters({ ...filters, edificio: e.target.value })}
-            className="border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-          >
-            <option value="">Todos los edificios</option>
-            <option value="Edificio A">Edificio A</option>
-            <option value="Edificio B">Edificio B</option>
-            <option value="Edificio C">Edificio C</option>
-            <option value="Laboratorios">Laboratorios</option>
-            <option value="Auditorio">Auditorio</option>
-          </select>
+      {/* Barra de búsqueda y filtros */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+        <div className="p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+          {/* Búsqueda */}
+          <div className="relative flex-1">
+            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              placeholder="Buscar por código, nombre o tipo..."
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition"
+            />
+          </div>
 
-          <select
-            value={filters.tipo}
-            onChange={(e) => setFilters({ ...filters, tipo: e.target.value })}
-            className="border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-          >
-            <option value="">Todos los tipos</option>
-            <option value="Estándar">Estándar</option>
-            <option value="Laboratorio">Laboratorio</option>
-            <option value="Auditorio">Auditorio</option>
-            <option value="Sala Especializada">Sala Especializada</option>
-            <option value="CUBICULO">Cubículo</option>
-            <option value="SALA_DESCANSO">Sala de Descanso</option>
-            <option value="SALA_AUDIENCIAS">Sala de Audiencias</option>
-          </select>
+          {/* Filtros inline */}
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={filters.tipo}
+              onChange={(e) => { setFilters({ ...filters, tipo: e.target.value }); setCurrentPage(1); }}
+              className="border border-gray-200 rounded-lg px-3 py-2.5 bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">Tipo: Todos</option>
+              <option value="AULA">Aula</option>
+              <option value="LABORATORIO">Laboratorio</option>
+              <option value="AUDITORIO">Auditorio</option>
+              <option value="SALA_ESPECIAL">Sala Especial</option>
+            </select>
 
-          <select
-            value={filters.piso}
-            onChange={(e) => setFilters({ ...filters, piso: e.target.value })}
-            className="border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-          >
-            <option value="">Todos los pisos</option>
-            <option value="1">Piso 1</option>
-            <option value="2">Piso 2</option>
-            <option value="3">Piso 3</option>
-            <option value="4">Piso 4</option>
-          </select>
+            <select
+              value={filters.estado}
+              onChange={(e) => { setFilters({ ...filters, estado: e.target.value }); setCurrentPage(1); }}
+              className="border border-gray-200 rounded-lg px-3 py-2.5 bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">Estado: Todos</option>
+              <option value="DISPONIBLE">Disponible</option>
+              <option value="MANTENIMIENTO">Mantenimiento</option>
+              <option value="NO_DISPONIBLE">No disponible</option>
+            </select>
 
-          <select
-            value={filters.estado}
-            onChange={(e) => setFilters({ ...filters, estado: e.target.value })}
-            className="border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-          >
-            <option value="">Todos los estados</option>
-            <option value="DISPONIBLE">Disponible</option>
-            <option value="MANTENIMIENTO">Mantenimiento</option>
-            <option value="NO_DISPONIBLE">No disponible</option>
-          </select>
-
-          <button
-            onClick={limpiarFiltros}
-            className="px-4 py-2 text-muted-foreground hover:bg-muted rounded-lg transition"
-          >
-            Limpiar filtros
-          </button>
+            {(filters.tipo || filters.estado || filters.edificio || filters.piso || searchTerm) && (
+              <button
+                onClick={limpiarFiltros}
+                className="px-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Tabla */}
       {loading ? (
-        <div className="text-center py-12 bg-card rounded-lg">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-muted-foreground mt-4">Cargando aulas...</p>
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-[3px] border-gray-200 border-t-primary"></div>
+          <p className="text-gray-500 mt-4 text-sm">Cargando aulas...</p>
         </div>
-      ) : aulas.length === 0 ? (
-        <div className="text-center py-12 bg-card rounded-lg">
-          <FaDoorOpen className="text-6xl text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground text-lg">No se encontraron aulas</p>
-          <p className="text-sm text-muted-foreground mt-2">Intenta ajustar los filtros o agrega una nueva aula</p>
+      ) : filteredAulas.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <FaDoorOpen className="text-5xl text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 font-medium">No se encontraron aulas</p>
+          <p className="text-sm text-gray-400 mt-1">Ajusta los filtros o agrega una nueva aula</p>
         </div>
       ) : (
-        <div className="bg-card rounded-lg shadow-md border border-border overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Código</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Nombre</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Ubicación</th>
-                  <th className="px-6 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wider">Capacidad</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Tipo</th>
-                  <th className="px-6 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wider">Estado</th>
-                  <th className="px-6 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wider">Acciones</th>
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Código</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nombre</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {aulas.map((aula) => (
-                  <tr key={aula.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-bold text-primary">{aula.codigo || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">{aula.nombre}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                        {aula.es_prioritaria && (
-                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">Prioritaria</span>
+              <tbody>
+                {paginatedAulas.map((aula) => {
+                  const estado = getEstadoDot(aula.estado);
+                  return (
+                    <tr key={aula.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-primary text-sm">{aula.codigo || 'N/A'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900 text-sm">{aula.nombre}</div>
+                        {(aula.es_prioritaria || aula.restriccion_carrera) && (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {aula.es_prioritaria && (
+                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-medium rounded border border-amber-200">Prioritaria</span>
+                            )}
+                            {aula.restriccion_carrera && (
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-medium rounded border border-blue-200">{aula.restriccion_carrera}</span>
+                            )}
+                          </div>
                         )}
-                        {aula.restriccion_carrera && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{aula.restriccion_carrera}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-foreground">{aula.edificio || '-'}</div>
-                      <div className="text-xs text-muted-foreground">Piso {aula.piso || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <FaUsers className="text-muted-foreground" />
-                        <span className="font-semibold">{aula.capacidad}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 text-xs rounded-full bg-blue-100 text-blue-800 font-medium">
-                        {aula.tipo || 'Estándar'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getEstadoColor(aula.estado)}`}>
-                        {aula.estado}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => openEdit(aula)}
-                          className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
-                          title="Editar"
-                        >
-                          <FaEdit />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(aula.id)}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
-                          title="Desactivar"
-                        >
-                          <FaTrash />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-700">{aula.capacidad} estudiantes</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-md border ${getTipoBadge(aula.tipo)}`}>
+                          {aula.tipo || 'AULA'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${estado.dot}`}></span>
+                          <span className={`text-sm font-medium ${estado.text}`}>{estado.label}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEdit(aula)}
+                            className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition"
+                            title="Editar"
+                          >
+                            <FaEdit className="text-sm" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(aula.id)}
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                            title="Desactivar"
+                          >
+                            <FaTrash className="text-sm" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 bg-muted/20 border-t border-border">
-            <p className="text-sm text-muted-foreground">
-              Mostrando <span className="font-semibold">{aulas.length}</span> aula(s)
+
+          {/* Footer con paginación */}
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-sm text-gray-500">
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredAulas.length)} de{' '}
+              <span className="font-semibold text-gray-700">{filteredAulas.length}</span> aulas
             </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  <FaChevronLeft className="text-xs" />
+                </button>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let page: number;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
+                        currentPage === page
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  <FaChevronRight className="text-xs" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gestión de Aulas — Administrador</title>
+<link rel="preconnect" href="/">
+<style>
+:root{--bg:#f7f6fb;--card:#ffffff;--text:#1f2937;--muted:#6b7280;--primary:#8b004c;--primary-900:#5e0034;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--chip:#eef2ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+.container{max-width:1100px;margin:24px auto;padding:0 16px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.title{font-size:24px;font-weight:700}
+.subtitle{color:var(--muted);font-size:14px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+.card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card h3{margin:0 0 8px 0;font-size:14px;color:var(--muted);font-weight:600}
+.card .value{font-size:28px;font-weight:700}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.search{flex:1;min-width:220px}
+.input,.select{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+.btn{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--primary-900)}
+.table{margin-top:14px;background:var(--card);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px;border-bottom:1px solid #f1f5f9;text-align:left;font-size:14px}
+th{font-size:12px;letter-spacing:.02em;color:var(--muted);text-transform:uppercase}
+.row-code{font-weight:700;color:#8b0000}
+.chip{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--chip);font-size:12px;font-weight:600}
+.chip.green{background:#dcfce7;color:#166534}
+.chip.yellow{background:#fef9c3;color:#854d0e}
+.chip.red{background:#fee2e2;color:#7f1d1d}
+.chip.blue{background:#dbeafe;color:#1e3a8a}
+.actions{display:flex;gap:8px}
+.btn-outline{background:#fff;color:var(--primary);border:1px solid #e5e7eb;padding:8px 10px;border-radius:8px;cursor:pointer}
+.btn-outline:hover{background:#fafafa}
+.footer{display:flex;justify-content:space-between;align-items:center;margin:14px 0;color:var(--muted);font-size:12px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.25);display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:#fff;border-radius:12px;max-width:640px;width:100%;padding:16px}
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.form-grid .full{grid-column:1/-1}
+.danger{color:#b91c1c}
+.topbar{display:flex;gap:8px;align-items:center}
+.token{flex:1;min-width:260px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <div class="title">Inventario de Aulas</div>
+      <div class="subtitle">Gestión centralizada de espacios académicos</div>
+    </div>
+    <div class="topbar">
+      <input id="tokenInput" class="input token" placeholder="Token JWT de administrador">
+      <button id="guardarTokenBtn" class="btn">Guardar Token</button>
+      <button id="nuevaAulaBtn" class="btn">Añadir Aula</button>
+    </div>
+  </div>
+
+  <div class="toolbar" style="margin-bottom:12px">
+    <button id="tabBtnAulas" class="btn">Aulas</button>
+    <button id="tabBtnDistribucion" class="btn btn-outline">Distribución de espacios</button>
+  </div>
+
+  <div id="tabAulas">
+    <div class="cards">
+      <div class="card"><h3>Total de aulas</h3><div id="totalAulas" class="value">—</div></div>
+      <div class="card"><h3>Capacidad total</h3><div id="capacidadTotal" class="value">—</div></div>
+      <div class="card"><h3>Promedio de capacidad</h3><div id="promedioCapacidad" class="value">—</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search"><input id="searchInput" class="input" placeholder="Buscar por código, edificio o tipo"></div>
+      <div><select id="filtroEdificio" class="select"><option value="">Edificio: Todos</option></select></div>
+      <div><select id="filtroTipo" class="select">
+        <option value="">Tipo: Todos</option>
+        <option value="AULA">Aula</option>
+        <option value="LABORATORIO">Laboratorio</option>
+        <option value="SALA_ESPECIAL">Sala especial</option>
+        <option value="AUDITORIO">Auditorio</option>
+      </select></div>
+      <div><select id="filtroEstado" class="select">
+        <option value="">Estado: Todos</option>
+        <option value="DISPONIBLE">Disponible</option>
+        <option value="OCUPADA">Ocupada</option>
+        <option value="MANTENIMIENTO">Mantenimiento</option>
+        <option value="NO_DISPONIBLE">No disponible</option>
+      </select></div>
+    </div>
+
+    <div class="table">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Edificio</th>
+            <th>Capacidad</th>
+            <th>Piso</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaAulas"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <div id="resumenLista">Mostrando — aulas</div>
+      <div>UIDE Gestión de Aulas</div>
+    </div>
+  </div>
+
+  <div id="tabDistribucion">
+    <div class="cards">
+      <div class="card"><h3>Total de clases</h3><div id="distTotal" class="value">—</div></div>
+      <div class="card"><h3>Asignadas + Simuladas</h3><div id="distAsignadasSim" class="value">—</div></div>
+      <div class="card"><h3>Pendientes</h3><div id="distPendientes" class="value">—</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div><select id="filtroCarreraDist" class="select">
+        <option value="">Carrera: Todas</option>
+        <option value="Arquitectura">Arquitectura</option>
+        <option value="Derecho">Derecho</option>
+      </select></div>
+      <button id="btnRefrescarDist" class="btn">Reintentar</button>
+    </div>
+
+    <div id="distError" style="display:none">
+      <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:12px;padding:16px;text-align:center">
+        <p style="color:#991b1b">Error al cargar los datos de distribución</p>
+        <button id="btnRetryDist" class="btn-outline">Reintentar</button>
+      </div>
+    </div>
+
+    <div class="table">
+      <table>
+        <thead>
+          <tr>
+            <th>Carrera</th>
+            <th>Materia</th>
+            <th>Día</th>
+            <th>Hora</th>
+            <th>Estudiantes</th>
+            <th>Aula</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tablaDistribucion">
+          <tr>
+            <td>Arquitectura</td>
+            <td class="row-code">Fundamentos de Diseño</td>
+            <td>Lun/Mie</td>
+            <td>07:00 - 09:00</td>
+            <td>35</td>
+            <td>AULA B4</td>
+            <td><span class="chip green">asignada</span></td>
+          </tr>
+          <tr>
+            <td>Derecho</td>
+            <td class="row-code">Introducción al Derecho</td>
+            <td>Mar/Jue</td>
+            <td>11:00 - 13:00</td>
+            <td>42</td>
+            <td>SALA DE AUDIENCIAS</td>
+            <td><span class="chip red">conflicto</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="modalForm" class="modal">
+  <div class="modal-card">
+    <h3 id="modalTitle">Nueva Aula</h3>
+    <div class="form-grid">
+      <div class="full"><input id="codigo" class="input" placeholder="Código (ej. A-101)"></div>
+      <div class="full"><input id="nombre" class="input" placeholder="Nombre del aula"></div>
+      <div><input id="edificio" class="input" placeholder="Edificio"></div>
+      <div><input id="piso" class="input" type="number" placeholder="Piso"></div>
+      <div><input id="capacidad" class="input" type="number" placeholder="Capacidad"></div>
+      <div>
+        <select id="tipo" class="select">
+          <option value="AULA">Aula</option>
+          <option value="LABORATORIO">Laboratorio</option>
+          <option value="SALA_ESPECIAL">Sala especial</option>
+          <option value="AUDITORIO">Auditorio</option>
+        </select>
+      </div>
+      <div>
+        <select id="estado" class="select">
+          <option value="DISPONIBLE">Disponible</option>
+          <option value="OCUPADA">Ocupada</option>
+          <option value="MANTENIMIENTO">Mantenimiento</option>
+          <option value="NO_DISPONIBLE">No disponible</option>
+        </select>
+      </div>
+      <div><input id="restriccion_carrera" class="input" placeholder="Restricción de carrera (opcional)"></div>
+      <div>
+        <select id="es_prioritaria" class="select">
+          <option value="false">No prioritaria</option>
+          <option value="true">Prioritaria</option>
+        </select>
+      </div>
+      <div class="full">
+        <button id="guardarBtn" class="btn">Guardar</button>
+        <button id="cancelarBtn" class="btn-outline">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./aulas.js"></script>
+</body>
+</html>

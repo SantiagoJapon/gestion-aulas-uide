@@ -1,25 +1,36 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// ⚡ CONFIGURACIÓN SQLITE - SOLUCIÓN DE EMERGENCIA
-// No requiere servidor PostgreSQL, todo en un archivo local
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: './database.sqlite',
-  logging: false,
-  define: {
-    timestamps: true,
-    underscored: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
+// Configuración PostgreSQL
+const sequelize = new Sequelize(
+  process.env.DB_NAME || 'gestion_aulas',
+  process.env.DB_USER || 'postgres',
+  process.env.DB_PASSWORD || 'postgres',
+  {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    dialect: 'postgres',
+    logging: false,
+    define: {
+      timestamps: true,
+      underscored: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
+    },
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
   }
-});
+);
 
 // Función para probar la conexión
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ Conexión a la base de datos establecida correctamente');
+    console.log('✅ Conexión a la base de datos PostgreSQL establecida correctamente');
     return true;
   } catch (error) {
     console.error('❌ Error al conectar con la base de datos:', error.message);
@@ -39,7 +50,7 @@ const syncDatabase = async (options = {}) => {
     }
 
     await sequelize.sync({ force, alter });
-    console.log('✅ Modelos sincronizados con la base de datos');
+    console.log('✅ Modelos sincronizados con la base de datos PostgreSQL');
   } catch (error) {
     console.error('❌ Error al sincronizar modelos:', error.message);
     throw error;

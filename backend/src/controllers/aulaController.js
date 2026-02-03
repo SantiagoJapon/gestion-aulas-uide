@@ -1,5 +1,5 @@
 const { Aula, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 
 /**
  * @desc    Listar todas las aulas (con filtros opcionales)
@@ -8,11 +8,11 @@ const { Op } = require('sequelize');
  */
 const getAllAulas = async (req, res) => {
   try {
-    const { 
-      edificio, 
-      carrera, 
-      capacidadMin, 
-      estado, 
+    const {
+      edificio,
+      carrera,
+      capacidadMin,
+      estado,
       tipo,
       piso,
       es_prioritaria,
@@ -20,7 +20,7 @@ const getAllAulas = async (req, res) => {
     } = req.query;
 
     const where = {};
-    
+
     if (edificio) where.edificio = edificio;
     if (estado) where.estado = estado;
     if (tipo) where.tipo = tipo;
@@ -49,9 +49,9 @@ const getAllAulas = async (req, res) => {
         });
       }
     } else {
-      aulas = await Aula.findAll({ 
-        where, 
-        order: [['edificio', 'ASC'], ['piso', 'ASC'], ['codigo', 'ASC']] 
+      aulas = await Aula.findAll({
+        where,
+        order: [['edificio', 'ASC'], ['piso', 'ASC'], ['codigo', 'ASC']]
       });
     }
 
@@ -62,10 +62,10 @@ const getAllAulas = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al obtener aulas:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: 'Error interno del servidor',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -78,24 +78,24 @@ const getAllAulas = async (req, res) => {
 const getAulaById = async (req, res) => {
   try {
     const aula = await Aula.findByPk(req.params.id);
-    
+
     if (!aula) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: 'Aula no encontrada' 
+        error: 'Aula no encontrada'
       });
     }
-    
+
     res.json({
       success: true,
       aula
     });
   } catch (error) {
     console.error('Error al obtener aula:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: 'Error al obtener el aula',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -121,7 +121,7 @@ const createAula = async (req, res) => {
     }
 
     const aula = await Aula.create(req.body);
-    
+
     res.status(201).json({
       success: true,
       message: 'Aula creada exitosamente',
@@ -129,7 +129,7 @@ const createAula = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al crear aula:', error);
-    
+
     // Manejar errores de validación de Sequelize
     if (error.name === 'SequelizeValidationError') {
       return res.status(400).json({
@@ -150,10 +150,10 @@ const createAula = async (req, res) => {
       });
     }
 
-    res.status(400).json({ 
+    res.status(400).json({
       success: false,
       error: 'Error al crear el aula',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -166,11 +166,11 @@ const createAula = async (req, res) => {
 const updateAula = async (req, res) => {
   try {
     const aula = await Aula.findByPk(req.params.id);
-    
+
     if (!aula) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: 'Aula no encontrada' 
+        error: 'Aula no encontrada'
       });
     }
 
@@ -188,7 +188,7 @@ const updateAula = async (req, res) => {
     }
 
     await aula.update(req.body);
-    
+
     res.json({
       success: true,
       message: 'Aula actualizada exitosamente',
@@ -196,7 +196,7 @@ const updateAula = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al actualizar aula:', error);
-    
+
     // Manejar errores de validación de Sequelize
     if (error.name === 'SequelizeValidationError') {
       return res.status(400).json({
@@ -209,10 +209,10 @@ const updateAula = async (req, res) => {
       });
     }
 
-    res.status(400).json({ 
+    res.status(400).json({
       success: false,
       error: 'Error al actualizar el aula',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -225,11 +225,11 @@ const updateAula = async (req, res) => {
 const deleteAula = async (req, res) => {
   try {
     const aula = await Aula.findByPk(req.params.id);
-    
+
     if (!aula) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: 'Aula no encontrada' 
+        error: 'Aula no encontrada'
       });
     }
 
@@ -238,7 +238,7 @@ const deleteAula = async (req, res) => {
       'SELECT COUNT(*) as total FROM clases WHERE aula_sugerida = :codigo',
       {
         replacements: { codigo: aula.codigo },
-        type: sequelize.QueryTypes.SELECT
+        type: QueryTypes.SELECT
       }
     );
 
@@ -252,17 +252,17 @@ const deleteAula = async (req, res) => {
 
     // En lugar de eliminar, cambiamos el estado a 'no_disponible'
     await aula.update({ estado: 'no_disponible' });
-    
+
     res.json({
       success: true,
       message: 'Aula desactivada correctamente'
     });
   } catch (error) {
     console.error('Error al desactivar aula:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: 'Error al desactivar el aula',
-      message: error.message 
+      message: error.message
     });
   }
 };
@@ -275,10 +275,10 @@ const deleteAula = async (req, res) => {
 const getAulasStats = async (req, res) => {
   try {
     const totalAulas = await Aula.count();
-    const disponibles = await Aula.count({ where: { estado: 'DISPONIBLE' } });
-    const enMantenimiento = await Aula.count({ where: { estado: 'MANTENIMIENTO' } });
-    const noDisponibles = await Aula.count({ where: { estado: 'NO_DISPONIBLE' } });
-    
+    const disponibles = await Aula.count({ where: { estado: 'disponible' } });
+    const enMantenimiento = await Aula.count({ where: { estado: 'mantenimiento' } });
+    const noDisponibles = await Aula.count({ where: { estado: 'no_disponible' } });
+
     // Capacidad total
     const aulas = await Aula.findAll({
       attributes: ['capacidad']

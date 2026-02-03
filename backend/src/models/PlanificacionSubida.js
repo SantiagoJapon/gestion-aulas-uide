@@ -11,7 +11,7 @@ const PlanificacionSubida = sequelize.define('PlanificacionSubida', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'carreras',
+      model: 'uploads_carreras',
       key: 'id'
     }
   },
@@ -42,6 +42,14 @@ const PlanificacionSubida = sequelize.define('PlanificacionSubida', {
   estado: {
     type: DataTypes.STRING,
     defaultValue: 'procesado' // procesado, error, pendiente
+  },
+  periodo_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'periodos',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'planificaciones_subidas',

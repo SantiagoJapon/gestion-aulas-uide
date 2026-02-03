@@ -1,4 +1,5 @@
 const { Estudiante, sequelize } = require('../models');
+const { QueryTypes } = require('sequelize');
 const XLSX = require('xlsx');
 
 /**
@@ -114,21 +115,21 @@ const loginEstudianteByCedula = async (req, res) => {
  */
 function validarCedulaEcuatoriana(cedula) {
   if (!cedula || cedula.length !== 10) return false;
-  
+
   const digitos = cedula.split('').map(Number);
   const provincia = parseInt(cedula.substring(0, 2));
-  
+
   if (provincia < 1 || provincia > 24) return false;
-  
+
   const coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
   let suma = 0;
-  
+
   for (let i = 0; i < 9; i++) {
     let valor = digitos[i] * coeficientes[i];
     if (valor >= 10) valor -= 9;
     suma += valor;
   }
-  
+
   const verificador = suma % 10 === 0 ? 0 : 10 - (suma % 10);
   return verificador === digitos[9];
 }
@@ -140,7 +141,7 @@ function validarCedulaEcuatoriana(cedula) {
  */
 const subirEstudiantes = async (req, res) => {
   const transaction = await sequelize.transaction();
-  
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -154,9 +155,9 @@ const subirEstudiantes = async (req, res) => {
 
     // Leer el archivo Excel
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    
+
     console.log('📄 Hojas disponibles:', workbook.SheetNames.join(', '));
-    
+
     // Usar la primera hoja disponible para estudiantes
     if (workbook.SheetNames.length === 0) {
       await transaction.rollback();
@@ -170,9 +171,9 @@ const subirEstudiantes = async (req, res) => {
     const primeraHoja = workbook.SheetNames[0];
     const sheet1 = workbook.Sheets[primeraHoja];
     const estudiantesData = XLSX.utils.sheet_to_json(sheet1);
-    
+
     console.log(`📚 Leyendo hoja "${primeraHoja}": ${estudiantesData.length} filas`);
-    
+
     // Validar que la primera hoja tenga datos
     if (estudiantesData.length === 0) {
       await transaction.rollback();
@@ -181,7 +182,7 @@ const subirEstudiantes = async (req, res) => {
         mensaje: `La hoja "${primeraHoja}" no contiene datos`
       });
     }
-    
+
     // Leer segunda hoja para inscripciones (opcional)
     let materiasData = [];
     if (workbook.SheetNames.length > 1) {
@@ -201,62 +202,62 @@ const subirEstudiantes = async (req, res) => {
     if (estudiantesData.length > 0) {
       const primeraFila = estudiantesData[0];
       const columnasDetectadas = Object.keys(primeraFila).filter(k => !k.startsWith('__EMPTY'));
-      
+
       console.log('📋 Columnas detectadas:', columnasDetectadas.join(', '));
-      
+
       // Si tiene columnas vacías, buscar si hay encabezados en una fila posterior
       if (columnasDetectadas.length === 0 || columnasDetectadas.some(c => c.includes('__EMPTY'))) {
         console.log('⚠️  Excel tiene formato no estándar, intentando detectar encabezados...');
         console.log('🔍 Buscando encabezados en las primeras 15 filas...');
-        
+
         // Buscar en las primeras 15 filas
         let filaEncabezados = -1;
         let encabezadosEncontrados = {};
-        
+
         for (let i = 0; i < Math.min(15, estudiantesData.length); i++) {
           const fila = estudiantesData[i];
           const valoresFila = Object.values(fila).filter(v => v !== null && v !== undefined);
-          
+
           console.log(`   Fila ${i + 1}: ${valoresFila.slice(0, 5).map(v => String(v).substring(0, 20)).join(' | ')}`);
-          
+
           // Si encontramos "cedula" o "nombres" en los valores, esta es la fila de encabezados
-          const tieneCedula = valoresFila.some(v => 
-            typeof v === 'string' && 
+          const tieneCedula = valoresFila.some(v =>
+            typeof v === 'string' &&
             (v.toLowerCase().includes('cedula') || v.toLowerCase().includes('cédula') || v.toLowerCase() === 'ci')
           );
-          
-          const tieneNombres = valoresFila.some(v => 
-            typeof v === 'string' && 
+
+          const tieneNombres = valoresFila.some(v =>
+            typeof v === 'string' &&
             v.toLowerCase().includes('nombre')
           );
-          
-          const tieneApellidos = valoresFila.some(v => 
-            typeof v === 'string' && 
+
+          const tieneApellidos = valoresFila.some(v =>
+            typeof v === 'string' &&
             v.toLowerCase().includes('apellido')
           );
-          
-          const tieneNombreCompleto = valoresFila.some(v => 
-            typeof v === 'string' && 
-            (v.toLowerCase().includes('nombre completo') || 
-             v.toLowerCase().includes('nombre_completo') ||
-             v.toLowerCase().includes('full name'))
+
+          const tieneNombreCompleto = valoresFila.some(v =>
+            typeof v === 'string' &&
+            (v.toLowerCase().includes('nombre completo') ||
+              v.toLowerCase().includes('nombre_completo') ||
+              v.toLowerCase().includes('full name'))
           );
-          
+
           if (tieneCedula || tieneNombreCompleto || (tieneNombres && tieneApellidos)) {
             console.log(`   ✅ Posible fila de encabezados detectada en fila ${i + 1}`);
             filaEncabezados = i;
-            
+
             // Mapear encabezados desde los valores de esta fila
             const keys = Object.keys(fila);
             keys.forEach(key => {
               const valor = String(fila[key] || '').toLowerCase().trim();
-              
+
               // Eliminar acentos para comparación más flexible
               const sinAcentos = valor
                 .normalize('NFD')
                 .replace(/[\u0300-\u036f]/g, '')
                 .replace(/ñ/g, 'n');
-              
+
               if (sinAcentos.includes('cedula') || valor === 'ci' || valor.includes('cédula')) {
                 encabezadosEncontrados.cedula = key;
               } else if (valor.includes('nombre completo') || valor.includes('nombre_completo') || valor.includes('full name')) {
@@ -282,10 +283,10 @@ const subirEstudiantes = async (req, res) => {
                 encabezadosEncontrados.nivel = key;
               }
             });
-            
+
             console.log(`✅ Encabezados encontrados en fila ${i + 1} (fila Excel: ${i + 1})`);
             console.log(`📋 Mapeo creado:`, JSON.stringify(encabezadosEncontrados, null, 2));
-            
+
             // Verificar que al menos tenemos cedula, nombres y apellidos
             if (encabezadosEncontrados.cedula && encabezadosEncontrados.nombres && encabezadosEncontrados.apellidos) {
               console.log('✅ Encabezados completos detectados (cedula, nombres, apellidos)');
@@ -298,25 +299,25 @@ const subirEstudiantes = async (req, res) => {
             }
           }
         }
-        
+
         // Si encontramos encabezados en otra fila, usar desde ahí
         if (filaEncabezados !== -1) {
           const filaExcel = filaEncabezados + 1;
           const filaInicioDatos = filaEncabezados + 2;
-          
+
           console.log('');
           console.log('🎯 RESULTADO DE DETECCIÓN:');
           console.log(`   📍 Encabezados en: Fila ${filaExcel} (Excel)`);
           console.log(`   📍 Datos inician en: Fila ${filaInicioDatos} (Excel)`);
           console.log(`   🗑️  Saltando: ${filaEncabezados + 1} filas (títulos + encabezados)`);
           console.log('');
-          
+
           // Eliminar las filas antes de los encabezados (incluyendo la fila de encabezados)
           estudiantesData.splice(0, filaEncabezados + 1);
-          
+
           console.log(`📊 Filas de datos a procesar: ${estudiantesData.length}`);
           console.log('');
-          
+
           // Actualizar el mapeo de columnas
           columnMap = {
             cedulaCol: encabezadosEncontrados.cedula,
@@ -327,10 +328,10 @@ const subirEstudiantes = async (req, res) => {
             escuelaCol: encabezadosEncontrados.escuela,  // ← Agregar escuela
             nivelCol: encabezadosEncontrados.nivel       // ← Agregar nivel
           };
-          
+
           // Marcar que usamos detección automática
           usandoDeteccionAutomatica = true;
-          
+
           console.log('✅ Usando mapeo automático de headers detectados');
         } else {
           // No se encontraron encabezados válidos
@@ -343,31 +344,31 @@ const subirEstudiantes = async (req, res) => {
           });
         }
       }
-      
+
       // Solo verificar columnas manualmente si NO se detectaron headers automáticamente
       if (!usandoDeteccionAutomatica) {
         // Verificar columnas requeridas (buscar variantes comunes)
         const buscarColumna = (nombreBuscado, aliases = []) => {
           const todasOpciones = [nombreBuscado, ...aliases];
-          return todasOpciones.find(opt => 
-            Object.keys(primeraFila).some(k => 
+          return todasOpciones.find(opt =>
+            Object.keys(primeraFila).some(k =>
               k.toLowerCase().trim() === opt.toLowerCase()
             )
-          ) || Object.keys(primeraFila).find(k => 
+          ) || Object.keys(primeraFila).find(k =>
             k.toLowerCase().includes(nombreBuscado.toLowerCase())
           );
         };
-        
+
         const cedulaCol = buscarColumna('cedula', ['cédula', 'ci', 'identificacion']);
         const nombresCol = buscarColumna('nombres', ['nombre', 'name']);
         const apellidosCol = buscarColumna('apellidos', ['apellido', 'surname']);
-        
+
         if (!cedulaCol || !nombresCol || !apellidosCol) {
           const faltantes = [];
           if (!cedulaCol) faltantes.push('cedula');
           if (!nombresCol) faltantes.push('nombres');
           if (!apellidosCol) faltantes.push('apellidos');
-          
+
           await transaction.rollback();
           return res.status(400).json({
             success: false,
@@ -377,9 +378,9 @@ const subirEstudiantes = async (req, res) => {
             ayuda: 'Asegúrate de que la primera fila del Excel tenga exactamente estos nombres: cedula, nombres, apellidos'
           });
         }
-        
+
         console.log(`✅ Columnas mapeadas: cedula="${cedulaCol}", nombres="${nombresCol}", apellidos="${apellidosCol}"`);
-        
+
         // Actualizar mapeo con columnas detectadas
         columnMap = { cedulaCol, nombresCol, apellidosCol };
       }
@@ -396,27 +397,27 @@ const subirEstudiantes = async (req, res) => {
     // ========================================
     console.log('👥 Procesando estudiantes...');
     console.log(`📊 Total de filas a procesar: ${estudiantesData.length}`);
-    
+
     for (let i = 0; i < estudiantesData.length; i++) {
       const row = estudiantesData[i];
-      
+
       try {
         // Obtener valores usando las columnas detectadas
         const cedulaVal = row[columnMap.cedulaCol] || row['Cédula'] || row.cedula;
         let nombresVal = row[columnMap.nombresCol] || row.nombres;
         let apellidosVal = row[columnMap.apellidosCol] || row.apellidos;
-        
+
         // Saltar filas completamente vacías sin reportar error
         const todasVacias = Object.values(row).every(v => !v || String(v).trim() === '');
         if (todasVacias) {
           continue;
         }
-        
+
         // Si tenemos "Nombre Completo", dividirlo en nombres y apellidos
         if (columnMap.nombreCompleto && row[columnMap.nombreCompleto]) {
           const nombreCompleto = String(row[columnMap.nombreCompleto]).trim();
           const partes = nombreCompleto.split(' ');
-          
+
           if (partes.length >= 2) {
             // Asumir que la primera mitad son nombres y la segunda mitad apellidos
             const mitad = Math.ceil(partes.length / 2);
@@ -427,7 +428,7 @@ const subirEstudiantes = async (req, res) => {
             apellidosVal = partes[0];
           }
         }
-        
+
         // Validar campos requeridos y reportar específicamente qué falta
         const camposFaltantes = [];
         if (!cedulaVal || String(cedulaVal).trim() === '') {
@@ -439,7 +440,7 @@ const subirEstudiantes = async (req, res) => {
         if (!apellidosVal || String(apellidosVal).trim() === '') {
           camposFaltantes.push('apellidos');
         }
-        
+
         if (camposFaltantes.length > 0) {
           errores.push(`Fila ${i + 2}: Faltan campos requeridos: ${camposFaltantes.join(', ')}`);
           console.log(`⚠️  Fila ${i + 2}: Datos incompletos. Faltan: ${camposFaltantes.join(', ')}`);
@@ -449,23 +450,23 @@ const subirEstudiantes = async (req, res) => {
         const cedula = String(cedulaVal).trim();
         const nombres = String(nombresVal).trim();
         const apellidos = String(apellidosVal).trim();
-        
+
         // Buscar email usando el mapeo si existe, sino buscar en campos posibles
-        const emailRaw = columnMap.emailCol 
-          ? row[columnMap.emailCol] 
+        const emailRaw = columnMap.emailCol
+          ? row[columnMap.emailCol]
           : (row['Email UIDE'] || row.email || row['email'] || row.Email);
         const emailFinal = emailRaw ? String(emailRaw).trim() : null;
-        
+
         const telefono = row.telefono ? String(row.telefono).trim() : null;
-        
+
         // Buscar nivel usando el mapeo si existe, sino buscar en campos posibles
-        const nivelRaw = columnMap.nivelCol 
+        const nivelRaw = columnMap.nivelCol
           ? row[columnMap.nivelCol]
           : (row['Nivel Actual'] || row.nivel || row.Nivel || row.semestre || row.Semestre || '1');
         const nivel = String(nivelRaw).trim();
-        
+
         // Buscar escuela usando el mapeo si existe, sino buscar en campos posibles
-        const escuelaRaw = columnMap.escuelaCol 
+        const escuelaRaw = columnMap.escuelaCol
           ? row[columnMap.escuelaCol]
           : (row.Escuela || row.escuela || row.Carrera || row.carrera);
         const escuela = escuelaRaw ? String(escuelaRaw).trim() : 'Sin especificar';
@@ -501,14 +502,14 @@ const subirEstudiantes = async (req, res) => {
              escuela = EXCLUDED.escuela
            RETURNING (xmax = 0) as inserted`,
           {
-            replacements: { 
-              cedula, 
-              nombre, 
-              email: emailFinal, 
-              nivel, 
-              escuela 
+            replacements: {
+              cedula,
+              nombre,
+              email: emailFinal,
+              nivel,
+              escuela
             },
-            type: sequelize.QueryTypes.INSERT,
+            type: QueryTypes.INSERT,
             transaction
           }
         );
@@ -538,7 +539,7 @@ const subirEstudiantes = async (req, res) => {
     // ========================================
     if (materiasData.length > 0) {
       console.log('📚 Procesando inscripciones...');
-      
+
       // Verificar si existe la tabla estudiantes_materias
       const tableCheck = await sequelize.query(
         `SELECT EXISTS (
@@ -546,13 +547,13 @@ const subirEstudiantes = async (req, res) => {
           WHERE table_schema = 'public' 
           AND table_name = 'estudiantes_materias'
         )`,
-        { type: sequelize.QueryTypes.SELECT, transaction }
+        { type: QueryTypes.SELECT, transaction }
       );
 
       if (tableCheck[0].exists) {
         for (let i = 0; i < materiasData.length; i++) {
           const row = materiasData[i];
-          
+
           try {
             // Validar campos requeridos
             if (!row.cedula_estudiante || !row.codigo_materia) {
@@ -570,7 +571,7 @@ const subirEstudiantes = async (req, res) => {
               'SELECT id FROM estudiantes WHERE cedula = :cedula',
               {
                 replacements: { cedula: cedula_estudiante },
-                type: sequelize.QueryTypes.SELECT,
+                type: QueryTypes.SELECT,
                 transaction
               }
             );
@@ -590,13 +591,13 @@ const subirEstudiantes = async (req, res) => {
                AND paralelo = :paralelo
                LIMIT 1`,
               {
-                replacements: { 
-                  materia: `%${codigo_materia}%`, 
+                replacements: {
+                  materia: `%${codigo_materia}%`,
                   ciclo: nivel.toString(),
                   cicloStr: `%${nivel}%`,
-                  paralelo 
+                  paralelo
                 },
-                type: sequelize.QueryTypes.SELECT,
+                type: QueryTypes.SELECT,
                 transaction
               }
             );
@@ -615,7 +616,7 @@ const subirEstudiantes = async (req, res) => {
                ON CONFLICT (estudiante_id, clase_id) DO NOTHING`,
               {
                 replacements: { estudiante_id, clase_id },
-                type: sequelize.QueryTypes.INSERT,
+                type: QueryTypes.INSERT,
                 transaction
               }
             );
@@ -656,7 +657,7 @@ const subirEstudiantes = async (req, res) => {
             }),
             usuario_id: req.usuario?.id || null
           },
-          type: sequelize.QueryTypes.INSERT,
+          type: QueryTypes.INSERT,
           transaction
         }
       );
@@ -679,27 +680,27 @@ const subirEstudiantes = async (req, res) => {
         formato_incorrecto: errores.filter(e => e.includes('formato incorrecto')).length,
         estudiantes_no_encontrados: errores.filter(e => e.includes('Estudiante no encontrado')).length,
         clases_no_encontradas: errores.filter(e => e.includes('Clase no encontrada')).length,
-        otros: errores.filter(e => 
-          !e.includes('Faltan campos') && 
-          !e.includes('Cédula') && 
+        otros: errores.filter(e =>
+          !e.includes('Faltan campos') &&
+          !e.includes('Cédula') &&
           !e.includes('formato') &&
           !e.includes('no encontrado') &&
           !e.includes('no encontrada')
         ).length
       };
-      
+
       resumenErrores = {
         total: errores.length,
         por_tipo: tiposError,
         primeros_10: errores.slice(0, 10),
-        mensaje: errores.length > 10 
+        mensaje: errores.length > 10
           ? `Mostrando los primeros 10 de ${errores.length} errores. Revisa los logs para ver todos.`
           : null
       };
     }
 
-    const mensaje = errores.length === 0 
-      ? 'Estudiantes procesados exitosamente sin errores' 
+    const mensaje = errores.length === 0
+      ? 'Estudiantes procesados exitosamente sin errores'
       : `Proceso completado. ${estudiantesGuardados + estudiantesActualizados} estudiantes procesados con ${errores.length} error(es) detectado(s)`;
 
     res.json({
@@ -723,11 +724,11 @@ const subirEstudiantes = async (req, res) => {
     } catch (rollbackError) {
       console.error('Error al hacer rollback:', rollbackError);
     }
-    
+
     console.error('❌ Error al procesar estudiantes:');
     console.error('   Mensaje:', error.message);
     console.error('   Stack:', error.stack);
-    
+
     // Registrar error en historial
     if (req.file) {
       try {
@@ -739,14 +740,14 @@ const subirEstudiantes = async (req, res) => {
             replacements: {
               tipo: 'estudiantes',
               archivo: req.file.originalname,
-              detalles: JSON.stringify({ 
+              detalles: JSON.stringify({
                 error: error.message,
                 stack: error.stack,
-                code: error.code 
+                code: error.code
               }),
               usuario_id: req.usuario?.id || null
             },
-            type: sequelize.QueryTypes.INSERT
+            type: QueryTypes.INSERT
           }
         );
       } catch (histError) {
@@ -771,35 +772,35 @@ const subirEstudiantes = async (req, res) => {
 const obtenerHistorialCargas = async (req, res) => {
   try {
     const { tipo, limite } = req.query;
-    
+
     let query = 'SELECT * FROM historial_cargas WHERE 1=1';
     const replacements = {};
-    
+
     if (tipo) {
       query += ` AND tipo = :tipo`;
       replacements.tipo = tipo;
     }
-    
+
     query += ' ORDER BY fecha_carga DESC';
-    
+
     const limit = limite ? parseInt(limite) : 20;
     query += ` LIMIT ${limit}`;
-    
+
     const result = await sequelize.query(query, {
       replacements,
-      type: sequelize.QueryTypes.SELECT
+      type: QueryTypes.SELECT
     });
-    
+
     res.json({
       success: true,
       historial: result
     });
-    
+
   } catch (error) {
     console.error('Error al obtener historial:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 };

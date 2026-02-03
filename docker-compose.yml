@@ -45,6 +45,11 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=gestion_aulas
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/gestion_aulas
       - JWT_SECRET=${JWT_SECRET:-supersecreto123}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -108,10 +113,10 @@ services:
       - DB_POSTGRESDB_USER=postgres
       - DB_POSTGRESDB_PASSWORD=postgres
 
-      # Redis para modo queue (opcional, mejora rendimiento)
-      - EXECUTIONS_MODE=queue
-      - QUEUE_BULL_REDIS_HOST=redis
-      - QUEUE_BULL_REDIS_PORT=6379
+      # Modo de ejecución regular (sin workers separados)
+      - EXECUTIONS_MODE=regular
+      # - QUEUE_BULL_REDIS_HOST=redis
+      # - QUEUE_BULL_REDIS_PORT=6379
 
       # API Keys para servicios externos
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -119,6 +124,11 @@ services:
 
       # URLs de servicios
       - N8N_EDITOR_BASE_URL=http://localhost:5678
+
+      # Task runner timeout (para algoritmos pesados con muchas clases)
+      - N8N_RUNNERS_HEARTBEAT_INTERVAL=600
+      - N8N_RUNNERS_TASK_TIMEOUT=600
+      - N8N_RUNNERS_MAX_PAYLOAD=104857600
 
       # Para desarrollo
       - NODE_ENV=${NODE_ENV:-development}

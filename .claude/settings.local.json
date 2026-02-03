@@ -26,9 +26,14 @@
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
       "Bash(sqlite3:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker network inspect:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\Users\\sjapo\\OneDrive\\Documents\\Proyecto de Titulacion"
+    ]
   }
 }
