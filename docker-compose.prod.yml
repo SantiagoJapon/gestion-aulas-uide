@@ -1,0 +1,229 @@
+# ============================================
+# Docker Compose - PRODUCCIÓN
+# Gestion de Aulas UIDE
+# ============================================
+# Uso: docker compose -f docker-compose.prod.yml up -d --build
+# Requiere: .env.production en la raiz del proyecto
+# ============================================
+
+services:
+
+  # ==========================================
+  # PostgreSQL
+  # ==========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: gestion_aulas_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD es requerido}
+      POSTGRES_DB: ${DB_NAME:-gestion_aulas}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # NO exponemos puerto al host en produccion
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-gestion_aulas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # Redis
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: gestion_aulas_redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
+    # NO exponemos puerto al host en produccion
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # Backend (API Node.js)
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gestion_aulas_backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-gestion_aulas}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD es requerido}
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-gestion_aulas}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET es requerido}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      N8N_WEBHOOK_URL: http://n8n:5678/webhook
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # Frontend (Build estático)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    container_name: gestion_aulas_frontend_build
+    # Este servicio solo existe para que Nginx copie los archivos
+    # No necesita correr permanentemente
+    volumes:
+      - frontend_dist:/usr/share/nginx/html
+    networks:
+      - app_network
+    # Se detiene después de copiar, nginx sirve los archivos
+    restart: "no"
+    command: ["sh", "-c", "echo 'Frontend build listo' && tail -f /dev/null"]
+
+  # ==========================================
+  # Nginx (Reverse Proxy)
+  # ==========================================
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: gestion_aulas_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - frontend_dist:/usr/share/nginx/html:ro
+      - certbot_data:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # n8n (Workflow Automation) - SOLO INTERNO
+  # ==========================================
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: gestion_aulas_n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:?N8N_PASSWORD es requerido}
+      N8N_HOST: n8n
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://n8n:5678/
+      GENERIC_TIMEZONE: America/Guayaquil
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n_db
+      DB_POSTGRESDB_USER: ${DB_USER:-postgres}
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD}
+      EXECUTIONS_MODE: regular
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      N8N_EDITOR_BASE_URL: http://n8n:5678
+      N8N_RUNNERS_TASK_TIMEOUT: 600
+      N8N_RUNNERS_MAX_PAYLOAD: 104857600
+      NODE_ENV: production
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # NO exponemos puerto - solo accesible internamente
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # Telegram Bot (Polling)
+  # ==========================================
+  telegram-bot:
+    build:
+      context: ./telegram-bot-aulas
+      dockerfile: Dockerfile
+    container_name: gestion_aulas_bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN es requerido}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-gestion_aulas}
+      DB_SSL: "false"
+      VOICE_API_KEY: ${VOICE_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # NO necesita puerto - usa polling
+    networks:
+      - app_network
+    restart: always
+
+  # ==========================================
+  # Certbot (SSL - ejecutar manualmente)
+  # ==========================================
+  certbot:
+    image: certbot/certbot
+    container_name: gestion_aulas_certbot
+    volumes:
+      - certbot_data:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    # Solo se ejecuta manualmente para renovar certificados:
+    # docker compose -f docker-compose.prod.yml run certbot certonly --webroot -w /var/www/certbot -d tudominio.com
+    entrypoint: "echo 'Ejecutar manualmente: docker compose run certbot certonly --webroot -w /var/www/certbot -d TUDOMINIO'"
+    networks:
+      - app_network
+
+# ==========================================
+# Volumenes persistentes
+# ==========================================
+volumes:
+  postgres_data:
+    name: gestion_aulas_pgdata
+  n8n_data:
+    name: gestion_aulas_n8n
+  uploads_data:
+    name: gestion_aulas_uploads
+  frontend_dist:
+    name: gestion_aulas_frontend
+  certbot_data:
+    name: gestion_aulas_certbot
+  certbot_certs:
+    name: gestion_aulas_certs
+
+# ==========================================
+# Red interna
+# ==========================================
+networks:
+  app_network:
+    driver: bridge
+    name: gestion_aulas_network

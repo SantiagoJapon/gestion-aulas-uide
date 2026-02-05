@@ -13,7 +13,15 @@ const PORT = process.env.PORT || 3000;
 // ========================================
 // CORS - Configuración para permitir peticiones del frontend
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function(origin, callback) {
+    const allowed = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',');
+    // Permitir requests sin origin (mismo servidor, curl, etc)
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // En produccion Nginx maneja el proxy, no hay CORS real
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -50,9 +58,11 @@ app.use(sanitizeInput);
 // Logging de seguridad
 app.use(securityLogger);
 
-// Rate Limiting - Diferentes límites según el tipo de endpoint
-// app.use('/api/auth/', authLimiter); // DESHABILITADO - Sin límite de intentos de autenticación
-// app.use('/api/', apiLimiter); // DESHABILITADO TEMPORALMENTE - Límite general para API (para pruebas)
+// Rate Limiting - Habilitado en produccion
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/auth/', authLimiter);
+  app.use('/api/', apiLimiter);
+}
 
 // ========================================
 // MIDDLEWARES DE PARSEO

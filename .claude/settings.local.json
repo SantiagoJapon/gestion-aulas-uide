@@ -28,7 +28,8 @@
       "Bash(sqlite3:*)",
       "Bash(taskkill:*)",
       "Bash(docker compose:*)",
-      "Bash(docker network inspect:*)"
+      "Bash(docker network inspect:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],
