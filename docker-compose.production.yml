@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  # Base de Datos PostgreSQL
+  postgres:
+    image: postgres:15
+    container_name: gestion_aulas_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-gestion_aulas}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - app_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d gestion_aulas" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: gestion_aulas_redis
+    networks:
+      - app_network
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend - Node.js API
+  backend:
+    build: ./backend
+    container_name: gestion_aulas_backend
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-gestion_aulas}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-gestion_aulas}
+      - JWT_SECRET=${JWT_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
+      - FRONTEND_URL=${FRONTEND_URL}
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # Frontend - React + Nginx
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ""
+    container_name: gestion_aulas_frontend
+    restart: always
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+  # n8n - Workflow Automation
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: gestion_aulas_n8n
+    restart: always
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - GENERIC_TIMEZONE=America/Guayaquil
+
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_db
+      - DB_POSTGRESDB_USER=${DB_USER:-postgres}
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD}
+
+      - EXECUTIONS_MODE=regular
+
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+
+      - N8N_EDITOR_BASE_URL=${WEBHOOK_URL}
+
+      - N8N_RUNNERS_HEARTBEAT_INTERVAL=600
+      - N8N_RUNNERS_TASK_TIMEOUT=600
+      - N8N_RUNNERS_MAX_PAYLOAD=104857600
+
+      - NODE_ENV=production
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+  n8n_data:
+  backend_uploads:
+
+networks:
+  app_network:
+    driver: bridge
