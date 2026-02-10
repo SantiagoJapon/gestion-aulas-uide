@@ -130,19 +130,19 @@ const User = sequelize.define('User', {
 });
 
 // Método de instancia para verificar contraseña
-User.prototype.verificarPassword = async function(passwordIngresado) {
+User.prototype.verificarPassword = async function (passwordIngresado) {
   return await bcrypt.compare(passwordIngresado, this.password);
 };
 
 // Método de instancia para obtener datos públicos (sin contraseña)
-User.prototype.toJSON = function() {
+User.prototype.toJSON = function () {
   const values = { ...this.get() };
   delete values.password;
   return values;
 };
 
 // Método estático para obtener nombre completo
-User.prototype.getNombreCompleto = function() {
+User.prototype.getNombreCompleto = function () {
   return `${this.nombre} ${this.apellido}`;
 };
 

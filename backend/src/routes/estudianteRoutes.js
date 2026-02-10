@@ -1,13 +1,15 @@
+// Actualización de rutas para permitir acceso a directores - 2026-02-10
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { 
-  lookupEstudianteByEmail, 
-  loginEstudianteByCedula, 
+const {
+  lookupEstudianteByEmail,
+  loginEstudianteByCedula,
   subirEstudiantes,
-  obtenerHistorialCargas
+  obtenerHistorialCargas,
+  listarEstudiantes
 } = require('../controllers/estudianteController');
-const { verificarAuth, verificarAdmin } = require('../middleware/auth');
+const { verificarAuth, verificarAdmin, verificarRol } = require('../middleware/auth');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -25,6 +27,18 @@ const upload = multer({
     }
   }
 });
+
+/**
+ * @route   GET /api/estudiantes
+ * @desc    Listar estudiantes (admin)
+ * @access  Private (admin)
+ */
+router.get(
+  '/',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  listarEstudiantes
+);
 
 /**
  * @route   GET /api/estudiantes/lookup
@@ -48,7 +62,7 @@ router.get('/login/:cedula', loginEstudianteByCedula);
 router.post(
   '/subir',
   verificarAuth,
-  verificarAdmin,
+  verificarRol('director', 'admin'),
   upload.single('archivo'),
   subirEstudiantes
 );
@@ -61,7 +75,7 @@ router.post(
 router.get(
   '/historial-cargas',
   verificarAuth,
-  verificarAdmin,
+  verificarRol('director', 'admin'),
   obtenerHistorialCargas
 );
 

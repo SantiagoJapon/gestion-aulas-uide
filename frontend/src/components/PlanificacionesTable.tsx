@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { planificacionService, PlanificacionSubida } from '../services/api';
-import { FaDownload, FaFileExcel, FaCalendarAlt, FaUser, FaCheckCircle } from 'react-icons/fa';
+import { FaDownload, FaFileExcel, FaCalendarAlt, FaUser, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 
 export default function PlanificacionesTable() {
   const [planificaciones, setPlanificaciones] = useState<PlanificacionSubida[]>([]);
@@ -40,7 +40,6 @@ export default function PlanificacionesTable() {
 
   const formatFecha = (fecha: string) => {
     return new Date(fecha).toLocaleString('es-EC', {
-      year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -50,165 +49,110 @@ export default function PlanificacionesTable() {
 
   if (loading) {
     return (
-      <div className="bg-card rounded-xl shadow-card p-6 border border-border">
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <span className="ml-3 text-muted-foreground">Cargando planificaciones...</span>
-        </div>
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 p-12 text-center animate-fade-in">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-[3px] border-slate-100 border-t-uide-blue"></div>
+        <p className="text-slate-500 mt-4 text-xs font-bold uppercase tracking-widest">Sincronizando archivos...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-destructive/10 border-2 border-destructive/50 rounded-xl p-6">
-        <p className="text-destructive font-medium">{error}</p>
+      <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center animate-fade-in">
+        <FaExclamationCircle className="text-red-400 text-3xl mx-auto mb-3" />
+        <p className="text-red-700 font-bold text-sm">{error}</p>
+        <button onClick={cargarPlanificaciones} className="mt-4 text-xs font-black text-red-700 uppercase tracking-widest hover:underline">Reintentar</button>
       </div>
     );
   }
 
   if (planificaciones.length === 0) {
     return (
-      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6">
-        <div className="flex items-center gap-3">
-          <FaFileExcel className="text-yellow-600" size={24} />
-          <div>
-            <h3 className="font-semibold text-yellow-900">Sin planificaciones</h3>
-            <p className="text-sm text-yellow-700">No hay planificaciones subidas aún</p>
-          </div>
-        </div>
+      <div className="bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center animate-fade-in">
+        <FaFileExcel className="text-slate-300 dark:text-slate-700 text-4xl mx-auto mb-4" />
+        <h3 className="font-black text-slate-500 uppercase tracking-tighter">Sin planificaciones</h3>
+        <p className="text-xs text-slate-400 mt-1">No se han registrado subidas recientemente</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
-      <div className="p-6 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <FaFileExcel className="text-primary" size={20} />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground">
-                Planificaciones Subidas
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {planificaciones.length} archivo{planificaciones.length !== 1 ? 's' : ''} encontrado{planificaciones.length !== 1 ? 's' : ''}
-              </p>
-            </div>
+    <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden animate-fade-in">
+      <div className="p-4 sm:p-6 border-b border-slate-50 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-uide-blue/10 flex items-center justify-center text-uide-blue">
+            <FaFileExcel size={20} />
           </div>
-          <button
-            onClick={cargarPlanificaciones}
-            className="px-4 py-2 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-          >
-            Actualizar
-          </button>
+          <div>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">Archivos de Planificación</h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+              Últimas {planificaciones.length} subidas procesadas
+            </p>
+          </div>
         </div>
+        <button
+          onClick={cargarPlanificaciones}
+          className="p-2 text-uide-blue hover:bg-uide-blue/5 rounded-lg transition-all"
+          title="Actualizar lista"
+        >
+          <span className="material-symbols-outlined text-[20px]">refresh</span>
+        </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-muted/50 border-b border-border">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Carrera
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Archivo
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Clases
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Subido Por
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Fecha
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-card divide-y divide-border">
-            {planificaciones.map((plan) => (
-              <tr key={plan.id} className="hover:bg-muted/30 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-foreground">
-                    {plan.carrera?.carrera || 'N/A'}
+      <div className="divide-y divide-slate-50 dark:divide-slate-800">
+        {planificaciones.map((plan) => (
+          <div key={plan.id} className="p-4 sm:p-5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-all group">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 shadow-sm ${plan.estado === 'procesado' ? 'bg-emerald-500' : plan.estado === 'error' ? 'bg-red-500' : 'bg-amber-500'
+                    }`}></span>
+                  <p className="text-sm font-black text-slate-900 dark:text-white truncate">
+                    {plan.carrera?.carrera || 'Carrera No Especificada'}
+                  </p>
+                  {plan.estado === 'procesado' && <FaCheckCircle className="text-emerald-500 shrink-0" size={12} />}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <FaFileExcel className="text-emerald-600" size={11} />
+                    <span className="truncate max-w-[150px] sm:max-w-[250px]">{plan.nombre_archivo_original}</span>
                   </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <FaFileExcel className="text-green-600" />
-                    <div className="text-sm text-foreground max-w-xs truncate" title={plan.nombre_archivo_original}>
-                      {plan.nombre_archivo_original}
-                    </div>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <FaUser size={10} />
+                    <span>{plan.usuario ? `${plan.usuario.nombre}` : 'Sist.'}</span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                      {plan.total_clases}
-                    </span>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <FaCalendarAlt size={10} />
+                    <span>{formatFecha(plan.fecha_subida)}</span>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <FaUser className="text-muted-foreground" size={14} />
-                    <div className="text-sm text-foreground">
-                      {plan.usuario ? `${plan.usuario.nombre} ${plan.usuario.apellido}` : 'N/A'}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <FaCalendarAlt className="text-muted-foreground" size={14} />
-                    <div className="text-sm text-muted-foreground">
-                      {formatFecha(plan.fecha_subida)}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    plan.estado === 'procesado' 
-                      ? 'bg-green-100 text-green-800' 
-                      : plan.estado === 'error'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {plan.estado === 'procesado' && <FaCheckCircle size={12} />}
-                    {plan.estado === 'procesado' ? 'Procesado' : plan.estado}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <button
-                    onClick={() => handleDescargar(plan.id)}
-                    disabled={descargando === plan.id}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Descargar archivo"
-                  >
-                    {descargando === plan.id ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        <span className="text-sm">Descargando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FaDownload size={14} />
-                        <span className="text-sm">Descargar</span>
-                      </>
-                    )}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-50 dark:border-slate-800/50">
+                <div className="flex items-center gap-1 bg-uide-blue/5 dark:bg-uide-blue/10 px-2 py-1 rounded-lg">
+                  <span className="text-[10px] font-black text-uide-blue">{plan.total_clases}</span>
+                  <span className="text-[8px] font-bold text-uide-blue/60 uppercase tracking-tighter">Sesiones</span>
+                </div>
+
+                <button
+                  onClick={() => handleDescargar(plan.id)}
+                  disabled={descargando === plan.id}
+                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 text-uide-blue rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:scale-[1.05] active:scale-[0.95] disabled:opacity-50 transition-all hover:bg-uide-blue hover:text-white hover:border-uide-blue"
+                >
+                  {descargando === plan.id ? (
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-current border-t-transparent"></div>
+                  ) : (
+                    <>
+                      <FaDownload size={12} />
+                      <span>Excel</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

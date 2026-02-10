@@ -15,7 +15,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (user: User) => void;
@@ -25,27 +25,36 @@ export const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token') || sessionStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   // Cargar usuario al iniciar si hay token
   useEffect(() => {
     const loadUser = async () => {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
 
       if (storedToken && storedUser) {
         try {
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
           // Verificar que el token sigue siendo válido
           const profile = await authService.getProfile();
           setUser(profile.usuario);
-          localStorage.setItem('user', JSON.stringify(profile.usuario));
+
+          // Actualizar en el storage que corresponda
+          if (localStorage.getItem('token')) {
+            localStorage.setItem('user', JSON.stringify(profile.usuario));
+          } else {
+            sessionStorage.setItem('user', JSON.stringify(profile.usuario));
+          }
         } catch (error) {
           // Token inválido, limpiar
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('user');
           setToken(null);
           setUser(null);
         }
@@ -56,13 +65,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loadUser();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberMe: boolean = false) => {
     try {
-      const response = await authService.login(email, password);
+      const response = await authService.login(email, password, rememberMe);
       setToken(response.token);
       setUser(response.usuario);
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.usuario));
+
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('token', response.token);
+      storage.setItem('user', JSON.stringify(response.usuario));
+
+      // Si no es recordado, nos aseguramos de que no haya restos en localStorage
+      if (!rememberMe) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     } catch (error: any) {
       // Pasar el error completo para que el componente pueda acceder a response.data
       if (error.response) {
@@ -103,11 +120,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
   };
 
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    if (localStorage.getItem('token')) {
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    } else {
+      sessionStorage.setItem('user', JSON.stringify(updatedUser));
+    }
   };
 
   return (

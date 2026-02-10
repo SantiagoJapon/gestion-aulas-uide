@@ -110,7 +110,7 @@ const Aula = sequelize.define('Aula', {
 });
 
 // Método de instancia para verificar si una carrera tiene prioridad/restricción
-Aula.prototype.tienePrioridad = function(carrera) {
+Aula.prototype.tienePrioridad = function (carrera) {
   if (!this.restriccion_carrera) {
     return false;
   }
@@ -118,45 +118,41 @@ Aula.prototype.tienePrioridad = function(carrera) {
 };
 
 // Método de instancia para verificar si el aula está disponible
-Aula.prototype.estaDisponible = function() {
+Aula.prototype.estaDisponible = function () {
   return this.estado === 'DISPONIBLE';
 };
 
 // Método de instancia para obtener datos públicos
-Aula.prototype.toJSON = function() {
+Aula.prototype.toJSON = function () {
   const values = { ...this.get() };
   return values;
 };
 
 // Método estático para buscar aulas disponibles por capacidad
-Aula.findByCapacidad = async function(capacidadMinima) {
-  return await Aula.findAll({
+Aula.findByCapacidad = async function (capacidadMinima) {
+  const aulas = await this.findAll({
     where: {
-      capacidad: {
-        [Op.gte]: capacidadMinima
-      },
-      estado: 'DISPONIBLE'
+      estado: 'DISPONIBLE',
+      capacidad: { [sequelize.Sequelize.Op.gte]: capacidadMinima }
     },
     order: [['capacidad', 'ASC']]
   });
 };
 
 // Método estático para buscar aulas por prioridad de carrera
-Aula.findByCarrera = async function(carrera) {
-  const { Sequelize } = require('sequelize');
-  return await Aula.findAll({
-    where: {
-      estado: 'DISPONIBLE',
-      [Op.or]: [
-        { restriccion_carrera: carrera },
-        { restriccion_carrera: null }
-      ]
-    },
-    order: [
-      // Primero las que tienen prioridad para esta carrera
-      [Sequelize.literal(`CASE WHEN restriccion_carrera = '${carrera}' THEN 0 ELSE 1 END`), 'ASC'],
-      ['capacidad', 'ASC']
-    ]
+Aula.findByCarrera = async function (carrera) {
+  // Usar query parametrizada para evitar SQL injection
+  return await sequelize.query(`
+    SELECT * FROM aulas
+    WHERE estado = 'DISPONIBLE'
+      AND (restriccion_carrera = :carrera OR restriccion_carrera IS NULL)
+    ORDER BY CASE WHEN restriccion_carrera = :carrera THEN 0 ELSE 1 END ASC,
+             capacidad ASC
+  `, {
+    replacements: { carrera },
+    type: require('sequelize').QueryTypes.SELECT,
+    model: Aula,
+    mapToModel: true
   });
 };
 

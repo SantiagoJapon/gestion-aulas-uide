@@ -251,7 +251,7 @@ const deleteAula = async (req, res) => {
     }
 
     // En lugar de eliminar, cambiamos el estado a 'no_disponible'
-    await aula.update({ estado: 'no_disponible' });
+    await aula.update({ estado: 'NO_DISPONIBLE' });
 
     res.json({
       success: true,
@@ -275,9 +275,9 @@ const deleteAula = async (req, res) => {
 const getAulasStats = async (req, res) => {
   try {
     const totalAulas = await Aula.count();
-    const disponibles = await Aula.count({ where: { estado: 'disponible' } });
-    const enMantenimiento = await Aula.count({ where: { estado: 'mantenimiento' } });
-    const noDisponibles = await Aula.count({ where: { estado: 'no_disponible' } });
+    const disponibles = await Aula.count({ where: { estado: 'DISPONIBLE' } });
+    const enMantenimiento = await Aula.count({ where: { estado: 'MANTENIMIENTO' } });
+    const noDisponibles = await Aula.count({ where: { estado: 'NO_DISPONIBLE' } });
 
     // Capacidad total
     const aulas = await Aula.findAll({

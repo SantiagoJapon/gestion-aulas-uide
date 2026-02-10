@@ -18,7 +18,7 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d gestion_aulas"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d gestion_aulas" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,7 +33,7 @@ services:
       - app_network
     restart: always
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -62,6 +62,7 @@ services:
       - ./backend:/app
       - /app/node_modules
       - ./backend/uploads:/app/uploads
+    command: npm run dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +121,7 @@ services:
 
       # API Keys para servicios externos
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
 
       # URLs de servicios
@@ -152,7 +154,7 @@ volumes:
   postgres_data:
   n8n_data:
 
+
 networks:
   app_network:
     driver: bridge
-

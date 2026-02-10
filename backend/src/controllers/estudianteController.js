@@ -1,5 +1,5 @@
 const { Estudiante, sequelize } = require('../models');
-const { QueryTypes } = require('sequelize');
+const { QueryTypes, Op } = require('sequelize');
 const XLSX = require('xlsx');
 
 /**
@@ -106,6 +106,75 @@ const loginEstudianteByCedula = async (req, res) => {
       success: false,
       mensaje: 'Error al buscar estudiante',
       error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Listar estudiantes con filtros y paginación
+ * @route   GET /api/estudiantes
+ * @access  Private (admin)
+ */
+const listarEstudiantes = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200); // tope razonable
+    const offset = (page - 1) * limit;
+
+    const { search, escuela, nivel } = req.query;
+    const where = {};
+
+    // Filtro por Rol: Si es director, solo ve su carrera
+    if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
+      const carreraOriginal = req.usuario.carrera_director.trim();
+      const carreraSinAcentos = carreraOriginal.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+      where.escuela = {
+        [Op.or]: [
+          { [Op.iLike]: `%${carreraOriginal}%` },
+          { [Op.iLike]: `%${carreraSinAcentos}%` }
+        ]
+      };
+    } else if (escuela && String(escuela).trim() !== '') {
+      // Si es admin y pasó un filtro de escuela
+      where.escuela = { [Op.iLike]: `%${String(escuela).trim()}%` };
+    }
+
+    if (search && String(search).trim() !== '') {
+      const term = `%${String(search).trim()}%`;
+      where[Op.or] = [
+        { cedula: { [Op.iLike]: term } },
+        { nombre: { [Op.iLike]: term } },
+        { email: { [Op.iLike]: term } },
+      ];
+    }
+
+    if (nivel && String(nivel).trim() !== '') {
+      where.nivel = { [Op.iLike]: `%${String(nivel).trim()}%` };
+    }
+
+    const { rows, count } = await Estudiante.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['nombre', 'ASC']],
+    });
+
+    const totalPages = Math.ceil(count / limit) || 1;
+
+    res.json({
+      success: true,
+      total: count,
+      page,
+      pages: totalPages,
+      estudiantes: rows,
+    });
+  } catch (error) {
+    console.error('Error en listarEstudiantes:', error);
+    res.status(500).json({
+      success: false,
+      mensaje: 'Error al listar estudiantes',
+      error: error.message,
     });
   }
 };
@@ -465,11 +534,23 @@ const subirEstudiantes = async (req, res) => {
           : (row['Nivel Actual'] || row.nivel || row.Nivel || row.semestre || row.Semestre || '1');
         const nivel = String(nivelRaw).trim();
 
-        // Buscar escuela usando el mapeo si existe, sino buscar en campos posibles
+        // Detectar escuela en el Excel
         const escuelaRaw = columnMap.escuelaCol
           ? row[columnMap.escuelaCol]
           : (row.Escuela || row.escuela || row.Carrera || row.carrera);
-        const escuela = escuelaRaw ? String(escuelaRaw).trim() : 'Sin especificar';
+
+        // Lógica de asignación de escuela:
+        // 1. Prioridad: Si el usuario es director, forzamos su carrera propia
+        // 2. Si es admin y envió escuela por body (desde el selector), usamos esa
+        // 3. Por último, lo que venga en el Excel
+        let escuela = 'Sin especificar';
+        if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
+          escuela = req.usuario.carrera_director;
+        } else if (req.body.escuela) {
+          escuela = String(req.body.escuela).trim();
+        } else if (escuelaRaw) {
+          escuela = String(escuelaRaw).trim();
+        }
 
         // Validar formato de cédula
         if (cedula.length !== 10 || !/^\d+$/.test(cedula)) {
@@ -809,5 +890,6 @@ module.exports = {
   lookupEstudianteByEmail,
   loginEstudianteByCedula,
   subirEstudiantes,
-  obtenerHistorialCargas
+  obtenerHistorialCargas,
+  listarEstudiantes
 };

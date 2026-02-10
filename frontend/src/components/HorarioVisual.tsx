@@ -42,10 +42,10 @@ export default function HorarioVisual() {
     try {
       setLoading(true);
       setError('');
-      
+
       const carreraId = user?.rol === 'director' ? user.carrera_director : undefined;
-      const response = await distribucionService.obtenerHorario(carreraId);
-      
+      const response = await distribucionService.obtenerHorario(carreraId || undefined);
+
       setClases(response.horario || []);
     } catch (err: any) {
       setError(err.response?.data?.mensaje || 'Error al cargar horario');
@@ -58,7 +58,7 @@ export default function HorarioVisual() {
   const getClasesEnHorario = (dia: string, hora: string) => {
     return clases.filter(clase => {
       if (!clase.dia || !clase.hora_inicio) return false;
-      
+
       // Normalizar día
       const diaNormalizado = normalizarDia(clase.dia);
       if (diaNormalizado !== dia) return false;
@@ -71,14 +71,14 @@ export default function HorarioVisual() {
 
   const normalizarDia = (dia: string): string => {
     const diaLower = dia.toLowerCase().trim();
-    
+
     if (diaLower.includes('lun') || diaLower === 'l') return 'Lunes';
     if (diaLower.includes('mar') || diaLower === 'm') return 'Martes';
     if (diaLower.includes('mie') || diaLower === 'x' || diaLower === 'mi') return 'Miércoles';
     if (diaLower.includes('jue') || diaLower === 'j') return 'Jueves';
     if (diaLower.includes('vie') || diaLower === 'v') return 'Viernes';
     if (diaLower.includes('sab') || diaLower === 's') return 'Sábado';
-    
+
     return dia;
   };
 
@@ -109,7 +109,7 @@ export default function HorarioVisual() {
           <div>
             <h3 className="font-semibold text-yellow-900">Sin horario disponible</h3>
             <p className="text-sm text-yellow-700">
-              {user?.rol === 'admin' 
+              {user?.rol === 'admin'
                 ? 'No hay distribución de aulas. Ejecuta la distribución automática primero.'
                 : 'Tu carrera aún no tiene aulas asignadas.'}
             </p>
@@ -133,9 +133,9 @@ export default function HorarioVisual() {
                 Horario de Clases
               </h3>
               <p className="text-sm text-muted-foreground">
-                {user?.rol === 'admin' 
+                {user?.rol === 'admin'
                   ? `${clases.length} clases distribuidas - Todas las carreras`
-                  : `${clases.length} clases distribuidas - ${user?.carrera?.nombre || 'Tu carrera'}`}
+                  : `${clases.length} clases distribuidas - ${user?.carrera?.carrera || 'Tu carrera'}`}
               </p>
             </div>
           </div>
@@ -149,87 +149,97 @@ export default function HorarioVisual() {
       </div>
 
       {/* Horario Grid */}
-      <div className="p-6 overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="border-2 border-border bg-muted/50 px-4 py-3 text-sm font-semibold text-foreground min-w-[80px]">
-                <FaClock className="inline mr-2" />
-                Hora
-              </th>
-              {DIAS.map(dia => (
-                <th key={dia} className="border-2 border-border bg-primary/10 px-4 py-3 text-sm font-semibold text-foreground min-w-[180px]">
-                  {dia}
+      <div className="p-6">
+        {/*
+          Si hay muchas clases en un mismo bloque (día/hora),
+          no debemos permitir que la celda crezca indefinidamente.
+          Limitamos la altura del calendario y usamos scroll interno.
+        */}
+        <div className="rounded-xl border border-border overflow-auto max-h-[70vh] bg-background">
+          <table className="min-w-[1100px] w-full border-collapse table-fixed">
+            <thead>
+              <tr>
+                <th className="border-2 border-border bg-muted/50 px-4 py-3 text-sm font-semibold text-foreground w-[92px] sticky top-0 left-0 z-30">
+                  <FaClock className="inline mr-2" />
+                  Hora
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {HORAS.map(hora => (
-              <tr key={hora}>
-                <td className="border-2 border-border bg-muted/30 px-4 py-3 text-sm font-medium text-foreground text-center">
-                  {hora}
-                </td>
-                {DIAS.map(dia => {
-                  const clasesEnHorario = getClasesEnHorario(dia, hora);
-                  
-                  return (
-                    <td key={`${dia}-${hora}`} className="border-2 border-border bg-card p-2 align-top min-h-[80px]">
-                      {clasesEnHorario.length > 0 ? (
-                        <div className="space-y-2">
-                          {clasesEnHorario.map((clase, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg p-3 border-l-4 border-primary hover:shadow-md transition-shadow"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <FaBook className="text-primary flex-shrink-0" size={12} />
-                                    <p className="text-sm font-bold text-foreground truncate" title={clase.materia}>
-                                      {clase.materia}
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                                    <FaMapMarkerAlt size={10} />
-                                    <span className="font-semibold text-primary">
-                                      {clase.aula_asignada}
-                                    </span>
-                                  </div>
+                {DIAS.map(dia => (
+                  <th
+                    key={dia}
+                    className="border-2 border-border bg-primary/10 px-4 py-3 text-sm font-semibold text-foreground w-[180px] sticky top-0 z-20"
+                  >
+                    {dia}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {HORAS.map(hora => (
+                <tr key={hora}>
+                  <td className="border-2 border-border bg-muted/30 px-4 py-3 text-sm font-medium text-foreground text-center sticky left-0 z-10">
+                    {hora}
+                  </td>
+                  {DIAS.map(dia => {
+                    const clasesEnHorario = getClasesEnHorario(dia, hora);
 
-                                  {clase.docente && (
-                                    <p className="text-xs text-muted-foreground truncate" title={clase.docente}>
-                                      {clase.docente}
-                                    </p>
-                                  )}
+                    return (
+                      <td key={`${dia}-${hora}`} className="border-2 border-border bg-card p-2 align-top h-[120px]">
+                        {clasesEnHorario.length > 0 ? (
+                          <div className="h-[104px] overflow-y-auto pr-1 space-y-2">
+                            {clasesEnHorario.map((clase, idx) => (
+                              <div
+                                key={idx}
+                                className="bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg p-3 border-l-4 border-primary hover:shadow-md transition-shadow"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <FaBook className="text-primary flex-shrink-0" size={12} />
+                                      <p className="text-sm font-bold text-foreground truncate" title={clase.materia}>
+                                        {clase.materia}
+                                      </p>
+                                    </div>
 
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary">
-                                      <FaUsers size={10} />
-                                      {clase.num_estudiantes}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {clase.hora_inicio} - {clase.hora_fin}
-                                    </span>
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                                      <FaMapMarkerAlt size={10} />
+                                      <span className="font-semibold text-primary">
+                                        {clase.aula_asignada}
+                                      </span>
+                                    </div>
+
+                                    {clase.docente && (
+                                      <p className="text-xs text-muted-foreground truncate" title={clase.docente}>
+                                        {clase.docente}
+                                      </p>
+                                    )}
+
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary">
+                                        <FaUsers size={10} />
+                                        {clase.num_estudiantes}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {clase.hora_inicio} - {clase.hora_fin}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center text-muted-foreground text-xs py-4 opacity-50">
-                          -
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="h-[104px] flex items-center justify-center text-muted-foreground text-xs opacity-50">
+                            -
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Leyenda */}

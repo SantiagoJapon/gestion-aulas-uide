@@ -47,15 +47,29 @@ const fixEncoding = (value) => {
 
 const getUsuarios = async (req, res) => {
   try {
-    const { rol } = req.query;
+    const { rol, carrera_id } = req.query;
     const where = {};
     if (rol) where.rol = rol;
+
+    // Si el usuario es director, forzar filtro por su carrera
+    if (req.usuario.rol === 'director') {
+      where.carrera_director = req.usuario.carrera_director;
+    } else if (carrera_id) {
+      // Si es admin y pasa carrera_id, filtrar por esa carrera
+      const { Carrera: CarreraModel } = require('../models');
+      const carreraObj = await CarreraModel.findByPk(carrera_id);
+      if (carreraObj) {
+        where.carrera_director = carreraObj.carrera;
+      } else {
+        where.carrera_director = '__NON_EXISTENT__';
+      }
+    }
 
     // Si estamos buscando directores, incluir información de la carrera
     const include = rol === 'director' ? [
       {
         model: Carrera,
-        as: 'Carrera',
+        as: 'carrera',
         attributes: ['id', 'carrera', 'carrera_normalizada'],
         required: false
       }
@@ -73,9 +87,9 @@ const getUsuarios = async (req, res) => {
       usuarios: usuarios.map((u) => {
         const json = u.toJSON();
         // Si tiene carrera asociada, incluir el nombre
-        if (json.Carrera) {
-          json.carrera_nombre = json.Carrera.carrera;
-          delete json.Carrera; // Remover el objeto anidado
+        if (json.carrera) {
+          json.carrera_nombre = json.carrera.carrera;
+          delete json.carrera; // Remover el objeto anidado
         }
         return json;
       })
@@ -177,14 +191,26 @@ const createUsuario = async (req, res) => {
       });
     }
 
+    // Restricciones para Directores
+    let finalRol = rol || 'docente';
+    let finalCarrera = carrera_director;
+
+    if (req.usuario.rol === 'director') {
+      // Un director solo puede crear docentes (o estudiantes si se permitiera aquí)
+      // pero nunca otros admins
+      if (finalRol === 'admin') finalRol = 'docente';
+      // Forzar que la carrera sea la misma que la del director
+      finalCarrera = req.usuario.carrera_director;
+    }
+
     // Crear el usuario (el password se hashea en el hook beforeCreate)
     const newUsuario = await User.create({
       nombre,
       apellido,
       email,
       password,
-      rol: rol || 'director',
-      carrera_director,
+      rol: finalRol,
+      carrera_director: finalCarrera,
       estado: 'activo'
     });
 
@@ -198,8 +224,85 @@ const createUsuario = async (req, res) => {
   }
 };
 
+const updateUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, apellido, email, rol, estado, cedula, telefono, carrera_director } = req.body;
+
+    const usuario = await User.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        error: 'Usuario no encontrado'
+      });
+    }
+
+    // Si el que edita es un director, validar que no cambie el rol de otro usuario a admin
+    // o que no edite a alguien fuera de su carrera (opcional pero recomendado)
+    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
+      return res.status(403).json({
+        success: false,
+        error: 'No tienes permiso para editar este usuario'
+      });
+    }
+
+    // Restricciones para Directores en la edición
+    let updatedFields = { nombre, apellido, email, rol, estado, cedula, telefono, carrera_director };
+
+    if (req.usuario.rol === 'director') {
+      // No permitir que un director asigne el rol de admin
+      if (rol === 'admin') delete updatedFields.rol;
+      // No permitir que un director mueva a un usuario a otra carrera
+      updatedFields.carrera_director = req.usuario.carrera_director;
+    }
+
+    await usuario.update(updatedFields);
+
+    res.json({
+      success: true,
+      mensaje: 'Usuario actualizado exitosamente',
+      usuario: usuario.toJSON()
+    });
+  } catch (error) {
+    handle500(res, error, 'updateUsuario');
+  }
+};
+
+const deleteUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const usuario = await User.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        error: 'Usuario no encontrado'
+      });
+    }
+
+    // Seguridad para directores
+    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
+      return res.status(403).json({
+        success: false,
+        error: 'No tienes permiso para eliminar este usuario'
+      });
+    }
+
+    await usuario.destroy();
+
+    res.json({
+      success: true,
+      mensaje: 'Usuario eliminado exitosamente'
+    });
+  } catch (error) {
+    handle500(res, error, 'deleteUsuario');
+  }
+};
+
 module.exports = {
   getUsuarios,
   updateDirectorCarrera,
-  createUsuario
+  createUsuario,
+  updateUsuario,
+  deleteUsuario
 };

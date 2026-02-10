@@ -141,6 +141,19 @@ function escMd(text) {
 
 function extractDay(text) {
   const normalized = normalizeText(text);
+
+  // Soporte para "Hoy" y "Mañana"
+  if (normalized.includes('hoy')) {
+    const today = new Date().toLocaleDateString('es-ES', { timeZone: 'America/Guayaquil', weekday: 'long' });
+    return extractDay(normalizeText(today));
+  }
+  if (normalized.includes('manana')) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toLocaleDateString('es-ES', { timeZone: 'America/Guayaquil', weekday: 'long' });
+    return extractDay(normalizeText(tomorrowStr));
+  }
+
   const dias = [
     { raw: 'lunes', formatted: 'Lunes' },
     { raw: 'martes', formatted: 'Martes' },
@@ -427,7 +440,14 @@ async function processInput(chatId, inputText, fromId) {
 
     // MENÚ: AULAS
     if (normalized.includes('buscar aulas') || normalized.includes('aulas libres')) {
-      await bot.sendMessage(chatId, '🏢 ¿Para qué día y hora buscamos?\n\nEjemplo: "Hoy 10:00" o "Lunes 15:00"');
+      const dayButtons = {
+        inline_keyboard: [
+          [{ text: '📅 Hoy', callback_data: 'day_Hoy' }, { text: '📅 Mañana', callback_data: 'day_Mañana' }],
+          [{ text: 'Lunes', callback_data: 'day_Lunes' }, { text: 'Martes', callback_data: 'day_Martes' }, { text: 'Miércoles', callback_data: 'day_Miércoles' }],
+          [{ text: 'Jueves', callback_data: 'day_Jueves' }, { text: 'Viernes', callback_data: 'day_Viernes' }]
+        ]
+      };
+      await bot.sendMessage(chatId, '🏢 ¿Para qué día buscamos?', { reply_markup: dayButtons });
       return;
     }
 
@@ -555,18 +575,53 @@ async function processInput(chatId, inputText, fromId) {
       return;
     }
 
-    // BÚSQUEDA DE AULAS (Fallback)
+    // ... (previous code)
+
+    // BÚSQUEDA DE AULAS (Fallback y Flujo Mejorado)
     const day = extractDay(text);
     const time = extractTime(text);
 
-    if (day || time) {
-      const d = day ? day.formatted : 'Lunes';
-      const t = time || '07:00';
+    // Si el usuario solo dice "Mañana" o "El Lunes", y estamos en el estado correcto, preguntamos hora
+    if (day && !time && !normalized.includes('buscar aulas')) {
+      // Guardamos el día en el contexto
+      userState.set(chatId, { state: STATES.WAITING_BOOKING_TIME, context: { day: day.formatted } });
 
-      // Definimos un rango de 2 horas si no se provee fin
-      const tEnd = time ? `${String(parseInt(t.split(':')[0]) + 2).padStart(2, '0')}:${t.split(':')[1]}` : '22:00';
+      const timeButtons = {
+        inline_keyboard: [
+          [{ text: '07:00', callback_data: 'time_07:00' }, { text: '09:00', callback_data: 'time_09:00' }, { text: '11:00', callback_data: 'time_11:00' }],
+          [{ text: '14:00', callback_data: 'time_14:00' }, { text: '16:00', callback_data: 'time_16:00' }, { text: '18:00', callback_data: 'time_18:00' }]
+        ]
+      };
+      await bot.sendMessage(chatId, `📅 Vale, para el *${day.formatted}*. ¿A qué hora? (Ej: 09:00)`, { parse_mode: 'Markdown', reply_markup: timeButtons });
+      return;
+    }
 
-      // Query de Arquitectura: Ver aulas libres
+    if (day || time || (state === STATES.WAITING_BOOKING_TIME)) {
+      let d = day ? day.formatted : (userState.get(chatId)?.context?.day || 'Lunes');
+      let t = time;
+
+      if (!t && state === STATES.WAITING_BOOKING_TIME) {
+        // Si estamos esperando hora y el usuario mandó texto que parece hora
+        t = extractTime(text);
+      }
+
+      if (!t) {
+        // Fallback: Si no hay hora, mostramos botones de hora nuevamente
+        const timeButtons = {
+          inline_keyboard: [
+            [{ text: '07:00', callback_data: 'time_07:00' }, { text: '09:00', callback_data: 'time_09:00' }, { text: '11:00', callback_data: 'time_11:00' }],
+            [{ text: '14:00', callback_data: 'time_14:00' }, { text: '16:00', callback_data: 'time_16:00' }, { text: '18:00', callback_data: 'time_18:00' }]
+          ]
+        };
+        await bot.sendMessage(chatId, `🕒 ¿A qué hora necesitas el aula?`, { reply_markup: timeButtons });
+        userState.set(chatId, { state: STATES.WAITING_BOOKING_TIME, context: { day: d } });
+        return;
+      }
+
+      // Si tenemos día y hora, buscamos
+      // ... (Lógica de búsqueda existente) ...
+      const tEnd = `${String(parseInt(t.split(':')[0]) + 2).padStart(2, '0')}:${t.split(':')[1]}`;
+
       const sql = `
         SELECT a.codigo, a.nombre, a.capacidad FROM aulas a
         WHERE a.estado ILIKE 'disponible' AND a.codigo NOT IN (
@@ -588,11 +643,17 @@ async function processInput(chatId, inputText, fromId) {
             callback_data: `book_${a.codigo}_${d}_${t}`
           }]));
 
-          responseText += `He encontrado estas opciones. Solo pulsa el botón del aula que quieras usar. 👇`;
+          responseText += `He encontrado estas opciones. Pulsa un botón o escribe "Reservar [Aula]". 👇`;
 
           await bot.sendMessage(chatId, responseText, {
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: buttons }
+          });
+
+          // Guardamos contexto completo por si escribe "Reservar AULA 1"
+          userState.set(chatId, {
+            state: STATES.IDLE,
+            context: { lastSearch: { day: d, time: t, timeEnd: tEnd } }
           });
         }
       } catch (e) {
@@ -602,33 +663,48 @@ async function processInput(chatId, inputText, fromId) {
       return;
     }
 
-    // 5. COMANDO RESERVAR
+    // 5. COMANDO RESERVAR (Mejorado con Contexto)
     if (normalized.startsWith('reservar')) {
       const parts = text.split(' ');
+      let aulaCodigo, dia, horas;
+
+      // Caso 1: Completo "Reservar AULA 1 Lunes 10:00-12:00"
       if (parts.length >= 4) {
-        const aulaCodigo = parts[1].toUpperCase();
-        const dia = parts[2];
-        const horas = parts[3].split('-');
-
-        if (horas.length !== 2) {
-          await bot.sendMessage(chatId, 'Formato hora incorrecto. Ej: 14:00-16:00');
-          return;
-        }
-
-        const session = await getSession(fromId);
-        if (!session) {
-          await bot.sendMessage(chatId, 'Inicia sesión primero.');
-          return;
-        }
-
-        await pool.query(
-          `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telegram_id, estado) VALUES ($1, $2, $3, $4, $5, 'activa')`,
-          [aulaCodigo, dia, horas[0], horas[1], String(fromId)]
-        );
-        await bot.sendMessage(chatId, `✅ *¡Listo!* Reservaste el aula *${aulaCodigo}*.\n\nRoomie te avisará antes de que empiece. 😉`, { parse_mode: 'Markdown' });
-      } else {
-        await bot.sendMessage(chatId, 'Formato: Reservar [Aula] [Dia] [Inicio-Fin]\nEj: Reservar AULA-1 Lunes 10:00-12:00');
+        aulaCodigo = parts[1].toUpperCase();
+        dia = parts[2];
+        horas = parts[3].split('-');
       }
+      // Caso 2: Contexto "Reservar AULA 1" (Usa la última búsqueda)
+      else if (parts.length >= 2) {
+        const lastSearch = userState.get(chatId)?.context?.lastSearch;
+        if (lastSearch) {
+          aulaCodigo = parts[1].toUpperCase();
+          dia = lastSearch.day;
+          horas = [lastSearch.time, lastSearch.timeEnd];
+          console.log(`💡 Usando contexto para reserva: ${aulaCodigo} en ${dia} ${horas.join('-')}`);
+        } else {
+          await bot.sendMessage(chatId, '⚠️ Falta información. Dime el día y hora, o busca aulas primero.');
+          return;
+        }
+      }
+
+      if (!horas || horas.length !== 2) {
+        await bot.sendMessage(chatId, 'Formato incorrecto o falta contexto. Intenta buscar aulas primero.');
+        return;
+      }
+
+      // ... existing database insert logic ...
+      const session = await getSession(fromId);
+      if (!session) {
+        await bot.sendMessage(chatId, 'Inicia sesión primero.');
+        return;
+      }
+
+      await pool.query(
+        `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telegram_id, estado) VALUES ($1, $2, $3, $4, $5, 'activa')`,
+        [aulaCodigo, dia, horas[0], horas[1], String(fromId)]
+      );
+      await bot.sendMessage(chatId, `✅ *¡Listo!* Reservaste el aula *${aulaCodigo}* (${dia} ${horas[0]}-${horas[1]}).\n\nRoomie te avisará antes de que empiece. 😉`, { parse_mode: 'Markdown' });
       return;
     }
 
@@ -665,17 +741,49 @@ bot.onText(/\/menu/, async (msg) => {
 });
 
 // LOG DE ERRORES DE TELEGRAM
+// LOG DE ERRORES DE TELEGRAM
 bot.on('polling_error', (error) => {
   if (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict')) {
     console.warn('⚠️ Conflicto de Polling detectado. Asegúrate de que n8n u otra instancia no esté usando el mismo token.');
+  } else if (error.code === 'EFATAL' || error.message.includes('ECONNRESET')) {
+    console.warn('⚠️ Error de red temporal en Polling (ECONNRESET/EFATAL). Reintentando...');
   } else {
     console.error('❌ Error de Telegram Polling:', error.message);
   }
 });
 
+// Evitar que el bot se caiga por errores de red no manejados
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  // No salir del proceso, solo loguear
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+  // No salir del proceso
+});
+
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
+
+  // SELECCIÓN DE DÍA (UX)
+  if (data.startsWith('day_')) {
+    const dia = data.split('_')[1];
+    await bot.answerCallbackQuery(query.id); // Quitar relojito
+    await bot.sendMessage(chatId, `🗓️ Escogiste: *${dia}*`, { parse_mode: 'Markdown' });
+    await processInput(chatId, dia, query.from.id);
+    return;
+  }
+
+  // SELECCIÓN DE HORA (UX)
+  if (data.startsWith('time_')) {
+    const hora = data.split('_')[1];
+    await bot.answerCallbackQuery(query.id);
+    await bot.sendMessage(chatId, `⏰ Hora: *${hora}*`, { parse_mode: 'Markdown' });
+    await processInput(chatId, hora, query.from.id);
+    return;
+  }
 
   // CERRAR SESIÓN DESDE PERFIL
   if (data === 'logout_confirm') {
@@ -694,32 +802,57 @@ bot.on('callback_query', async (query) => {
 
   // RESERVA RÁPIDA (Un clic)
   if (data.startsWith('book_')) {
-    const [_, aula, dia, hora] = data.split('_');
+    console.log('⚡ Callback recibido:', data);
+
+    // Parsing robusto: book_AULA_1_Lunes_10:00
+    // Partimos por _ pero reconstruimos el aula si tenía _
+    const parts = data.split('_'); // ['book', 'AULA', '1', 'Lunes', '10:00']
+    const hora = parts.pop();      // '10:00'
+    const dia = parts.pop();       // 'Lunes'
+    const aula = parts.slice(1).join('_'); // 'AULA_1'
+
+    console.log(`   📝 Intentando reservar: ${aula} | ${dia} | ${hora}`);
+
     const tid = String(query.from.id);
 
     const session = await getSession(tid);
     if (!session) {
+      console.log('   ❌ Usuario no tiene sesión');
       return bot.answerCallbackQuery(query.id, { text: 'Inicia sesión primero con /start', show_alert: true });
     }
 
     try {
       // Calculamos hora fin (1h por defecto)
-      const h = parseInt(hora.split(':')[0]) + 1;
-      const horaFin = `${String(h).padStart(2, '0')}:${hora.split(':')[1]}`;
+      const hStr = hora.split(':')[0];
+      const mStr = hora.split(':')[1];
+      const h = parseInt(hStr) + 1;
+      const horaFin = `${String(h).padStart(2, '0')}:${mStr}`;
+
+      console.log(`   ⏳ Insertando reserva... Inicio: ${hora}, Fin: ${horaFin}`);
 
       await pool.query(
         `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telegram_id, estado) VALUES ($1, $2, $3, $4, $5, 'activa')`,
         [aula, dia, hora, horaFin, tid]
       );
 
+      console.log('   ✅ Reserva guardada en DB');
+
       await bot.answerCallbackQuery(query.id, { text: '¡Reserva confirmada!' });
-      await bot.editMessageText(`✅ *Reserva Confirmada*\n\n📍 Aula: ${aula}\n📅 Día: ${dia}\n⏰ Hora: ${hora} - ${horaFin}\n\n¡Listo! Te avisaré unos minutos antes de empezar. 😉`, {
-        chat_id: chatId,
-        message_id: query.message.message_id,
-        parse_mode: 'Markdown'
-      });
+
+      try {
+        await bot.editMessageText(`✅ *Reserva Confirmada*\n\n📍 Aula: ${aula}\n📅 Día: ${dia}\n⏰ Hora: ${hora} - ${horaFin}\n\n¡Listo! Te avisaré unos minutos antes de empezar. 😉`, {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown'
+        });
+      } catch (editError) {
+        console.warn('   ⚠️ No se pudo editar el mensaje (puede ser antiguo):', editError.message);
+        // Fallback: enviar nuevo mensaje si no se puede editar
+        await bot.sendMessage(chatId, `✅ *Reserva Confirmada* (${aula} - ${hora})`, { parse_mode: 'Markdown' });
+      }
+
     } catch (e) {
-      console.error(e);
+      console.error('   ❌ Error al reservar:', e);
       await bot.answerCallbackQuery(query.id, { text: 'Error al reservar. Inténtalo de nuevo.', show_alert: true });
     }
     return;

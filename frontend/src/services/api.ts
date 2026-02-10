@@ -11,7 +11,7 @@ const api = axios.create({
 // Interceptor para agregar token a todas las requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,6 +30,8 @@ api.interceptors.response.use(
       // Token expirado o inválido
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -45,12 +47,12 @@ export interface User {
   rol: 'admin' | 'director' | 'profesor' | 'estudiante' | 'docente';
   cedula?: string;
   telefono?: string;
-  carrera_director?: number | null;
+  carrera_director?: string | null;
   carrera_nombre?: string;
   carrera?: {
     id: number;
-    nombre: string;
-    normalizada: string;
+    carrera: string;
+    carrera_normalizada: string;
   };
   estado: 'activo' | 'inactivo';
 }
@@ -78,6 +80,26 @@ export interface EstudianteLookup {
   nivel?: string;
   email?: string;
   edad?: number | null;
+}
+
+export interface Estudiante {
+  id: number;
+  cedula: string;
+  nombre: string;
+  escuela: string | null;
+  nivel: string | null;
+  email: string | null;
+  edad: number | null;
+  telegram_id?: number | null;
+  fecha_registro?: string | null;
+}
+
+export interface ListarEstudiantesResponse {
+  success: boolean;
+  total: number;
+  page: number;
+  pages: number;
+  estudiantes: Estudiante[];
 }
 
 // Tipos para Aulas
@@ -133,10 +155,11 @@ export interface Carrera {
 
 // Servicios de autenticación
 export const authService = {
-  login: async (email: string, password: string): Promise<LoginResponse> => {
+  login: async (email: string, password: string, rememberMe: boolean = false): Promise<LoginResponse> => {
     const response = await api.post<LoginResponse>('/api/auth/login', {
       email,
       password,
+      rememberMe,
     });
     return response.data;
   },
@@ -170,6 +193,30 @@ export const authService = {
 export const estudianteService = {
   lookupByEmail: async (email: string): Promise<{ success: boolean; found: boolean; estudiante?: EstudianteLookup }> => {
     const response = await api.get('/api/estudiantes/lookup', { params: { email } });
+    return response.data;
+  },
+
+  getEstudiantes: async (params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    escuela?: string;
+    nivel?: string;
+  } = {}): Promise<ListarEstudiantesResponse> => {
+    const response = await api.get<ListarEstudiantesResponse>('/api/estudiantes', { params });
+    return response.data;
+  },
+
+  subirEstudiantes: async (formData: FormData): Promise<any> => {
+    const response = await api.post('/api/estudiantes/subir', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+    return response.data;
+  },
+
+  getHistorialCargas: async (tipo: string = 'estudiantes'): Promise<any> => {
+    const response = await api.get('/api/estudiantes/historial-cargas', { params: { tipo } });
     return response.data;
   }
 };
@@ -236,33 +283,40 @@ export const carreraService = {
   },
 };
 
-// Servicios de usuarios (admin)
+// Servicios de usuarios (admin y directores)
 export const usuarioService = {
+  getUsuarios: async (params: { rol?: string; carrera_id?: number } = {}): Promise<{ success: boolean; total: number; usuarios: User[] }> => {
+    const response = await api.get('/api/usuarios', { params });
+    return response.data;
+  },
+
   getDirectores: async (): Promise<{ success: boolean; total: number; usuarios: User[] }> => {
-    const response = await api.get('/api/usuarios', { params: { rol: 'director' } });
+    return usuarioService.getUsuarios({ rol: 'director' });
+  },
+
+  createUsuario: async (data: Partial<User>): Promise<{ success: boolean; usuario: User }> => {
+    const response = await api.post('/api/usuarios', data);
     return response.data;
   },
 
-  createDirector: async (data: Partial<User>): Promise<{ success: boolean; usuario: User }> => {
-    // Assuming the backend has a general user creation endpoint or we use auth/register but as admin.
-    // Often systems have a POST /api/usuarios for admins. Let's try that or use register if backend logic dictates.
-    // Based on standard REST patterns in this project (simulated), I will check if I should use /api/auth/register or /api/usuarios.
-    // Existing code has authService.register. A pure /api/usuarios POST might be cleaner if it exists.
-    // Given I don't see backend code for /api/usuarios POST, but I see `createAula` etc., I will assume /api/usuarios is the CRUD endpoint.
-    // If not, I'll fall back to register.
-    const response = await api.post('/api/usuarios', { ...data, rol: 'director' });
-    return response.data;
-  },
+  // Mantener alias por compatibilidad
+  createDirector: async (data: Partial<User>) => usuarioService.createUsuario({ ...data, rol: 'director' }),
 
-  updateDirector: async (id: number, data: Partial<User>): Promise<{ success: boolean; mensaje: string; usuario: User }> => {
+  updateUsuario: async (id: number, data: Partial<User>): Promise<{ success: boolean; mensaje: string; usuario: User }> => {
     const response = await api.put(`/api/usuarios/${id}`, data);
     return response.data;
   },
 
-  deleteDirector: async (id: number): Promise<{ success: boolean; mensaje: string }> => {
+  // Mantener alias por compatibilidad
+  updateDirector: async (id: number, data: Partial<User>) => usuarioService.updateUsuario(id, data),
+
+  deleteUsuario: async (id: number): Promise<{ success: boolean; mensaje: string }> => {
     const response = await api.delete(`/api/usuarios/${id}`);
     return response.data;
   },
+
+  // Mantener alias por compatibilidad
+  deleteDirector: async (id: number) => usuarioService.deleteUsuario(id),
 
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
     const response = await api.put(`/api/usuarios/${id}/carrera`, { carrera });
@@ -417,13 +471,14 @@ export const distribucionService = {
   },
 
   // Ejecutar distribución automática
-  ejecutarDistribucion: async () => {
-    const response = await api.post('/api/distribucion/ejecutar');
+  ejecutarDistribucion: async (carreraId?: number) => {
+    const params = carreraId ? { carrera_id: carreraId } : {};
+    const response = await api.post('/api/distribucion/ejecutar', {}, { params });
     return response.data;
   },
 
   // Obtener horario
-  obtenerHorario: async (carreraId?: number) => {
+  obtenerHorario: async (carreraId?: number | string) => {
     const params = carreraId ? { carrera_id: carreraId } : {};
     const response = await api.get('/api/distribucion/horario', { params });
     return response.data;
@@ -432,6 +487,18 @@ export const distribucionService = {
   // Obtener todas las clases con estado de distribución
   getClasesDistribucion: async () => {
     const response = await api.get('/api/distribucion/clases');
+    return response.data;
+  },
+
+  // Actualizar una clase individualmente
+  updateClase: async (id: number, data: any) => {
+    const response = await api.put(`/api/distribucion/clase/${id}`, data);
+    return response.data;
+  },
+
+  // Consultar disponibilidad de aulas
+  getDisponibilidadAulas: async (params: { dia: string; hora_inicio: string; hora_fin: string; capacidad_minima?: number }) => {
+    const response = await api.get('/api/distribucion/disponibilidad', { params });
     return response.data;
   }
 };
@@ -471,6 +538,17 @@ export const planificacionService = {
   // Listar planificaciones
   listar: async (): Promise<ListarPlanificacionesResponse> => {
     const response = await api.get<ListarPlanificacionesResponse>('/api/planificaciones/listar');
+    return response.data;
+  },
+
+  // Subir planificación
+  subirPlanificacion: async (archivo: File, carreraId?: number): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    if (carreraId) formData.append('carrera_id', carreraId.toString());
+    const response = await api.post<{ success: boolean; message: string }>('/api/planificaciones/subir', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data;
   },
 
@@ -560,6 +638,71 @@ export const espacioService = {
   getEspaciosStats: async (): Promise<{ success: boolean; stats: EspacioStats }> => {
     const response = await api.get('/api/espacios/stats/summary');
     return response.data;
+  },
+};
+
+// ============================================
+// REPORTES
+// ============================================
+
+export interface ReporteHistorial {
+  id: number;
+  nombre: string;
+  tipo: 'GENERAL' | 'CARRERA' | 'AULA' | 'ESPACIOS';
+  filtros: any;
+  metadatos: any;
+  ruta_archivo: string;
+  formato: string;
+  usuario_id: number;
+  fecha_generacion: string;
+  generadoPor?: {
+    nombre: string;
+    apellido: string;
+    email: string;
+  };
+}
+
+export const reporteService = {
+  // Obtener métricas en tiempo real
+  getMetricasActuales: async (carreraId?: string) => {
+    const params = carreraId ? { carrera_id: carreraId } : {};
+    const response = await api.get('/api/reportes/metricas', { params });
+    return response.data;
+  },
+
+  // Generar un nuevo reporte
+  generarReporte: async (data: { nombre?: string; carrera_id?: string; tipo?: string }) => {
+    const response = await api.post('/api/reportes/generar', data);
+    return response.data;
+  },
+
+  // Obtener historial de reportes
+  getHistorial: async (tipo?: string): Promise<{ success: boolean; historial: ReporteHistorial[] }> => {
+    const params = tipo ? { tipo } : {};
+    const response = await api.get('/api/reportes/historial', { params });
+    return response.data;
+  },
+
+  // Eliminar un reporte del historial
+  eliminarReporte: async (id: number) => {
+    const response = await api.delete(`/api/reportes/${id}`);
+    return response.data;
+  },
+
+  // Descargar un reporte
+  descargarReporte: async (id: number, nombreArchivo: string): Promise<void> => {
+    const response = await api.get(`/api/reportes/descargar/${id}`, {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', nombreArchivo);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };
 

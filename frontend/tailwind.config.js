@@ -8,8 +8,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        'uide-blue': '#003366',
-        'uide-orange': '#FF6B35',
+        'uide-blue': '#002D72',
+        'uide-orange': '#EAAA00',
+        'brand-primary': '#910048',
+        'brand-secondary': '#EAAA00',
+        'brand-text': '#333333',
+        'brand-accent': '#FFFFFF',
+        'brand-blue': '#002D72',
         border: "hsl(var(--border) / <alpha-value>)",
         input: "hsl(var(--input) / <alpha-value>)",
         ring: "hsl(var(--ring) / <alpha-value>)",

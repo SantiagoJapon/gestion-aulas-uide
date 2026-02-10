@@ -1,391 +1,405 @@
-import { useContext, useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import DashboardLayout from '../components/layout/DashboardLayout';
+import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { AuthContext } from '../context/AuthContext';
-import { Navbar } from '../components/Navbar';
-import { StatCard } from '../components/common/StatCard';
-import { Button } from '../components/common/Button';
 import MapaCalor from '../components/MapaCalor';
 import HorarioVisual from '../components/HorarioVisual';
-import api, { carreraService, Carrera } from '../services/api';
-import { FaFileUpload, FaCheckCircle, FaClock, FaTimesCircle, FaFileExcel } from 'react-icons/fa';
+import { planificacionService, distribucionService } from '../services/api';
+import { Button } from '../components/common/Button';
+import AppearanceSettings from '../components/AppearanceSettings';
+import ReporteEjecutivo from '../components/ReporteEjecutivo';
+import SubirEstudiantes from '../components/SubirEstudiantes';
+import DocenteTable from '../components/DocenteTable';
+import EstudianteTable from '../components/EstudianteTable';
+import ClaseEditModal from '../components/ClaseEditModal';
 
-interface Planificacion {
-  id: number;
-  nombre_archivo: string;
-  fecha_procesamiento: string;
-  estado: string;
-  total_clases: number;
-  clases_completas: number;
-}
-
-export default function DirectorDashboard() {
+const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
+  const [activeTab, setActiveTab] = useState('general');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [planificaciones] = useState<Planificacion[]>([]);
-  const [loadingPlanificaciones, setLoadingPlanificaciones] = useState(true);
-  const [carrerasActivas, setCarrerasActivas] = useState<Carrera[]>([]);
-  const [carreraSeleccionada, setCarreraSeleccionada] = useState('');
+  const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, porcentaje_completado: 0 });
+  const [misClases, setMisClases] = useState<any[]>([]);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [editingClase, setEditingClase] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
-    loadPlanificaciones();
-    loadCarrerasActivas();
-  }, []);
-
-  useEffect(() => {
-    if (user?.carrera_director) {
-      // Convertir el ID a string para el select
-      setCarreraSeleccionada(String(user.carrera_director));
+    if (user) {
+      loadStats();
     }
   }, [user]);
 
-  const loadPlanificaciones = async () => {
+  const loadStats = async () => {
     try {
-      setLoadingPlanificaciones(true);
-      // TODO: Implementar endpoint para obtener planificaciones del director
-      // const response = await api.get('/api/planificaciones/mis-planificaciones');
-      // setPlanificaciones(response.data);
+      setLoadingStats(true);
+      const [resStats, resHorario] = await Promise.all([
+        distribucionService.getEstado(),
+        distribucionService.obtenerHorario()
+      ]);
+
+      if (resStats.success) setStats(resStats.estadisticas);
+      if (resHorario.success) setMisClases(resHorario.horario || []);
     } catch (error) {
-      console.error('Error al cargar planificaciones:', error);
+      console.error('Error loading stats:', error);
     } finally {
-      setLoadingPlanificaciones(false);
+      setLoadingStats(false);
     }
   };
 
-  const loadCarrerasActivas = async () => {
-    try {
-      const response = await carreraService.getCarreras(false);
-      setCarrerasActivas(response.carreras);
-    } catch (error) {
-      console.error('Error al cargar carreras activas:', error);
-    }
+  const handleClaseUpdate = async () => {
+    setIsEditModalOpen(false);
+    setEditingClase(null);
+    await loadStats();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
-      setMessage(null);
     }
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) {
-      setMessage({ type: 'error', text: 'Por favor selecciona un archivo' });
-      return;
-    }
-    if (!carreraSeleccionada) {
-      setMessage({ type: 'error', text: 'Selecciona una carrera habilitada' });
-      return;
-    }
+    if (!selectedFile) return;
 
-    setUploading(true);
-    setMessage(null);
+    const carreraId = user?.carrera?.id;
+    if (!carreraId) {
+      alert('No se pudo determinar el ID de tu carrera. Contacta al administrador.');
+      return;
+    }
 
     try {
-      // Encontrar el ID de la carrera seleccionada (buscar por ID, no por nombre)
-      const carreraObj = carrerasActivas.find(c => c.id === Number(carreraSeleccionada));
-      if (!carreraObj) {
-        setMessage({ type: 'error', text: 'Carrera no encontrada' });
-        setUploading(false);
-        return;
+      setUploading(true);
+      const res = await planificacionService.subirPlanificacion(selectedFile, carreraId);
+      if (res.success) {
+        setSelectedFile(null);
+        loadStats();
+        alert('Planificación subida exitosamente');
       }
-
-      const formData = new FormData();
-      formData.append('archivo', selectedFile);
-      formData.append('carrera_id', carreraObj.id.toString());
-
-      await api.post('/api/planificaciones/subir', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      setMessage({ type: 'success', text: 'Planificación subida exitosamente. Se está procesando...' });
-      setSelectedFile(null);
-      // NO limpiar carreraSeleccionada si el usuario tiene una carrera asignada
-      if (!user?.carrera_director) {
-        setCarreraSeleccionada('');
-      }
-      // Reset file input
-      const fileInput = document.getElementById('file-input') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-      // Recargar planificaciones después de un delay
-      setTimeout(() => {
-        loadPlanificaciones();
-      }, 2000);
     } catch (error: any) {
-      setMessage({
-        type: 'error',
-        text: error.response?.data?.mensaje || error.response?.data?.error || 'Error al subir la planificación',
-      });
+      const mensaje = error.response?.data?.mensaje || error.message || 'Error al subir planificación';
+      alert(mensaje);
+      console.error('Upload error:', error);
     } finally {
       setUploading(false);
     }
   };
 
-  const getEstadoCounts = () => {
-    const pendientes = planificaciones.filter(p => p.estado === 'PENDIENTE').length;
-    const aprobadas = planificaciones.filter(p => p.estado === 'APROBADA').length;
-    const rechazadas = planificaciones.filter(p => p.estado === 'RECHAZADA').length;
-    return { pendientes, aprobadas, rechazadas };
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'general':
+        return (
+          <div className="space-y-10 pb-20 animate-fade-in px-1">
+
+            {/* 1. KPIs SUPERIORES - Vista Panorámica */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Clases Totales', value: stats.total_clases, icon: 'analytics', color: 'blue', desc: 'Carga académica' },
+                { label: 'Asignadas', value: stats.clases_asignadas, icon: 'verified', color: 'emerald', desc: 'Con aula física' },
+                { label: 'Pendientes', value: stats.clases_pendientes, icon: 'clock_loader_40', color: 'orange', desc: 'Por distribuir' },
+                { label: 'Eficiencia', value: `${stats.porcentaje_completado}%`, icon: 'query_stats', color: 'purple', desc: 'Meta institucional' }
+              ].map((kpi, i) => (
+                <div key={i} className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className={`size-12 rounded-2xl bg-${kpi.color}-500/10 flex items-center justify-center text-${kpi.color}-600`}>
+                      <span className="material-symbols-outlined text-2xl">{kpi.icon}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-3xl font-black text-foreground tracking-tighter leading-none">{loadingStats ? '...' : kpi.value}</h4>
+                    <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest mt-2">{kpi.label}</p>
+                    <p className="text-[9px] text-muted-foreground/60 font-medium uppercase mt-1">{kpi.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 2. AREA DE HORARIO (FULL WIDTH) - Fundamental para legibilidad */}
+            <div className="w-full">
+              <DashboardWidget
+                title="Horario de Carrera"
+                subtitle="Mapa cronológico de clases distribuidas"
+                icon="calendar_view_week"
+                noPadding
+              >
+                <div className="p-2 min-h-[500px] overflow-hidden rounded-[2rem]">
+                  <HorarioVisual />
+                </div>
+              </DashboardWidget>
+            </div>
+
+            {/* 3. GRID DINÁMICO (Tabla + Acciones) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+
+              {/* Listado Detallado (8/12) */}
+              <div className="lg:col-span-8 space-y-8">
+                <DashboardWidget
+                  title="Detalle de Distribución"
+                  subtitle="Verifique y edite estados de aulas individualmente"
+                  icon="format_list_bulleted"
+                >
+                  <div className="overflow-x-auto -mx-6">
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead className="bg-muted/30 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border/50">
+                        <tr>
+                          <th className="px-8 py-5">Materia / Nivel</th>
+                          <th className="px-6 py-5">Horario</th>
+                          <th className="px-6 py-5 text-center">Aula</th>
+                          <th className="px-6 py-5 text-right">Docente</th>
+                          <th className="px-8 py-5 text-right">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {loadingStats ? (
+                          [1, 2, 3].map(i => (
+                            <tr key={i} className="animate-pulse">
+                              <td colSpan={5} className="px-8 py-10 h-20 bg-muted/5"></td>
+                            </tr>
+                          ))
+                        ) : misClases.length > 0 ? (
+                          misClases.slice(0, 8).map((clase, i) => (
+                            <tr key={i} className="hover:bg-muted/20 transition-all group">
+                              <td className="px-8 py-5">
+                                <p className="font-black text-foreground text-xs leading-none">{clase.materia}</p>
+                                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter mt-1.5 opacity-60">{clase.nivel} • {clase.paralelo}</p>
+                              </td>
+                              <td className="px-6 py-5">
+                                <span className="inline-flex items-center px-2 py-1 rounded-xl bg-primary/5 text-primary text-[10px] font-black uppercase tracking-tighter ring-1 ring-primary/10">
+                                  {clase.dia} {clase.hora_inicio}
+                                </span>
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                {clase.aula ? (
+                                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20 uppercase shadow-sm">
+                                    {typeof clase.aula === 'object' ? clase.aula.nombre : clase.aula}
+                                  </span>
+                                ) : (
+                                  <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-600 text-[10px] font-black border border-red-500/20 uppercase">
+                                    Sin Aula
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-5 text-right">
+                                <p className="text-[10px] font-bold text-foreground/80 truncate max-w-[150px]">{clase.docente}</p>
+                              </td>
+                              <td className="px-8 py-5 text-right font-black">
+                                <button
+                                  onClick={() => { setEditingClase(clase); setIsEditModalOpen(true); }}
+                                  className="size-10 rounded-2xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all flex items-center justify-center ml-auto"
+                                >
+                                  <span className="material-symbols-outlined text-xl">edit_square</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="px-8 py-24 text-center">
+                              <div className="bg-muted/20 size-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="material-symbols-outlined text-4xl text-muted-foreground/30">inbox</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest">Sin datos de distribución</p>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </DashboardWidget>
+              </div>
+
+              {/* BARRA LATERAL (4/12) */}
+              <div className="lg:col-span-4 space-y-10">
+
+                {/* Herramientas de Carga */}
+                <DashboardWidget title="Centro de Datos" icon="database">
+                  <div className="space-y-8">
+                    {/* Horarios */}
+                    <div className="p-6 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
+                      <div className="relative z-10">
+                        <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">backup</span>
+                          Subir Planificación
+                        </h4>
+                        <form onSubmit={handleUpload} className="space-y-4">
+                          <label className="relative flex flex-col items-center justify-center p-8 border-2 border-dashed border-primary/20 rounded-3xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
+                            <input type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                            <span className="material-symbols-outlined text-4xl text-primary/30 group-hover/label:text-primary transition-colors">upload_file</span>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase mt-3 text-center truncate w-full">
+                              {selectedFile ? selectedFile.name : 'Seleccionar Excel'}
+                            </span>
+                          </label>
+                          <Button variant="primary" fullWidth loading={uploading} size="sm" disabled={!selectedFile}>
+                            Procesar Ahora
+                          </Button>
+                        </form>
+                      </div>
+                    </div>
+
+                    {/* Acciones de Distribución */}
+                    <div className="pt-6 border-t border-border">
+                      <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm">settings_motion_mode</span>
+                        Distribución Automática
+                      </h4>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                        <p className="text-[10px] text-muted-foreground mb-4 leading-relaxed">
+                          Si ha subido una nueva planificación, ejecute el algoritmo para asignar aulas automáticamente a su carrera.
+                        </p>
+                        <Button
+                          variant="secondary"
+                          fullWidth
+                          size="sm"
+                          onClick={async () => {
+                            if (!confirm('¿Iniciar distribución para ' + (user?.carrera?.carrera || 'su carrera') + '?')) return;
+                            try {
+                              const res = await distribucionService.ejecutarDistribucion(user?.carrera?.id);
+                              if (res.success) {
+                                alert('Distribución completada: ' + res.estadisticas.exitosas + ' clases asignadas.');
+                                loadStats();
+                              }
+                            } catch (e: any) {
+                              alert(e.response?.data?.mensaje || 'Error al ejecutar distribución');
+                            }
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-base mr-2">auto_fix_high</span>
+                          Ejecutar Distribución
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Estudiantes */}
+                    <div className="pt-6 border-t border-border">
+                      <div className="text-[10px] font-black text-foreground uppercase mb-2 flex items-center gap-2">
+                        <div className="w-1.5 h-4 bg-primary rounded-full"></div> Sheet 1: Estudiantes
+                      </div>
+                      <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm">group_add</span>
+                        Carga de Estudiantes
+                      </h4>
+                      <SubirEstudiantes isCompact />
+                    </div>
+                  </div>
+                </DashboardWidget>
+
+                {/* Perfil del Director */}
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-all duration-700">
+                    <span className="material-symbols-outlined text-[12rem]">verified_user</span>
+                  </div>
+                  <div className="flex items-center gap-5 relative z-10">
+                    <div className="size-20 bg-primary text-white rounded-[1.5rem] flex items-center justify-center font-black text-3xl shadow-xl border-4 border-white/10 group-hover:scale-105 transition-transform">
+                      {user?.nombre?.[0]}{user?.apellido?.[0]}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-xl leading-none tracking-tight mb-2">{user?.nombre}</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-3">Director Académico</p>
+                      <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-500/20">
+                        <span className="size-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                        Sesión Activa
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-8 pt-6 border-t border-white/10 relative z-10">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Carrera Asignada</p>
+                    <p className="text-sm font-bold text-slate-200 truncate">{user?.carrera?.carrera || user?.carrera_director || 'Carrera UIDE'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. MAPA DE CALOR (ANCHO COMPLETO) - Evita el amontonamiento visual */}
+            <div className="pt-10 border-t border-border/50">
+              <DashboardWidget
+                title="Monitoreo de Saturación"
+                subtitle="Mapa de calor detallado de ocupación de aulas por franja horaria"
+                icon="grid_view"
+                noPadding
+              >
+                <div className="p-4 overflow-hidden rounded-[2rem] bg-background">
+                  <MapaCalor carreraId={user?.carrera?.id} />
+                </div>
+              </DashboardWidget>
+            </div>
+          </div>
+        );
+      case 'heatmap':
+        return <MapaCalor />;
+      case 'estudiantes':
+        const nombreCarrera = user?.carrera?.carrera || user?.carrera_director || '';
+        return (
+          <div className="space-y-12 animate-fade-in pb-20">
+            <DashboardWidget
+              title="Base de Datos de Alumnado"
+              subtitle={`Estudiantes registrados en la carrera de ${nombreCarrera}`}
+              icon="people"
+            >
+              <div className="mt-4">
+                <EstudianteTable carreraNombre={nombreCarrera} />
+              </div>
+            </DashboardWidget>
+
+            <DashboardWidget
+              title="Carga Masiva de Alumnos"
+              subtitle="Importar listado oficial desde archivo Excel"
+              icon="upload_file"
+            >
+              <div className="mt-4">
+                <SubirEstudiantes carreraNombre={nombreCarrera} isCompact />
+              </div>
+            </DashboardWidget>
+          </div>
+        );
+      case 'docentes':
+        return (
+          <DashboardWidget title="Plantilla Docente" icon="badge">
+            <DocenteTable carreraId={user?.carrera?.id || 0} />
+          </DashboardWidget>
+        );
+      case 'configuracion':
+        return <AppearanceSettings />;
+      case 'reportes':
+        return <ReporteEjecutivo carreraPreseleccionada={{ id: user?.carrera?.id || 0, nombre: user?.carrera?.carrera || '' }} />;
+      default:
+        return null;
+    }
   };
 
-  const estadoCounts = getEstadoCounts();
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/40">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-4xl font-bold text-foreground mb-2">
-            Dashboard Director
-          </h1>
-          <div className="space-y-1">
-            <p className="text-lg text-muted-foreground">
-              Bienvenido, <span className="font-semibold text-primary">{user?.nombre} {user?.apellido}</span>
+    <DashboardLayout
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      title="Director"
+      subtitle="UIDE Gestión"
+    >
+      <div className="mb-12 px-2 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h2 className="text-5xl font-black text-foreground tracking-tighter leading-none mb-3">
+            {user ? `${user.nombre}` : 'Bienvenido'}
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/10">
+              UIDE Académico
+            </span>
+            <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px]">
+              {new Date().toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
-            {user?.carrera && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-sm font-medium text-muted-foreground">Carrera:</span>
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-primary/10 text-primary border border-primary/20">
-                  {user.carrera.nombre}
-                </span>
-              </div>
-            )}
           </div>
         </div>
-
-        {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard
-            title="Planificaciones Pendientes"
-            value={estadoCounts.pendientes}
-            subtitle="Esperando revisión"
-            icon={FaClock}
-            iconColor="text-yellow-600"
-            iconBgColor="bg-yellow-100"
-          />
-          <StatCard
-            title="Planificaciones Aprobadas"
-            value={estadoCounts.aprobadas}
-            subtitle="Procesadas correctamente"
-            icon={FaCheckCircle}
-            iconColor="text-green-600"
-            iconBgColor="bg-green-100"
-          />
-          <StatCard
-            title="Total Subidas"
-            value={planificaciones.length}
-            subtitle="Este ciclo académico"
-            icon={FaFileExcel}
-            iconColor="text-primary"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Subida de Planificación Mejorada */}
-          <div className="bg-card rounded-xl shadow-card p-6 border border-border animate-fade-in">
-            <div className="flex items-center mb-6">
-              <div className="bg-primary/10 p-3 rounded-lg mr-4">
-                <FaFileUpload className="text-2xl text-primary" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground">
-                Subir Planificación
-              </h2>
-            </div>
-            
-            <form onSubmit={handleUpload} className="space-y-4">
-              <div>
-                <label 
-                  htmlFor="file-input" 
-                  className="block text-sm font-medium text-muted-foreground mb-2"
-                >
-                  Archivo Excel (.xlsx, .xls)
-                </label>
-                <div className="mb-3">
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    Carrera habilitada
-                  </label>
-                  <select
-                    value={carreraSeleccionada}
-                    onChange={(e) => setCarreraSeleccionada(e.target.value)}
-                    disabled={Boolean(user?.carrera_director)}
-                    className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                  >
-                    <option value="">Selecciona una carrera</option>
-                    {carrerasActivas.map((carrera) => (
-                      <option key={carrera.id} value={carrera.id}>
-                        {carrera.carrera}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {user?.carrera_director
-                      ? 'Carrera asignada por el administrador'
-                      : 'Solo las carreras activas pueden subir planificación'}
-                  </p>
-                </div>
-                <div className="relative">
-                  <input
-                    id="file-input"
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleFileChange}
-                    className="w-full px-4 py-3 border-2 border-dashed border-border rounded-lg focus:ring-2 focus:ring-ring focus:border-primary transition-colors cursor-pointer bg-background"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <FaFileExcel className="text-3xl text-muted-foreground" />
-                  </div>
-                </div>
-                {selectedFile && (
-                  <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
-                    <p className="text-sm font-medium text-primary">
-                      ✓ {selectedFile.name}
-                    </p>
-                    <p className="text-xs text-primary/80 mt-1">
-                      {(selectedFile.size / 1024).toFixed(2)} KB
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {message && (
-                <div
-                  className={`p-4 rounded-lg border ${
-                    message.type === 'success'
-                      ? 'bg-green-50 text-green-800 border-green-200'
-                      : 'bg-destructive/10 text-destructive border-destructive/30'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    {message.type === 'success' ? (
-                      <FaCheckCircle className="mr-2" />
-                    ) : (
-                      <FaTimesCircle className="mr-2" />
-                    )}
-                    <span>{message.text}</span>
-                  </div>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                fullWidth
-                loading={uploading}
-                disabled={!selectedFile || !carreraSeleccionada}
-                icon={FaFileUpload}
-              >
-                {uploading ? 'Subiendo...' : 'Subir Planificación'}
-              </Button>
-            </form>
-          </div>
-
-          {/* Estado de Planificaciones Mejorado */}
-          <div className="bg-card rounded-xl shadow-card p-6 border border-border animate-fade-in">
-            <h2 className="text-2xl font-bold text-foreground mb-6">
-              Mis Planificaciones
-            </h2>
-            
-            {loadingPlanificaciones ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="border border-border bg-muted/40 p-4 rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">Pendientes</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {estadoCounts.pendientes} planificación{estadoCounts.pendientes !== 1 ? 'es' : ''}
-                      </p>
-                    </div>
-                    <FaClock className="text-2xl text-yellow-600" />
-                  </div>
-                </div>
-                
-                <div className="border border-border bg-muted/40 p-4 rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">Aprobadas</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {estadoCounts.aprobadas} planificación{estadoCounts.aprobadas !== 1 ? 'es' : ''}
-                      </p>
-                    </div>
-                    <FaCheckCircle className="text-2xl text-green-600" />
-                  </div>
-                </div>
-                
-                <div className="border border-border bg-muted/40 p-4 rounded-lg hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">Rechazadas</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {estadoCounts.rechazadas} planificación{estadoCounts.rechazadas !== 1 ? 'es' : ''}
-                      </p>
-                    </div>
-                    <FaTimesCircle className="text-2xl text-destructive" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Instrucciones mejoradas */}
-        <div className="mt-8 bg-card border border-border rounded-xl p-6 shadow-card animate-fade-in">
-          <h3 className="font-bold text-foreground mb-3 text-lg flex items-center">
-            <FaFileExcel className="mr-2" />
-            Instrucciones para Subir Planificación
-          </h3>
-          <ul className="text-sm text-muted-foreground space-y-2">
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>El archivo Excel debe contener las columnas: <strong>Materia, Profesor, Horario, Carrera, Estudiantes</strong></span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>Una vez subido, la planificación será procesada automáticamente por el sistema</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>Recibirás una notificación cuando se complete el procesamiento</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>El administrador revisará y aprobará la planificación</span>
-            </li>
-          </ul>
-        </div>
-
-        {/* Horario de Clases - Vista Director (SOLO SU CARRERA) */}
-        {user?.carrera_director && (
-          <div className="mt-8 animate-fade-in">
-            <HorarioVisual />
-          </div>
-        )}
-
-        {/* Mapa de Calor - Vista Director (SOLO SU CARRERA) */}
-        {user?.carrera_director && (
-          <div className="mt-8 animate-fade-in">
-            <MapaCalor
-              carreraId={Number(user.carrera_director)}
-              titulo={`Mapa de Calor - ${carrerasActivas.find(c => c.id === Number(user.carrera_director))?.carrera || 'Mi Carrera'}`}
-              showExport={true}
-            />
-          </div>
-        )}
       </div>
-    </div>
+
+      {renderContent()}
+
+      <ClaseEditModal
+        clase={editingClase}
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onUpdate={handleClaseUpdate}
+      />
+    </DashboardLayout>
   );
-}
+};
 
-
-
-
-
-
+export default DirectorDashboard;

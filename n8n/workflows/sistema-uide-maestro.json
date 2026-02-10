@@ -12,7 +12,10 @@
       "name": "Webhook Maestro",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-496, 336],
+      "position": [
+        -496,
+        336
+      ],
       "webhookId": "maestro-uide"
     },
     {
@@ -23,7 +26,10 @@
       "name": "Router - Detectar Acción",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-272, 336]
+      "position": [
+        -272,
+        336
+      ]
     },
     {
       "parameters": {
@@ -31,12 +37,18 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.accion }}",
                     "rightValue": "subir_planificacion",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -46,12 +58,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.accion }}",
                     "rightValue": "subir_estudiantes",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -61,12 +79,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.accion }}",
                     "rightValue": "distribuir_aulas",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -76,12 +100,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.accion }}",
                     "rightValue": "obtener_estado",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -99,9 +129,11 @@
       "name": "Router Switch",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [-48, 536]
+      "position": [
+        -48,
+        536
+      ]
     },
-
     {
       "parameters": {
         "jsCode": "// Validar carrera para planificación\n// Acepta carrera_id O carrera_nombre\nconst datos = $input.item.json.datos;\nconst carrera_id = datos.carrera_id || null;\nconst carrera_nombre = datos.carrera_nombre || null;\nconst archivo_url = datos.archivo_url || null;\nconst archivo_base64 = datos.archivo_base64 || null;\n\nif (!carrera_id && !carrera_nombre) {\n  throw new Error('Se requiere carrera_id o carrera_nombre');\n}\n\nif (!archivo_url && !archivo_base64) {\n  throw new Error('Se requiere archivo_url o archivo_base64');\n}\n\nreturn {\n  carrera_id: carrera_id,\n  carrera_nombre: carrera_nombre,\n  archivo_url: archivo_url,\n  archivo_base64: archivo_base64,\n  nombre_archivo: datos.nombre_archivo || 'planificacion.xlsx'\n};"
@@ -110,19 +142,25 @@
       "name": "Validar Carrera",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [176, 240]
+      "position": [
+        176,
+        240
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, carrera, activa FROM uploads_carreras WHERE ({{ $json.carrera_id ? 'id = ' + $json.carrera_id : '1=1' }}) AND ({{ $json.carrera_nombre ? \"LOWER(carrera) = LOWER('\" + $json.carrera_nombre + \"')\" : '1=1' }}) AND activa = true LIMIT 1",
+        "query": "SELECT id, carrera, activa FROM uploads_carreras WHERE ({{ $json.carrera_id ? 'id = ' + parseInt($json.carrera_id) : '1=1' }}) AND ({{ $json.carrera_nombre ? \"LOWER(carrera) = LOWER('\" + String($json.carrera_nombre).replace(/'/g, \"''\") + \"')\" : '1=1' }}) AND activa = true LIMIT 1",
         "options": {}
       },
       "id": "c6798874-3f8d-431f-baab-ad002a12a549",
       "name": "Verificar Carrera en BD",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [400, 240],
+      "position": [
+        400,
+        240
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -133,13 +171,19 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
           "conditions": [
             {
               "id": "carrera-check",
               "leftValue": "={{ $json.id }}",
               "rightValue": "",
-              "operator": { "type": "number", "operation": "exists" }
+              "operator": {
+                "type": "number",
+                "operation": "exists"
+              }
             }
           ],
           "combinator": "and"
@@ -149,7 +193,10 @@
       "name": "¿Carrera Activa?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [624, 240]
+      "position": [
+        624,
+        240
+      ]
     },
     {
       "parameters": {
@@ -159,7 +206,10 @@
       "name": "Extraer Archivo Excel",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [848, 140]
+      "position": [
+        848,
+        140
+      ]
     },
     {
       "parameters": {
@@ -172,29 +222,38 @@
       "name": "Leer Excel Planificación",
       "type": "n8n-nodes-base.spreadsheetFile",
       "typeVersion": 2,
-      "position": [1072, 140]
+      "position": [
+        1072,
+        140
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// PROCESAR EXCEL ROBUSTO v2 - Sin GPT-4o\n// Soporta multi-sheet, horarios multi-linea, formatos variados\n// ============================================================\n\nconst items = $input.all();\nconst carreraData = $('Verificar Carrera en BD').first().json;\nconst validarData = $('Validar Carrera').first().json;\nconst carrera_id = carreraData.id || validarData.carrera_id;\nconst carreraNombre = carreraData.carrera || validarData.carrera_nombre || 'Carrera ' + carrera_id;\n\nconst allRows = items.map(item => item.json);\nconsole.log(`Total filas del Excel: ${allRows.length}`);\n\n// ── CONFIGURACION ──\nconst HEADER_KEYWORDS = {\n  numero_docente: ['n °', 'n°', 'nro.', 'nro', 'numero', '#'],\n  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor'],\n  titulo_pregrado: ['pregrado'],\n  titulo_posgrado: ['posgrado', 'postgrado'],\n  materia: ['materia', 'asignatura', 'curso', 'nombre materia'],\n  codigo_materia: ['codigo', 'codigo materia', 'cod'],\n  ciclo: ['ciclo', 'nivel', 'semestre'],\n  malla: ['malla'],\n  paralelo: ['paralelo', 'grupo', 'seccion'],\n  dia: ['dia', 'horario'],\n  hora: ['hora'],\n  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],\n  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],\n  numero_alumnos: ['nro. alumnos', 'alumnos', 'estudiantes', 'numero alumnos', 'nro alumnos', 'nro. estudiantes'],\n  aula: ['aula', 'sala', 'lugar', 'aula/lab'],\n  numero_horas: ['nro. horas', 'numero horas', 'nro horas'],\n  total_horas: ['total horas', 'total horas clase'],\n};\n\nconst SECCION_KEYWORDS = [\n  'tiempo completo', 'tiempo parcial', 'docentes tiempo',\n  'profesores tiempo', 'catedraticos'\n];\n\nconst VALORES_NULOS = ['n/a', 'na', 'n.a', '-', '--', '---', '', 'sin dato', 'sd', 'nd'];\nconst MERGED_NIVEL_1 = ['numero_docente', 'docente', 'titulo_pregrado', 'titulo_posgrado'];\nconst MERGED_NIVEL_2 = ['materia', 'codigo_materia'];\n\n// ── FUNCION: normalizar texto para comparacion ──\nconst norm = (s) => {\n  if (!s) return '';\n  return String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n};\n\n// ── FUNCION: detectar header en una fila ──\nfunction detectHeader(row) {\n  const entries = Object.entries(row);\n  let matches = 0;\n  const tempMap = {};\n  for (const [key, val] of entries) {\n    if (!val || typeof val !== 'string') continue;\n    const clean = norm(val);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (tempMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          tempMap[campo] = key;\n          matches++;\n          break;\n        }\n      }\n    }\n  }\n  return { matches, tempMap };\n}\n\n// ── PASO 1: Buscar el mejor bloque de header en TODAS las filas ──\n// Con readAllSheets, las filas de multiples hojas se mezclan.\n// Buscamos la fila con MAS matches de keywords de header.\nlet columnMap = {};\nlet dataStartIndex = 0;\nlet bestMatches = 0;\n\n// Primero: verificar si los keys del JSON ya son headers reales\nconst allKeys = Object.keys(allRows[0] || {});\nconst hasRealHeaders = allKeys.some(k => {\n  const n = norm(k);\n  return !k.startsWith('__EMPTY') && !k.startsWith('__rowNum') && \n    (n.includes('docente') || n.includes('materia') || n.includes('hora') || n.includes('dia'));\n});\n\nif (hasRealHeaders) {\n  for (const key of allKeys) {\n    const clean = norm(key);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (columnMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          columnMap[campo] = key;\n          break;\n        }\n      }\n    }\n  }\n  dataStartIndex = 0;\n  bestMatches = Object.keys(columnMap).length;\n} else {\n  // Escanear TODAS las filas buscando el mejor header\n  for (let i = 0; i < allRows.length; i++) {\n    const row = allRows[i];\n    const { matches, tempMap } = detectHeader(row);\n    if (matches > bestMatches) {\n      bestMatches = matches;\n      columnMap = tempMap;\n      dataStartIndex = i + 1;\n    }\n    // Si encontramos 6+ matches es un header excelente, pero seguimos buscando uno mejor\n  }\n}\n\nconsole.log(`Header detectado con ${bestMatches} columnas en fila ${dataStartIndex - 1}`);\nconsole.log('Columnas mapeadas: ' + JSON.stringify(columnMap));\n\n// ── PASO 1b: Verificar sub-headers (fila siguiente al header) ──\n// Algunos Excels tienen 2 filas de header: fila 1 = 'HORARIO', fila 2 = 'DIA' + 'HORA'\nif (dataStartIndex < allRows.length) {\n  const subRow = allRows[dataStartIndex];\n  const { matches: subMatches, tempMap: subMap } = detectHeader(subRow);\n  // Si la sub-fila tiene campos que no teniamos, agregarlos\n  for (const [campo, key] of Object.entries(subMap)) {\n    if (!columnMap[campo]) {\n      columnMap[campo] = key;\n      console.log(`Sub-header: agregando ${campo} -> ${key}`);\n    }\n  }\n  // Si la sub-fila tenia matches, la data empieza despues\n  if (subMatches >= 2) {\n    dataStartIndex++;\n  }\n}\n\n// ── PASO 2: Extraer registros ──\n// Tomar filas desde dataStartIndex hasta encontrar un bloque con keys totalmente diferentes\n// (indicando que empezo otra hoja del Excel)\nconst dataRows = allRows.slice(dataStartIndex);\nconst registros = [];\nlet seccionActual = 'TIEMPO COMPLETO';\nlet consecutivasVacias = 0;\n\nfor (const row of dataRows) {\n  // Verificar si esta fila pertenece a otra hoja (keys diferentes)\n  const rowKeys = Object.keys(row);\n  const keysMatch = Object.values(columnMap).some(k => rowKeys.includes(k));\n  if (!keysMatch && rowKeys.length > 0) {\n    // Las keys no coinciden - probablemente cambio de hoja\n    consecutivasVacias++;\n    if (consecutivasVacias > 3) break; // Definitivamente otra hoja\n    continue;\n  }\n  consecutivasVacias = 0;\n\n  // Detectar si es fila de seccion\n  const allValues = Object.values(row).filter(Boolean).map(v => norm(String(v))).join(' ');\n  const esSeccion = SECCION_KEYWORDS.some(kw => allValues.includes(norm(kw)));\n  if (esSeccion) {\n    if (allValues.includes('parcial')) seccionActual = 'TIEMPO PARCIAL';\n    else if (allValues.includes('completo')) seccionActual = 'TIEMPO COMPLETO';\n    continue;\n  }\n\n  // Extraer campos usando columnMap\n  const registro = { _seccion: seccionActual };\n  let camposConValor = 0;\n\n  for (const [campo, key] of Object.entries(columnMap)) {\n    let val = row[key];\n    if (val !== null && val !== undefined && String(val).trim() !== '') {\n      val = String(val).trim();\n      if (VALORES_NULOS.includes(val.toLowerCase())) {\n        registro[campo] = null;\n      } else {\n        registro[campo] = val;\n        camposConValor++;\n      }\n    } else {\n      registro[campo] = null;\n    }\n  }\n\n  if (camposConValor >= 2) {\n    registros.push(registro);\n  }\n}\n\nconsole.log(`Registros extraidos (pre-propagacion): ${registros.length}`);\n\n// ── PASO 3: Propagacion inteligente de celdas merged ──\nconst lastDoc = {};\nconst lastMat = {};\n\nfor (const reg of registros) {\n  if (reg.numero_docente && String(reg.numero_docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else if (reg.docente && String(reg.docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else {\n    for (const campo of MERGED_NIVEL_1) {\n      if (!reg[campo]) reg[campo] = lastDoc[campo] || null;\n    }\n    if (reg.materia && String(reg.materia).trim() !== '') {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    } else {\n      for (const campo of MERGED_NIVEL_2) {\n        if (!reg[campo]) reg[campo] = lastMat[campo] || null;\n      }\n    }\n  }\n}\n\n// ── PASO 4: Parsear horarios y formatear clases ──\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/'/g, \"''\").replace(/\\s+/g, ' ').trim();\n};\n\nconst normalizeHora = (h) => {\n  if (!h) return '';\n  let s = String(h).trim();\n  // Normalizar H00 -> :00 (formato 08H00)\n  s = s.replace(/(\\d{1,2})[Hh](\\d{2})/, '$1:$2');\n  // Si no tiene ':', agregar :00\n  if (s && !s.includes(':') && /^\\d+$/.test(s)) s += ':00';\n  return s;\n};\n\nconst clases = [];\nfor (const reg of registros) {\n  if (!reg.materia && !reg.dia) continue;\n  if (reg.materia && /^\\d+\\s*horas?$/i.test(String(reg.materia))) continue;\n  if (reg.total_horas && !reg.dia && !reg.materia) continue;\n\n  const diaRaw = String(reg.dia || '').trim();\n  const horaRaw = String(reg.hora || '').trim();\n  const num_est = parseInt(reg.numero_alumnos) || 0;\n  const cicloVal = reg.ciclo || reg.codigo_materia || '';\n\n  // ── Manejar horarios multi-linea ──\n  // Formato 1: dia='Lunes\\r\\nMartes', hora='08:00 - 10:00\\r\\n08:00 - 10:00'\n  // Formato 2: dia='LUNES: 08H00 - 10H00\\r\\nMIERCOLES: 08H00 - 10H00' (dia+hora juntos)\n  \n  const diasList = diaRaw.split(/\\r?\\n/).map(d => d.trim()).filter(Boolean);\n  const horasList = horaRaw.split(/\\r?\\n/).map(h => h.trim()).filter(Boolean);\n\n  if (diasList.length === 0 && horasList.length === 0) {\n    // Sin dia ni hora, pero tiene materia - agregar con datos vacios\n    clases.push({\n      carrera: sanitize(carreraNombre),\n      materia: sanitize(reg.materia) || 'Sin nombre',\n      ciclo: sanitize(String(cicloVal)),\n      paralelo: sanitize(reg.paralelo) || 'A',\n      dia: '',\n      hora_inicio: '',\n      hora_fin: '',\n      num_estudiantes: num_est,\n      docente: sanitize(reg.docente) || '',\n      aula_sugerida: sanitize(reg.aula),\n      nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n    });\n    continue;\n  }\n\n  // Comprobar si el dia contiene hora embebida (ej: 'LUNES: 08H00 - 10H00')\n  const diaConHora = diasList.length > 0 && diasList[0].includes(':') && /\\d/.test(diasList[0]);\n  \n  if (diaConHora && horasList.length === 0) {\n    // Formato embebido: 'LUNES: 08H00 - 10H00'\n    for (const entry of diasList) {\n      const colonIdx = entry.indexOf(':');\n      if (colonIdx === -1) continue;\n      const dia = entry.substring(0, colonIdx).trim();\n      const horaStr = entry.substring(colonIdx + 1).trim();\n      let hi = '', hf = '';\n      if (horaStr.includes('-')) {\n        const parts = horaStr.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      }\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(dia) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  } else {\n    // Formato normal: dias y horas en columnas separadas\n    const maxEntries = Math.max(diasList.length, horasList.length, 1);\n    for (let i = 0; i < maxEntries; i++) {\n      const diaVal = diasList[i] || diasList[diasList.length - 1] || '';\n      const horaVal = horasList[i] || horasList[horasList.length - 1] || '';\n      \n      let hi = '', hf = '';\n      if (horaVal.includes('-')) {\n        const parts = horaVal.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      } else if (horaVal) {\n        hi = normalizeHora(horaVal);\n      }\n\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(diaVal) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  }\n}\n\nconsole.log(`${clases.length} clases extraidas (sin GPT-4o)`);\n\nreturn {\n  clases: clases,\n  carrera_id: carrera_id,\n  carrera_nombre: sanitize(carreraNombre),\n  total: clases.length,\n  total_filas_excel: allRows.length,\n  nombre_archivo: validarData.nombre_archivo || 'n8n-upload',\n  columnas_detectadas: columnMap\n};"
+        "jsCode": "// ============================================================\n// PROCESAR EXCEL ROBUSTO v2 - Sin GPT-4o\n// Soporta multi-sheet, horarios multi-linea, formatos variados\n// ============================================================\n\nconst items = $input.all();\nconst carreraData = $('Verificar Carrera en BD').first().json;\nconst validarData = $('Validar Carrera').first().json;\nconst carrera_id = carreraData.id || validarData.carrera_id;\nconst carreraNombre = carreraData.carrera || validarData.carrera_nombre || 'Carrera ' + carrera_id;\n\nconst allRows = items.map(item => item.json);\nconsole.log(`Total filas del Excel: ${allRows.length}`);\n\n// ── CONFIGURACION ──\nconst HEADER_KEYWORDS = {\n  numero_docente: ['n °', 'n°', 'nro.', 'nro', 'numero', '#'],\n  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor'],\n  titulo_pregrado: ['pregrado'],\n  titulo_posgrado: ['posgrado', 'postgrado'],\n  materia: ['materia', 'asignatura', 'curso', 'nombre materia', 'nombre de la materia'],\n  codigo_materia: ['codigo', 'codigo materia', 'cod'],\n  ciclo: ['ciclo', 'nivel', 'semestre'],\n  malla: ['malla'],\n  paralelo: ['paralelo', 'grupo', 'seccion'],\n  dia: ['dia de clase', 'dia clase', 'horario dia', 'dia', 'horario'],\n  hora: ['hora clase', 'hora'],\n  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],\n  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],\n  numero_alumnos: ['nro. alumnos', 'alumnos', 'estudiantes', 'numero alumnos', 'nro alumnos', 'nro. estudiantes', 'num estudiantes', 'num alumnos', '# estudiantes', '# alumnos'],\n  aula: ['aula', 'sala', 'lugar', 'aula/lab'],\n  numero_horas: ['nro. horas', 'numero horas', 'nro horas'],\n  total_horas: ['total horas', 'total horas clase'],\n};\n\nconst SECCION_KEYWORDS = [\n  'tiempo completo', 'tiempo parcial', 'docentes tiempo',\n  'profesores tiempo', 'catedraticos'\n];\n\nconst VALORES_NULOS = ['n/a', 'na', 'n.a', '-', '--', '---', '', 'sin dato', 'sd', 'nd'];\nconst MERGED_NIVEL_1 = ['numero_docente', 'docente', 'titulo_pregrado', 'titulo_posgrado'];\nconst MERGED_NIVEL_2 = ['materia', 'codigo_materia'];\n\n// ── FUNCION: normalizar texto para comparacion ──\nconst norm = (s) => {\n  if (!s) return '';\n  return String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n};\n\n// ── FUNCION: detectar header en una fila ──\nfunction detectHeader(row) {\n  const entries = Object.entries(row);\n  let matches = 0;\n  const tempMap = {};\n  for (const [key, val] of entries) {\n    if (!val || typeof val !== 'string') continue;\n    const clean = norm(val);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (tempMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          tempMap[campo] = key;\n          matches++;\n          break;\n        }\n      }\n    }\n  }\n  return { matches, tempMap };\n}\n\n// ── PASO 1: Buscar el mejor bloque de header en TODAS las filas ──\n// Con readAllSheets, las filas de multiples hojas se mezclan.\n// Buscamos la fila con MAS matches de keywords de header.\nlet columnMap = {};\nlet dataStartIndex = 0;\nlet bestMatches = 0;\n\n// Primero: verificar si los keys del JSON ya son headers reales\nconst allKeys = Object.keys(allRows[0] || {});\nconst hasRealHeaders = allKeys.some(k => {\n  const n = norm(k);\n  return !k.startsWith('__EMPTY') && !k.startsWith('__rowNum') && \n    (n.includes('docente') || n.includes('materia') || n.includes('hora') || n.includes('dia'));\n});\n\nif (hasRealHeaders) {\n  for (const key of allKeys) {\n    const clean = norm(key);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (columnMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          columnMap[campo] = key;\n          break;\n        }\n      }\n    }\n  }\n  dataStartIndex = 0;\n  bestMatches = Object.keys(columnMap).length;\n} else {\n  // Escanear TODAS las filas buscando el mejor header\n  for (let i = 0; i < allRows.length; i++) {\n    const row = allRows[i];\n    const { matches, tempMap } = detectHeader(row);\n    if (matches > bestMatches) {\n      bestMatches = matches;\n      columnMap = tempMap;\n      dataStartIndex = i + 1;\n    }\n    // Si encontramos 6+ matches es un header excelente, pero seguimos buscando uno mejor\n  }\n}\n\nconsole.log(`Header detectado con ${bestMatches} columnas en fila ${dataStartIndex - 1}`);\nconsole.log('Columnas mapeadas: ' + JSON.stringify(columnMap));\n\n// ── PASO 1b: Verificar sub-headers (fila siguiente al header) ──\n// Algunos Excels tienen 2 filas de header: fila 1 = 'HORARIO', fila 2 = 'DIA' + 'HORA'\nif (dataStartIndex < allRows.length) {\n  const subRow = allRows[dataStartIndex];\n  const { matches: subMatches, tempMap: subMap } = detectHeader(subRow);\n  // Si la sub-fila tiene campos que no teniamos, agregarlos\n  for (const [campo, key] of Object.entries(subMap)) {\n    if (!columnMap[campo]) {\n      columnMap[campo] = key;\n      console.log(`Sub-header: agregando ${campo} -> ${key}`);\n    }\n  }\n  // Si la sub-fila tenia matches, la data empieza despues\n  if (subMatches >= 2) {\n    dataStartIndex++;\n  }\n}\n\n// ── PASO 2: Extraer registros ──\n// Tomar filas desde dataStartIndex hasta encontrar un bloque con keys totalmente diferentes\n// (indicando que empezo otra hoja del Excel)\nconst dataRows = allRows.slice(dataStartIndex);\nconst registros = [];\nlet seccionActual = 'TIEMPO COMPLETO';\nlet consecutivasVacias = 0;\n\nfor (const row of dataRows) {\n  // Verificar si esta fila pertenece a otra hoja (keys diferentes)\n  const rowKeys = Object.keys(row);\n  const keysMatch = Object.values(columnMap).some(k => rowKeys.includes(k));\n  if (!keysMatch && rowKeys.length > 0) {\n    // Las keys no coinciden - probablemente cambio de hoja\n    consecutivasVacias++;\n    // if (consecutivasVacias > 3) break; // Disabled to support multi-sheet // Definitivamente otra hoja\n    continue;\n  }\n  consecutivasVacias = 0;\n\n  // Detectar si es fila de seccion\n  const allValues = Object.values(row).filter(Boolean).map(v => norm(String(v))).join(' ');\n  const esSeccion = SECCION_KEYWORDS.some(kw => allValues.includes(norm(kw)));\n  if (esSeccion) {\n    if (allValues.includes('parcial')) seccionActual = 'TIEMPO PARCIAL';\n    else if (allValues.includes('completo')) seccionActual = 'TIEMPO COMPLETO';\n    continue;\n  }\n\n  // Extraer campos usando columnMap\n  const registro = { _seccion: seccionActual };\n  let camposConValor = 0;\n\n  for (const [campo, key] of Object.entries(columnMap)) {\n    let val = row[key];\n    if (val !== null && val !== undefined && String(val).trim() !== '') {\n      val = String(val).trim();\n      if (VALORES_NULOS.includes(val.toLowerCase())) {\n        registro[campo] = null;\n      } else {\n        registro[campo] = val;\n        camposConValor++;\n      }\n    } else {\n      registro[campo] = null;\n    }\n  }\n\n  if (camposConValor >= 2) {\n    registros.push(registro);\n  }\n}\n\nconsole.log(`Registros extraidos (pre-propagacion): ${registros.length}`);\n\n// ── PASO 3: Propagacion inteligente de celdas merged ──\nconst lastDoc = {};\nconst lastMat = {};\n\nfor (const reg of registros) {\n  if (reg.numero_docente && String(reg.numero_docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else if (reg.docente && String(reg.docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else {\n    for (const campo of MERGED_NIVEL_1) {\n      if (!reg[campo]) reg[campo] = lastDoc[campo] || null;\n    }\n    if (reg.materia && String(reg.materia).trim() !== '') {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    } else {\n      for (const campo of MERGED_NIVEL_2) {\n        if (!reg[campo]) reg[campo] = lastMat[campo] || null;\n      }\n    }\n  }\n}\n\n// ── PASO 4: Parsear horarios y formatear clases ──\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\").replace(/\\s+/g, ' ').trim();\n};\n\nconst normalizeHora = (h) => {\n  if (!h) return '';\n  let s = String(h).trim();\n  // Normalizar H00 -> :00 (formato 08H00)\n  s = s.replace(/(\\d{1,2})[Hh](\\d{2})/, '$1:$2');\n  // Si no tiene ':', agregar :00\n  if (s && !s.includes(':') && /^\\d+$/.test(s)) s += ':00';\n  return s;\n};\n\nconst clases = [];\nfor (const reg of registros) {\n  if (!reg.materia && !reg.dia) continue;\n  if (reg.materia && /^\\d+\\s*horas?$/i.test(String(reg.materia))) continue;\n  if (reg.total_horas && !reg.dia && !reg.materia) continue;\n\n  const diaRaw = String(reg.dia || '').trim();\n  const horaRaw = String(reg.hora || '').trim();\n  const num_est = parseInt(reg.numero_alumnos) || 0;\n  const cicloVal = reg.ciclo || reg.codigo_materia || '';\n\n  // ── Manejar horarios multi-linea ──\n  // Formato 1: dia='Lunes\\r\\nMartes', hora='08:00 - 10:00\\r\\n08:00 - 10:00'\n  // Formato 2: dia='LUNES: 08H00 - 10H00\\r\\nMIERCOLES: 08H00 - 10H00' (dia+hora juntos)\n  \n  const diasList = diaRaw.split(/\\r?\\n/).map(d => d.trim()).filter(Boolean);\n  const horasList = horaRaw.split(/\\r?\\n/).map(h => h.trim()).filter(Boolean);\n\n  if (diasList.length === 0 && horasList.length === 0) {\n    // Sin dia ni hora, pero tiene materia - agregar con datos vacios\n    clases.push({\n      carrera: sanitize(carreraNombre),\n      materia: sanitize(reg.materia) || 'Sin nombre',\n      ciclo: sanitize(String(cicloVal)),\n      paralelo: sanitize(reg.paralelo) || 'A',\n      dia: '',\n      hora_inicio: '',\n      hora_fin: '',\n      num_estudiantes: num_est,\n      docente: sanitize(reg.docente) || '',\n      aula_sugerida: sanitize(reg.aula),\n      nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n    });\n    continue;\n  }\n\n  // Comprobar si el dia contiene hora embebida (ej: 'LUNES: 08H00 - 10H00')\n  const diaConHora = diasList.length > 0 && diasList[0].includes(':') && /\\d/.test(diasList[0]);\n  \n  if (diaConHora && horasList.length === 0) {\n    // Formato embebido: 'LUNES: 08H00 - 10H00'\n    for (const entry of diasList) {\n      const colonIdx = entry.indexOf(':');\n      if (colonIdx === -1) continue;\n      const dia = entry.substring(0, colonIdx).trim();\n      const horaStr = entry.substring(colonIdx + 1).trim();\n      let hi = '', hf = '';\n      if (horaStr.includes('-')) {\n        const parts = horaStr.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      }\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(dia) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  } else {\n    // Formato normal: dias y horas en columnas separadas\n    const maxEntries = Math.max(diasList.length, horasList.length, 1);\n    for (let i = 0; i < maxEntries; i++) {\n      const diaVal = diasList[i] || diasList[diasList.length - 1] || '';\n      const horaVal = horasList[i] || horasList[horasList.length - 1] || '';\n      \n      let hi = '', hf = '';\n      if (horaVal.includes('-')) {\n        const parts = horaVal.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      } else if (horaVal) {\n        hi = normalizeHora(horaVal);\n      }\n\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(diaVal) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  }\n}\n\nconsole.log(`${clases.length} clases extraidas (sin GPT-4o)`);\n\nreturn {\n  clases: clases,\n  carrera_id: carrera_id,\n  carrera_nombre: sanitize(carreraNombre),\n  total: clases.length,\n  total_filas_excel: allRows.length,\n  nombre_archivo: validarData.nombre_archivo || 'n8n-upload',\n  columnas_detectadas: columnMap\n};"
       },
       "id": "a1b2c3d4-0001-4000-8000-000000000001",
       "name": "Procesar Excel Robusto",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1296, 140]
+      "position": [
+        1296,
+        140
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "DELETE FROM distribucion WHERE clase_id IN (SELECT id FROM clases WHERE carrera = '{{ $json.carrera_nombre }}');\nDELETE FROM clases WHERE carrera = '{{ $json.carrera_nombre }}'",
+        "query": "DELETE FROM distribucion WHERE clase_id IN (SELECT id FROM clases WHERE carrera = '{{ String($json.carrera_nombre || '').replace(/'/g, \"''\") }}');\nDELETE FROM clases WHERE carrera = '{{ String($json.carrera_nombre || '').replace(/'/g, \"''\") }}'",
         "options": {}
       },
       "id": "a1b2c3d4-0004-4000-8000-000000000004",
       "name": "Eliminar Clases Antiguas",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1520, 140],
+      "position": [
+        1520,
+        140
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -212,7 +271,10 @@
       "name": "Guardar Clases en BD",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1744, 140],
+      "position": [
+        1744,
+        140
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -223,14 +285,17 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO planificaciones_subidas (carrera_id, usuario_id, nombre_archivo_original, nombre_archivo_guardado, ruta_archivo, total_clases, estado, fecha_subida)\nVALUES (\n  {{ $('Procesar Excel Robusto').first().json.carrera_id }},\n  1,\n  '{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  '{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  'n8n-upload/{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  {{ $('Procesar Excel Robusto').first().json.total }},\n  'procesado',\n  NOW()\n)",
+        "query": "UPDATE planificaciones_subidas SET estado = 'historico' WHERE carrera_id = {{ $('Procesar Excel Robusto').first().json.carrera_id }} AND estado = 'procesado';\nINSERT INTO planificaciones_subidas (carrera_id, usuario_id, nombre_archivo_original, nombre_archivo_guardado, ruta_archivo, total_clases, estado, fecha_subida)\nVALUES (\n  {{ $('Procesar Excel Robusto').first().json.carrera_id }},\n  1,\n  '{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  '{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  'n8n-upload/{{ $('Procesar Excel Robusto').first().json.nombre_archivo }}',\n  {{ $('Procesar Excel Robusto').first().json.total }},\n  'procesado',\n  NOW()\n)",
         "options": {}
       },
       "id": "a866ecd5-2d5d-4f2a-85ea-b7cb8e92a233",
       "name": "Registrar Planificación",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1968, 140],
+      "position": [
+        1968,
+        140
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -246,7 +311,10 @@
       "name": "Respuesta Éxito",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2192, 140]
+      "position": [
+        2192,
+        140
+      ]
     },
     {
       "parameters": {
@@ -258,9 +326,11 @@
       "name": "Respond - Planificación",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [2416, 140]
+      "position": [
+        2416,
+        140
+      ]
     },
-
     {
       "parameters": {
         "jsCode": "// Validar archivo de estudiantes\nconst archivo_base64 = $input.item.json.datos.archivo_base64;\n\nif (!archivo_base64) {\n  throw new Error('archivo_base64 es requerido');\n}\n\nreturn {\n  archivo_base64: archivo_base64,\n  nombre_archivo: $input.item.json.datos.nombre_archivo || 'estudiantes.xlsx'\n};"
@@ -269,7 +339,10 @@
       "name": "Validar Archivo Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [176, 450]
+      "position": [
+        176,
+        450
+      ]
     },
     {
       "parameters": {
@@ -279,7 +352,10 @@
       "name": "Extraer Excel Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 450]
+      "position": [
+        400,
+        450
+      ]
     },
     {
       "parameters": {
@@ -290,7 +366,10 @@
       "name": "Leer Excel Estudiantes",
       "type": "n8n-nodes-base.spreadsheetFile",
       "typeVersion": 2,
-      "position": [624, 450]
+      "position": [
+        624,
+        450
+      ]
     },
     {
       "parameters": {
@@ -300,7 +379,10 @@
       "name": "Preparar Prompt IA Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [848, 450]
+      "position": [
+        848,
+        450
+      ]
     },
     {
       "parameters": {
@@ -311,7 +393,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer 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"
+              "value": "Bearer {{ $env.OPENAI_API_KEY }}"
             }
           ]
         },
@@ -326,7 +408,10 @@
       "name": "Llamar GPT-4o Estudiantes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1072, 450]
+      "position": [
+        1072,
+        450
+      ]
     },
     {
       "parameters": {
@@ -336,7 +421,10 @@
       "name": "Parsear Respuesta Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1296, 450]
+      "position": [
+        1296,
+        450
+      ]
     },
     {
       "parameters": {
@@ -348,7 +436,10 @@
       "name": "Guardar Estudiantes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1520, 450],
+      "position": [
+        1520,
+        450
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -364,7 +455,10 @@
       "name": "Respuesta Éxito Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1744, 450]
+      "position": [
+        1744,
+        450
+      ]
     },
     {
       "parameters": {
@@ -376,9 +470,11 @@
       "name": "Respond - Estudiantes",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1968, 450]
+      "position": [
+        1968,
+        450
+      ]
     },
-
     {
       "parameters": {
         "operation": "executeQuery",
@@ -389,7 +485,10 @@
       "name": "Obtener Clases Pendientes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [176, 680],
+      "position": [
+        176,
+        680
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -407,7 +506,10 @@
       "name": "Obtener Aulas Disponibles",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [400, 680],
+      "position": [
+        400,
+        680
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -423,7 +525,10 @@
       "name": "Algoritmo de Distribución",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [624, 680]
+      "position": [
+        624,
+        680
+      ]
     },
     {
       "parameters": {
@@ -433,7 +538,10 @@
       "name": "Preparar Actualizaciones",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [848, 680]
+      "position": [
+        848,
+        680
+      ]
     },
     {
       "parameters": {
@@ -445,7 +553,10 @@
       "name": "Actualizar Clases Asignadas",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1072, 680],
+      "position": [
+        1072,
+        680
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -463,7 +574,10 @@
       "name": "Registrar Distribución",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1296, 680],
+      "position": [
+        1296,
+        680
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -479,7 +593,10 @@
       "name": "Respuesta Distribución",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 680]
+      "position": [
+        1520,
+        680
+      ]
     },
     {
       "parameters": {
@@ -491,9 +608,11 @@
       "name": "Respond - Distribución",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1744, 680]
+      "position": [
+        1744,
+        680
+      ]
     },
-
     {
       "parameters": {
         "operation": "executeQuery",
@@ -504,7 +623,10 @@
       "name": "Consultar Estado Sistema",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [176, 880],
+      "position": [
+        176,
+        880
+      ],
       "credentials": {
         "postgres": {
           "id": "UGPKcLPpSuxVeqXk",
@@ -520,7 +642,10 @@
       "name": "Formatear Estado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 880]
+      "position": [
+        400,
+        880
+      ]
     },
     {
       "parameters": {
@@ -532,9 +657,11 @@
       "name": "Respond - Estado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [624, 880]
+      "position": [
+        624,
+        880
+      ]
     },
-
     {
       "parameters": {
         "jsCode": "return {\n  success: false,\n  error: 'Acción no reconocida',\n  accion_recibida: $json.accion,\n  acciones_disponibles: [\n    'subir_planificacion',\n    'subir_estudiantes',\n    'distribuir_aulas',\n    'obtener_estado'\n  ],\n  timestamp: new Date().toISOString()\n};"
@@ -543,7 +670,10 @@
       "name": "Acción No Reconocida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [176, 1080]
+      "position": [
+        176,
+        1080
+      ]
     },
     {
       "parameters": {
@@ -557,7 +687,10 @@
       "name": "Respond - Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [400, 1080]
+      "position": [
+        400,
+        1080
+      ]
     },
     {
       "parameters": {
@@ -567,7 +700,10 @@
       "name": "Manejo de Errores",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [848, 300]
+      "position": [
+        848,
+        300
+      ]
     },
     {
       "parameters": {
@@ -581,7 +717,10 @@
       "name": "Respond - Error Interno",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1072, 300]
+      "position": [
+        1072,
+        300
+      ]
     }
   ],
   "pinData": {},

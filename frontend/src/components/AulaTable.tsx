@@ -1,23 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { aulaService, Aula } from '../services/api';
-import { FaBuilding, FaUsers, FaTools, FaBan, FaChartBar, FaPlus, FaEdit, FaTrash, FaDoorOpen, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { aulaService, Aula, AulaStats } from '../services/api';
+import { FaBan, FaPlus, FaEdit, FaTrash, FaDoorOpen, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 interface AulaFilters {
   edificio: string;
   tipo: string;
   estado: string;
   piso: string;
-}
-
-interface AulaStats {
-  total: number;
-  disponibles: number;
-  enMantenimiento: number;
-  noDisponibles: number;
-  capacidadTotal: number;
-  totalEdificios: number;
-  porEdificio: Array<{edificio: string; total: string; capacidad_total: string}>;
-  porTipo: Array<{tipo: string; total: string; capacidad_total: string}>;
 }
 
 const AulaTable: React.FC = () => {
@@ -100,7 +89,7 @@ const AulaTable: React.FC = () => {
     e.preventDefault();
     try {
       setError(null);
-      
+
       // Parsear equipamiento si es JSON string
       let equipamientoObj = {};
       if (formData.equipamiento) {
@@ -167,13 +156,13 @@ const AulaTable: React.FC = () => {
       codigo: aula.codigo || '',
       nombre: aula.nombre,
       capacidad: aula.capacidad.toString(),
-      tipo: aula.tipo || 'Estándar',
+      tipo: aula.tipo || 'AULA',
       edificio: aula.edificio || '',
       piso: aula.piso?.toString() || '1',
       equipamiento: aula.equipamiento ? JSON.stringify(aula.equipamiento, null, 2) : '',
       restriccion_carrera: aula.restriccion_carrera || '',
       es_prioritaria: aula.es_prioritaria || false,
-      estado: aula.estado,
+      estado: aula.estado as 'DISPONIBLE' | 'MANTENIMIENTO' | 'NO_DISPONIBLE',
       notas: aula.notas || '',
     });
     setModalOpen(true);
@@ -219,13 +208,13 @@ const AulaTable: React.FC = () => {
   const getTipoBadge = (tipo: string) => {
     switch (tipo?.toUpperCase()) {
       case 'LABORATORIO':
-        return 'bg-violet-100 text-violet-700 border-violet-200';
+        return 'bg-violet-100 text-violet-700 border-violet-200 shadow-sm shadow-violet-100';
       case 'AUDITORIO':
-        return 'bg-rose-100 text-rose-700 border-rose-200';
+        return 'bg-rose-100 text-rose-700 border-rose-200 shadow-sm shadow-rose-100';
       case 'SALA_ESPECIAL':
-        return 'bg-cyan-100 text-cyan-700 border-cyan-200';
+        return 'bg-cyan-100 text-cyan-700 border-cyan-200 shadow-sm shadow-cyan-100';
       default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+        return 'bg-muted text-muted-foreground border-border';
     }
   };
 
@@ -254,83 +243,79 @@ const AulaTable: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="p-0 sm:p-2 lg:p-4 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">
-            Inventario de Aulas y Capacidad
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+            Inventario de Aulas
           </h2>
-          <p className="text-muted-foreground mt-1">Gestiona las aulas y espacios del campus UIDE.</p>
+          <p className="text-muted-foreground text-sm mt-1">Gestiona los espacios del campus UIDE.</p>
         </div>
         <button
           onClick={openCreate}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 px-5 rounded-lg transition flex items-center gap-2 shadow-sm"
+          className="w-full sm:w-auto bg-primary hover:scale-[1.02] active:scale-[0.98] text-primary-foreground font-bold py-2.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
         >
           <FaPlus className="text-sm" />
           Agregar Aula
         </button>
       </div>
 
-      {/* Estadísticas */}
+      {/* Estadísticas Compactas */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Total Aulas</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-5 mb-6 sm:mb-8">
+          <div className="mac-card p-4 sm:p-6 rounded-2xl border border-border shadow-sm">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-bold uppercase tracking-wider">Total Aulas</p>
+            <p className="text-2xl sm:text-3xl font-black text-foreground mt-1">{stats.total}</p>
+          </div>
+          <div className="mac-card p-4 sm:p-6 rounded-2xl border border-border shadow-sm">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-bold uppercase tracking-wider">Capacidad</p>
+            <div className="flex items-baseline gap-1 mt-1">
+              <p className="text-2xl sm:text-3xl font-black text-foreground">{stats.capacidadTotal}</p>
+              <span className="text-[10px] sm:text-xs text-muted-foreground font-bold">est.</span>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Capacidad Total</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-3xl font-bold text-gray-900">{stats.capacidadTotal}</p>
-              <span className="text-sm text-gray-500">estudiantes</span>
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">Capacidad Promedio</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-3xl font-bold text-gray-900">
+          <div className="hidden md:block mac-card p-4 sm:p-6 rounded-2xl border border-border shadow-sm">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-bold uppercase tracking-wider">Promedio</p>
+            <div className="flex items-baseline gap-1 mt-1">
+              <p className="text-2xl sm:text-3xl font-black text-foreground">
                 {stats.total > 0 ? Math.round(stats.capacidadTotal / stats.total) : 0}
               </p>
-              <span className="text-sm text-gray-500">por aula</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground font-bold">por aula</span>
             </div>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-xl flex items-center gap-3">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-6 rounded-xl flex items-center gap-3 animate-fade-in">
           <FaBan className="text-red-400 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
+          <p className="text-sm font-medium">{error}</p>
         </div>
       )}
 
-      {/* Barra de búsqueda y filtros */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-        <div className="p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
-          {/* Búsqueda */}
+      {/* Filtros Modernos */}
+      <div className="bg-card rounded-2xl border border-border shadow-sm mb-6 overflow-hidden">
+        <div className="p-4 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
           <div className="relative flex-1">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              placeholder="Buscar por código, nombre o tipo..."
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition"
+              placeholder="Buscar por código o nombre..."
+              className="w-full pl-11 pr-4 py-3 border border-border rounded-xl bg-muted/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-background transition-all outline-none"
             />
           </div>
 
-          {/* Filtros inline */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex overflow-x-auto gap-2 pb-1 lg:pb-0 scrollbar-hide">
             <select
               value={filters.tipo}
               onChange={(e) => { setFilters({ ...filters, tipo: e.target.value }); setCurrentPage(1); }}
-              className="border border-gray-200 rounded-lg px-3 py-2.5 bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-semibold text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
             >
-              <option value="">Tipo: Todos</option>
-              <option value="AULA">Aula</option>
+              <option value="">Todos los Tipos</option>
+              <option value="AULA">Aula Común</option>
               <option value="LABORATORIO">Laboratorio</option>
               <option value="AUDITORIO">Auditorio</option>
               <option value="SALA_ESPECIAL">Sala Especial</option>
@@ -339,18 +324,18 @@ const AulaTable: React.FC = () => {
             <select
               value={filters.estado}
               onChange={(e) => { setFilters({ ...filters, estado: e.target.value }); setCurrentPage(1); }}
-              className="border border-gray-200 rounded-lg px-3 py-2.5 bg-gray-50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-semibold text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
             >
-              <option value="">Estado: Todos</option>
+              <option value="">Todos los Estados</option>
               <option value="DISPONIBLE">Disponible</option>
               <option value="MANTENIMIENTO">Mantenimiento</option>
-              <option value="NO_DISPONIBLE">No disponible</option>
+              <option value="NO_DISPONIBLE">Fuera de Uso</option>
             </select>
 
-            {(filters.tipo || filters.estado || filters.edificio || filters.piso || searchTerm) && (
+            {(filters.tipo || filters.estado || searchTerm) && (
               <button
                 onClick={limpiarFiltros}
-                className="px-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                className="px-4 py-3 text-sm font-bold text-uide-blue hover:bg-uide-blue/5 rounded-xl transition-all whitespace-nowrap"
               >
                 Limpiar
               </button>
@@ -359,322 +344,369 @@ const AulaTable: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabla */}
+      {/* Vista de Datos: Cards vs Table */}
       {loading ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <div className="inline-block animate-spin rounded-full h-10 w-10 border-[3px] border-gray-200 border-t-primary"></div>
-          <p className="text-gray-500 mt-4 text-sm">Cargando aulas...</p>
+        <div className="text-center py-16 bg-card rounded-2xl border border-border shadow-sm">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-[3px] border-slate-100 border-t-uide-blue"></div>
+          <p className="text-slate-500 mt-4 text-sm font-medium">Sincronizando aulas...</p>
         </div>
       ) : filteredAulas.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <FaDoorOpen className="text-5xl text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">No se encontraron aulas</p>
-          <p className="text-sm text-gray-400 mt-1">Ajusta los filtros o agrega una nueva aula</p>
+        <div className="text-center py-16 bg-card rounded-2xl border border-border shadow-sm">
+          <FaDoorOpen className="text-5xl text-slate-200 dark:text-slate-700 mx-auto mb-4" />
+          <p className="text-muted-foreground font-bold">No se encontraron resultados</p>
+          <p className="text-xs text-muted-foreground mt-1">Intenta con otros términos de búsqueda</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Código</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nombre</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
-                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedAulas.map((aula) => {
-                  const estado = getEstadoDot(aula.estado);
-                  return (
-                    <tr key={aula.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4">
-                        <span className="font-semibold text-primary text-sm">{aula.codigo || 'N/A'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900 text-sm">{aula.nombre}</div>
-                        {(aula.es_prioritaria || aula.restriccion_carrera) && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            {aula.es_prioritaria && (
-                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-medium rounded border border-amber-200">Prioritaria</span>
-                            )}
-                            {aula.restriccion_carrera && (
-                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-medium rounded border border-blue-200">{aula.restriccion_carrera}</span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-gray-700">{aula.capacidad} estudiantes</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-md border ${getTipoBadge(aula.tipo)}`}>
-                          {aula.tipo || 'AULA'}
+        <div className="space-y-6">
+          {/* Mobile View: Cards */}
+          <div className="grid grid-cols-1 gap-4 sm:hidden">
+            {paginatedAulas.map((aula) => {
+              const estado = getEstadoDot(aula.estado);
+              return (
+                <div key={aula.id} className="bg-card p-5 rounded-2xl border border-border shadow-sm space-y-4 animate-fade-in">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-uide-blue uppercase tracking-widest">{aula.codigo || 'S/C'}</span>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">{aula.nombre}</h3>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEdit(aula)}
+                        className="p-2.5 bg-muted text-muted-foreground hover:text-primary rounded-xl transition-colors"
+                      >
+                        <FaEdit size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(aula.id)}
+                        className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
+                      >
+                        <FaTrash size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-4 pt-2">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground font-black uppercase tracking-wider">Estado</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`w-2 h-2 rounded-full ${estado.dot} shadow-sm`}></span>
+                        <span className={`text-xs font-bold ${estado.text}`}>{estado.label}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Categoría</p>
+                      <span className={`inline-block px-2.5 py-1 text-[10px] font-black rounded-lg border mt-1 ${getTipoBadge(aula.tipo)}`}>
+                        {aula.tipo || 'AULA'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">Capacidad</p>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-1">{aula.capacidad} est.</p>
+                    </div>
+                  </div>
+
+                  {(aula.es_prioritaria || aula.restriccion_carrera) && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                      {aula.es_prioritaria && (
+                        <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[9px] font-black rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-center gap-1 uppercase tracking-tighter">
+                          <span className="material-symbols-outlined text-[12px] font-bold">star</span> Prioritaria
                         </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${estado.dot}`}></span>
-                          <span className={`text-sm font-medium ${estado.text}`}>{estado.label}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEdit(aula)}
-                            className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition"
-                            title="Editar"
-                          >
-                            <FaEdit className="text-sm" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(aula.id)}
-                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                            title="Desactivar"
-                          >
-                            <FaTrash className="text-sm" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      )}
+                      {aula.restriccion_carrera && (
+                        <span className="px-2 py-1 bg-uide-blue/5 dark:bg-uide-blue/10 text-uide-blue text-[9px] font-black rounded-lg border border-uide-blue/10 flex items-center gap-1 uppercase tracking-tighter">
+                          <span className="material-symbols-outlined text-[12px] font-bold">school</span> {aula.restriccion_carrera}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Footer con paginación */}
-          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-sm text-gray-500">
-              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredAulas.length)} de{' '}
-              <span className="font-semibold text-gray-700">{filteredAulas.length}</span> aulas
-            </p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
+          {/* Desktop View: Table */}
+          <div className="hidden sm:block bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-widest">Código</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nombre del Espacio</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-widest">Capacidad</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-widest">Categoría</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-muted-foreground uppercase tracking-widest">Estado</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-muted-foreground uppercase tracking-widest">Gestión</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {paginatedAulas.map((aula) => {
+                    const estado = getEstadoDot(aula.estado);
+                    return (
+                      <tr key={aula.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors group">
+                        <td className="px-6 py-4">
+                          <span className="font-bold text-uide-blue text-sm tracking-tight">{aula.codigo || '—'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 dark:text-white text-sm">{aula.nombre}</div>
+                          <div className="flex gap-2 mt-1.5">
+                            {aula.es_prioritaria && (
+                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[9px] font-black rounded border border-amber-100 uppercase">Prioritaria</span>
+                            )}
+                            {aula.restriccion_carrera && (
+                              <span className="px-1.5 py-0.5 bg-uide-blue/5 text-uide-blue text-[9px] font-black rounded border border-uide-blue/10 uppercase">{aula.restriccion_carrera}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-bold text-slate-600 dark:text-slate-400">{aula.capacidad} <span className="text-[10px] text-slate-400 font-medium">estudiantes</span></span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex px-2.5 py-1 text-[10px] font-black rounded-lg border leading-none ${getTipoBadge(aula.tipo)}`}>
+                            {aula.tipo || 'AULA'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${estado.dot} shadow-sm`}></span>
+                            <span className={`text-xs font-bold ${estado.text}`}>{estado.label}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+                            <button
+                              onClick={() => openEdit(aula)}
+                              className="p-2 text-slate-400 hover:text-uide-blue hover:bg-uide-blue/5 rounded-xl transition-all"
+                              title="Editar"
+                            >
+                              <FaEdit className="text-sm" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(aula.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                              title="Desactivar"
+                            >
+                              <FaTrash className="text-sm" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pagination Modernizada */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2">
+              <p className="text-xs font-bold text-muted-foreground order-2 sm:order-1">
+                Mostrando <span className="text-foreground">{((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredAulas.length)}</span> de {filteredAulas.length} registros
+              </p>
+              <div className="flex items-center gap-1 shadow-sm rounded-2xl p-1 bg-card border border-border order-1 sm:order-2">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  className="p-2.5 rounded-xl text-slate-400 hover:text-uide-blue hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                 >
                   <FaChevronLeft className="text-xs" />
                 </button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let page: number;
-                  if (totalPages <= 5) {
-                    page = i + 1;
-                  } else if (currentPage <= 3) {
-                    page = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    page = totalPages - 4 + i;
-                  } else {
-                    page = currentPage - 2 + i;
-                  }
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                        currentPage === page
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                })}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || (p >= currentPage - 1 && p <= currentPage + 1))
+                  .map((page, index, array) => (
+                    <React.Fragment key={page}>
+                      {index > 0 && array[index - 1] !== page - 1 && <span className="px-2 text-slate-300">...</span>}
+                      <button
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${currentPage === page
+                          ? 'bg-uide-blue text-white shadow-lg shadow-uide-blue/20 scale-105'
+                          : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'
+                          }`}
+                      >
+                        {page}
+                      </button>
+                    </React.Fragment>
+                  ))
+                }
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  className="p-2.5 rounded-xl text-slate-400 hover:text-uide-blue hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                 >
                   <FaChevronRight className="text-xs" />
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Modal Formulario */}
+      {/* Modal Formulario Responsive */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-card p-6 rounded-xl w-full max-w-3xl shadow-2xl border border-border max-h-[90vh] overflow-y-auto"
-          >
-            <h3 className="text-2xl font-bold text-foreground mb-6">
-              {currentAula ? 'Editar' : 'Nueva'} Aula
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4 animate-fade-in">
+          <div className="bg-card w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+            <div className="p-6 border-b border-border flex items-center justify-between">
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Código del Aula *
-                </label>
-                <input
-                  type="text"
-                  value={formData.codigo}
-                  onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                  required
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                  placeholder="Ej: AULA-C12"
-                />
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  {currentAula ? 'Actualizar Información' : 'Registrar Nueva Aula'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Completa los campos para continuar.</p>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                  placeholder="Ej: Aula C12"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Capacidad *
-                </label>
-                <input
-                  type="number"
-                  value={formData.capacidad}
-                  onChange={(e) => setFormData({ ...formData, capacidad: e.target.value })}
-                  required
-                  min="1"
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <select
-                  value={formData.edificio}
-                  onChange={(e) => setFormData({ ...formData, edificio: e.target.value })}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                >
-                  <option value="">Seleccionar edificio</option>
-                  <option value="Edificio A">Edificio A</option>
-                  <option value="Edificio B">Edificio B</option>
-                  <option value="Edificio C">Edificio C</option>
-                  <option value="Laboratorios">Laboratorios</option>
-                  <option value="Auditorio">Auditorio</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Tipo *
-                </label>
-                <select
-                  value={formData.piso}
-                  onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                >
-                  <option value="1">Piso 1</option>
-                  <option value="2">Piso 2</option>
-                  <option value="3">Piso 3</option>
-                  <option value="4">Piso 4</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Restricción de Carrera
-                </label>
-                <input
-                  type="text"
-                  value={formData.restriccion_carrera}
-                  onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                  placeholder="Ej: Derecho, Arquitectura (dejar vacío para uso general)"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Equipamiento (JSON)
-                </label>
-                <textarea
-                  value={formData.equipamiento}
-                  onChange={(e) => setFormData({ ...formData, equipamiento: e.target.value })}
-                  rows={3}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent font-mono text-sm"
-                  placeholder='Ej: {"proyector": true, "computadoras": 30, "pizarra_digital": true}'
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formato JSON o descripción simple
-                </p>
-              </div>
-
-              <div>
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.es_prioritaria}
-                    onChange={(e) => setFormData({ ...formData, es_prioritaria: e.target.checked })}
-                    className="w-5 h-5 text-primary border-input rounded focus:ring-2 focus:ring-ring"
-                  />
-                  <span className="text-sm font-medium text-muted-foreground">Aula Prioritaria</span>
-                </label>
-                <p className="text-xs text-muted-foreground mt-1 ml-8">
-                  Se dará prioridad en la asignación automática
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Estado *
-                </label>
-                <select
-                  value={formData.estado}
-                  onChange={(e) => setFormData({ ...formData, estado: e.target.value as 'DISPONIBLE' | 'MANTENIMIENTO' | 'NO_DISPONIBLE' })}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                >
-                  <option value="DISPONIBLE">Disponible</option>
-                  <option value="MANTENIMIENTO">Mantenimiento</option>
-                  <option value="NO_DISPONIBLE">No disponible</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
-                  Notas
-                </label>
-                <textarea
-                  value={formData.notas}
-                  onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                  rows={3}
-                  className="w-full border border-input rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-                  placeholder="Notas adicionales, observaciones, mantenimientos programados..."
-                />
-              </div>
+              <button
+                onClick={() => { setModalOpen(false); resetForm(); }}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <FaBan className="text-slate-400" />
+              </button>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-border">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Código Identificador</label>
+                  <input
+                    type="text"
+                    value={formData.codigo}
+                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                    required
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                    placeholder="Ej: A-101"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Descriptivo</label>
+                  <input
+                    type="text"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                    required
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                    placeholder="Ej: Aula de Informática"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Capacidad Máxima</label>
+                  <input
+                    type="number"
+                    value={formData.capacidad}
+                    onChange={(e) => setFormData({ ...formData, capacidad: e.target.value })}
+                    required
+                    min="1"
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Categoría de Espacio</label>
+                  <select
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  >
+                    <option value="AULA">Aula Común</option>
+                    <option value="LABORATORIO">Laboratorio</option>
+                    <option value="AUDITORIO">Auditorio</option>
+                    <option value="SALA_ESPECIAL">Sala Especial</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Ubicación (Edificio)</label>
+                  <select
+                    value={formData.edificio}
+                    onChange={(e) => setFormData({ ...formData, edificio: e.target.value })}
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  >
+                    <option value="">No Asignado</option>
+                    <option value="Edificio A">Edificio A</option>
+                    <option value="Edificio B">Edificio B</option>
+                    <option value="Edificio C">Edificio C</option>
+                    <option value="Laboratorios">Laboratorios</option>
+                    <option value="Auditorio">Auditorio</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Piso / Nivel</label>
+                  <select
+                    value={formData.piso}
+                    onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
+                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  >
+                    <option value="1">Piso 1</option>
+                    <option value="2">Piso 2</option>
+                    <option value="3">Piso 3</option>
+                    <option value="4">Piso 4</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Prioridad y Restricción</label>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <label className="flex-1 flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-amber-50/50 transition-colors group">
+                      <input
+                        type="checkbox"
+                        checked={formData.es_prioritaria}
+                        onChange={(e) => setFormData({ ...formData, es_prioritaria: e.target.checked })}
+                        className="w-5 h-5 accent-uide-blue"
+                      />
+                      <div>
+                        <p className="text-xs font-black text-slate-700 dark:text-slate-300 group-hover:text-amber-700">Espacio Prioritario</p>
+                        <p className="text-[10px] text-slate-400">Preferente en asignación auto.</p>
+                      </div>
+                    </label>
+                    <div className="flex-[2]">
+                      <input
+                        type="text"
+                        value={formData.restriccion_carrera}
+                        onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
+                        className="w-full border border-slate-100 dark:border-slate-700 rounded-xl px-4 py-4 bg-slate-50 dark:bg-slate-900/50 text-sm font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none"
+                        placeholder="Restringir a carrera (opcional)"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Estado de Operatividad</label>
+                  <div className="flex gap-2">
+                    {['DISPONIBLE', 'MANTENIMIENTO', 'NO_DISPONIBLE'].map((estado) => (
+                      <button
+                        key={estado}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, estado: estado as any })}
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${formData.estado === estado
+                          ? 'bg-uide-blue text-white border-uide-blue shadow-lg shadow-uide-blue/20 scale-105'
+                          : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'
+                          }`}
+                      >
+                        {estado.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setModalOpen(false);
-                  resetForm();
-                }}
-                className="px-6 py-2 border border-border rounded-lg hover:bg-muted transition"
+                onClick={() => { setModalOpen(false); resetForm(); }}
+                className="flex-1 px-6 py-4 border border-slate-100 dark:border-slate-800 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm uppercase tracking-widest"
               >
                 Cancelar
               </button>
               <button
-                type="submit"
-                className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition font-semibold shadow-lg"
+                type="button"
+                onClick={handleSubmit}
+                className="flex-[2] px-6 py-4 bg-uide-blue text-white rounded-2xl font-black hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-uide-blue/20 text-sm uppercase tracking-widest"
               >
-                {currentAula ? 'Actualizar' : 'Crear'} Aula
+                {currentAula ? 'Guardar Cambios' : 'Confirmar Registro'}
               </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
     </div>
@@ -682,6 +714,3 @@ const AulaTable: React.FC = () => {
 };
 
 export default AulaTable;
-
-
-

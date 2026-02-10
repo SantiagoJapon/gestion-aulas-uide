@@ -88,36 +88,52 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
       backdrop-filter: blur(8px);
       background-color: rgba(255, 255, 255, 0.6);
     }
+    .dark .glass-export-group {
+      background-color: rgba(1, 1, 4, 0.6);
+    }
+
     .cell-empty { background-color: #ffffff; border: 1px solid #e5e7eb; }
     .cell-low { background-color: #dcfce7; border: 1px solid #bbf7d0; color: #166534; }
     .cell-medium { background-color: #fef9c3; border: 1px solid #fef08a; color: #854d0e; }
     .cell-high { background-color: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
+
+    .dark .cell-empty { background-color: #010104; border-color: #1f2937; }
+    .dark .cell-low { background-color: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.5); color: #bbf7d0; }
+    .dark .cell-medium { background-color: rgba(255, 192, 20, 0.18); border-color: rgba(255, 192, 20, 0.55); color: #fde68a; }
+    .dark .cell-high { background-color: rgba(255, 112, 146, 0.23); border-color: rgba(255, 112, 146, 0.6); color: #fecaca; }
     
     .glass-popover {
         backdrop-filter: blur(12px);
         background-color: rgba(255, 255, 255, 0.95);
         border: 1px solid rgba(0,0,0,0.05);
     }
+    .dark .glass-popover {
+        background-color: rgba(1, 1, 4, 0.96);
+        border-color: rgba(148, 163, 184, 0.35);
+    }
   `;
 
   if (cargando) {
     return (
-      <div className="flex items-center justify-center p-24 bg-white rounded-2xl shadow-sm">
+      <div className="flex items-center justify-center p-24 bg-card rounded-2xl shadow-sm border border-border">
         <span className="material-symbols-outlined animate-spin text-uide-blue text-4xl">refresh</span>
-        <span className="ml-3 text-slate-500 font-medium">Cargando ocupación...</span>
+        <span className="ml-3 text-muted-foreground font-medium">Cargando ocupación...</span>
       </div>
     );
   }
 
   if (error || !datos) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-slate-200">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
-          <span className="material-symbols-outlined text-3xl text-slate-400">grid_off</span>
+      <div className="bg-card rounded-2xl shadow-sm p-12 text-center border border-border">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+          <span className="material-symbols-outlined text-3xl text-muted-foreground">grid_off</span>
         </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-1">Sin datos disponibles</h3>
-        <p className="text-slate-500 mb-6">{error || 'No hay información de distribución para mostrar.'}</p>
-        <button onClick={cargarDatos} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
+        <h3 className="text-lg font-bold text-foreground mb-1">Sin datos disponibles</h3>
+        <p className="text-muted-foreground mb-6">{error || 'No hay información de distribución para mostrar.'}</p>
+        <button
+          onClick={cargarDatos}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
           Reintentar
         </button>
       </div>
@@ -125,33 +141,36 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
   }
 
   return (
-    <div className="flex flex-col min-w-0 bg-[#f5f7f8]">
+    <div className="flex flex-col min-w-0 bg-transparent">
       <style>{styles}</style>
 
       {/* Header Section */}
-      <header className="px-1 pt-2 pb-6 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+      <header className="px-1 pt-2 pb-4 lg:pb-6 flex flex-col gap-4 lg:gap-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{titulo}</h2>
-            <p className="text-slate-500 mt-1 flex items-center gap-2">
+            <h2 className="text-2xl lg:text-3xl font-black text-foreground tracking-tight">{titulo}</h2>
+            <p className="text-muted-foreground mt-1 flex items-center gap-2 text-sm lg:text-base">
               <span className="material-symbols-outlined text-lg">monitoring</span>
-              Monitoreo de ocupación en tiempo real
+              Monitoreo en tiempo real
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
             {showExport && (
-              <div className="flex items-center p-1 glass-export-group rounded-xl border border-slate-200 shadow-sm bg-white/50">
-                <span className="px-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest">Exportar</span>
-                <div className="h-6 w-px bg-slate-200 mx-1"></div>
-                <button title="PDF" className="h-8 w-10 flex items-center justify-center rounded-lg hover:bg-white transition-all text-slate-600">
+              <div className="flex items-center p-1 glass-export-group rounded-xl border border-border shadow-sm bg-white/50 dark:bg-black/30 shrink-0">
+                <span className="px-2 lg:px-3 text-[10px] lg:text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Exp.</span>
+                <div className="h-6 w-px bg-border mx-1"></div>
+                <button title="PDF" className="h-8 w-10 flex items-center justify-center rounded-lg hover:bg-card transition-all text-muted-foreground">
                   <span className="material-symbols-outlined text-xl">picture_as_pdf</span>
                 </button>
-                <button title="Excel" className="h-8 w-10 flex items-center justify-center rounded-lg hover:bg-white transition-all text-slate-600">
+                <button title="Excel" className="h-8 w-10 flex items-center justify-center rounded-lg hover:bg-card transition-all text-muted-foreground">
                   <span className="material-symbols-outlined text-xl">table_view</span>
                 </button>
               </div>
             )}
-            <button onClick={cargarDatos} className="h-10 px-4 flex items-center gap-2 rounded-xl bg-uide-blue text-white font-semibold text-sm shadow-lg shadow-uide-blue/20 hover:brightness-110 transition-all">
+            <button
+              onClick={cargarDatos}
+              className="h-10 px-3 lg:px-4 flex items-center gap-2 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all shrink-0"
+            >
               <span className="material-symbols-outlined text-lg">refresh</span>
               Actualizar
             </button>
@@ -159,61 +178,61 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
         </div>
 
         {/* Controls Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 py-4 px-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-              <button className="p-1.5 hover:bg-white rounded-md transition-all text-slate-600">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-3 lg:py-4 px-4 lg:px-5 bg-card rounded-2xl border border-border shadow-sm">
+            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+              <button className="p-1 hover:bg-card rounded-md transition-all text-muted-foreground">
                 <span className="material-symbols-outlined text-xl leading-none">chevron_left</span>
               </button>
-              <div className="px-3 flex items-center gap-2">
-                <span className="material-symbols-outlined text-uide-blue text-lg">calendar_month</span>
-                <span className="text-sm font-semibold whitespace-nowrap text-slate-700">Semana Actual</span>
+              <div className="px-2 lg:px-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-lg">calendar_month</span>
+                <span className="text-xs lg:text-sm font-semibold whitespace-nowrap text-foreground">Semana Actual</span>
               </div>
-              <button className="p-1.5 hover:bg-white rounded-md transition-all text-slate-600">
+              <button className="p-1 hover:bg-card rounded-md transition-all text-muted-foreground">
                 <span className="material-symbols-outlined text-xl leading-none">chevron_right</span>
               </button>
             </div>
           </div>
 
           {/* Stats Summary Chips */}
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-4 lg:gap-6 text-sm ml-auto md:ml-0">
             <div className="flex flex-col items-end">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ocupación Prom.</span>
-              <span className="font-black text-slate-700 text-lg leading-none">{datos.estadisticas.promedio_ocupacion}%</span>
+              <span className="text-[9px] lg:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ocupación</span>
+              <span className="font-black text-foreground text-base lg:text-lg leading-none">{datos.estadisticas.promedio_ocupacion}%</span>
             </div>
-            <div className="h-8 w-px bg-slate-200"></div>
+            <div className="h-8 w-px bg-border"></div>
             <div className="flex flex-col items-end">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Clases Totales</span>
-              <span className="font-black text-slate-700 text-lg leading-none">{datos.estadisticas.total_clases}</span>
+              <span className="text-[9px] lg:text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Clases</span>
+              <span className="font-black text-foreground text-base lg:text-lg leading-none">{datos.estadisticas.total_clases}</span>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Heat Map Table */}
-      <div className="flex-1 flex flex-col relative px-1">
-        <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm relative">
-          <table className="w-full border-collapse table-fixed">
+      <div className="flex-1 flex flex-col relative px-1 overflow-hidden">
+        <div className="flex-1 overflow-auto rounded-2xl border border-border bg-card shadow-sm relative">
+          <table className="w-full border-collapse min-w-[650px]">
             <thead>
-              <tr className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
-                <th className="w-24 p-4 text-left text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-r border-slate-200">
+              <tr className="sticky top-0 z-10 bg-muted border-b border-border">
+                <th className="w-20 lg:w-24 p-2 lg:p-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest bg-muted border-r border-border">
                   Hora
                 </th>
                 {DIAS_SEMANA.map((dia, index) => (
                   <th key={dia} className="p-4 text-center">
-                    <div className="text-xs font-bold text-slate-500 uppercase">{dia.substring(0, 3)}</div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase">{dia.substring(0, 3)}</div>
                     {/* Placeholder dates just for visual structure */}
-                    <div className={`text-lg font-black ${index === 2 ? 'text-uide-blue' : 'text-slate-800'}`}>
+                    <div className={`text-lg font-black ${index === 2 ? 'text-primary' : 'text-foreground'}`}>
                       {20 + index}
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border/40">
               {HORAS.map((hora) => (
                 <tr key={hora}>
-                  <td className="p-4 text-center text-xs font-bold text-slate-500 border-r border-slate-100 bg-slate-50/50">
+                  <td className="p-4 text-center text-xs font-bold text-muted-foreground border-r border-border/40 bg-muted/40">
                     {String(hora).padStart(2, '0')}:00
                   </td>
                   {DIAS_SEMANA.map((dia) => {
@@ -229,7 +248,7 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
                         {nivel !== 'EMPTY' ? (
                           <div
                             onClick={() => handleCeldaClick(dia, hora)}
-                            className={`h-full w-full rounded-lg ${config.divClass} flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md relative ${isSelected ? 'ring-2 ring-uide-blue ring-offset-2 z-10' : ''}`}
+                            className={`h-full w-full rounded-lg ${config.divClass} flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md relative ${isSelected ? 'ring-2 ring-primary ring-offset-2 z-10' : ''}`}
                           >
                             <span className="text-[10px] font-bold uppercase tracking-tight">{config.label}</span>
                             <span className="text-[10px] opacity-70 font-medium mt-0.5">{punto?.porcentaje_ocupacion.toFixed(0)}%</span>
@@ -247,39 +266,39 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
         </div>
 
         {/* Legend Footer */}
-        <footer className="mt-6 flex items-center justify-between px-2 mb-8">
-          <div className="flex items-center gap-6">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Leyenda de Ocupación</span>
-            <div className="flex items-center gap-4">
+        <footer className="mt-4 lg:mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-2 mb-8">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-6">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Leyenda de Ocupación</span>
+            <div className="flex flex-wrap items-center gap-3 lg:gap-4">
               <div className="flex items-center gap-2">
-                <div className="size-3 rounded-sm cell-empty border border-slate-300"></div>
-                <span className="text-xs font-medium text-slate-600">Vacío</span>
+                <div className="size-3 rounded-sm cell-empty border border-border/60"></div>
+                <span className="text-[10px] lg:text-xs font-medium text-muted-foreground">Vacío</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="size-3 rounded-sm cell-low"></div>
-                <span className="text-xs font-medium text-slate-600">Bajo (&lt; 40%)</span>
+                <span className="text-[10px] lg:text-xs font-medium text-muted-foreground">Bajo (&lt; 40%)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="size-3 rounded-sm cell-medium"></div>
-                <span className="text-xs font-medium text-slate-600">Medio (40-69%)</span>
+                <span className="text-[10px] lg:text-xs font-medium text-muted-foreground">Medio (40-69%)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="size-3 rounded-sm cell-high"></div>
-                <span className="text-xs font-medium text-slate-600">Alto (&ge; 70%)</span>
+                <span className="text-[10px] lg:text-xs font-medium text-muted-foreground">Alto (&ge; 70%)</span>
               </div>
             </div>
           </div>
-          <div className="text-[10px] font-medium text-slate-400">
-            Datos actualizados en tiempo real
+          <div className="text-[9px] lg:text-[10px] font-medium text-muted-foreground italic">
+            Actualización en tiempo real
           </div>
         </footer>
       </div>
 
       {/* Detalle Popover (Modal-like) used when clicking a cell */}
       {puntoSeleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm" onClick={() => setPuntoSeleccionado(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setPuntoSeleccionado(null)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200"
+            className="bg-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-border animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {(() => {
@@ -288,51 +307,51 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
 
               return (
                 <>
-                  <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <div className="p-4 border-b border-border flex items-center justify-between bg-muted/40">
                     <div className="flex items-center gap-2">
-                      <div className="size-2 rounded-full bg-uide-blue animate-pulse"></div>
-                      <h4 className="text-sm font-bold text-slate-900">
+                      <div className="size-2 rounded-full bg-primary animate-pulse"></div>
+                      <h4 className="text-sm font-bold text-foreground">
                         {puntoSeleccionado.dia}, {puntoSeleccionado.hora}:00
                       </h4>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Activo</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Activo</span>
                   </div>
                   <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs text-slate-500">Ocupación Total:</span>
-                      <span className="text-lg font-black text-slate-800">{datos.puntos.find(p => p.dia === puntoSeleccionado.dia && p.hora === puntoSeleccionado.hora)?.porcentaje_ocupacion.toFixed(0)}%</span>
+                      <div className="flex items-center justify_between mb-4">
+                      <span className="text-xs text-muted-foreground">Ocupación Total:</span>
+                      <span className="text-lg font-black text-foreground">{datos.puntos.find(p => p.dia === puntoSeleccionado.dia && p.hora === puntoSeleccionado.hora)?.porcentaje_ocupacion.toFixed(0)}%</span>
                     </div>
 
                     {detalle.clases.length > 0 ? (
                       detalle.clases.map((clase, idx) => (
-                        <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-uide-blue/30 transition-colors">
-                          <div className="flex items-start justify-between mb-2">
+                        <div key={idx} className="p-3 rounded-xl bg-muted/40 border border-border hover:border-primary/50 transition-colors">
+                            <div className="flex items-start justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-base text-slate-400">book</span>
-                              <span className="text-xs font-bold text-slate-700">{clase.materia}</span>
+                              <span className="material-symbols-outlined text-base text-muted-foreground">book</span>
+                              <span className="text-xs font-bold text-foreground">{clase.materia}</span>
                             </div>
-                            <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-bold shadow-sm">
+                            <span className="px-2 py-0.5 bg-card border border-border text-muted-foreground rounded text-[10px] font-bold shadow-sm">
                               {clase.aula}
                             </span>
                           </div>
-                          <div className="flex flex-col gap-1 ml-6">
+                            <div className="flex flex-col gap-1 ml-6">
                             <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[14px] text-slate-400">account_circle</span>
-                              <span className="text-xs text-slate-600">{clase.docente}</span>
+                              <span className="material-symbols-outlined text-[14px] text-muted-foreground">account_circle</span>
+                              <span className="text-xs text-muted-foreground">{clase.docente}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[14px] text-slate-400">group</span>
-                              <span className="text-xs text-slate-500">{clase.estudiantes} estudiantes ({clase.carrera})</span>
+                              <span className="material-symbols-outlined text-[14px] text-muted-foreground">group</span>
+                              <span className="text-xs text-muted-foreground">{clase.estudiantes} estudiantes ({clase.carrera})</span>
                             </div>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-center text-slate-400 text-sm py-4">No hay clases registradas</p>
+                    <p className="text-center text-muted-foreground text-sm py-4">No hay clases registradas</p>
                     )}
                   </div>
-                  <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-                    <button onClick={() => setPuntoSeleccionado(null)} className="text-xs font-bold text-uide-blue hover:underline">
+                  <div className="p-3 bg-muted/40 border-t border-border text-center">
+                    <button onClick={() => setPuntoSeleccionado(null)} className="text-xs font-bold text-primary hover:underline">
                       Cerrar Detalle
                     </button>
                   </div>

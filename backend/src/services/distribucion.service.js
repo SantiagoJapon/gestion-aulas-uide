@@ -87,24 +87,54 @@ class DistribucionService {
   /**
    * Ejecuta la distribución automática de aulas
    */
-  async ejecutarDistribucion() {
+  /**
+   * Ejecuta la distribución automática de aulas
+   * @param {number|null} carreraId - ID de la carrera para filtrar (opcional)
+   */
+  async ejecutarDistribucion(carreraId = null) {
     try {
-      console.log('🚀 Iniciando distribución automática de aulas...');
-      console.log('📋 Reglas activas:');
-      console.log('   - Auditorio: LIBRE (no se asigna)');
-      console.log('   - Sala de Audiencias: solo Derecho');
-      console.log('   - Aula 20 (Lab Psicología): solo Psicología');
-      console.log('   - Aulas 16, 17, 18: solo Arquitectura');
-      console.log('   - Labs 1, 2, 3: prioridad Informática\n');
+      console.log(`🚀 Iniciando distribución automática de aulas... ${carreraId ? `(Carrera ID: ${carreraId})` : '(GLOBLAL)'}`);
 
-      // PASO 1: Validar aulas pre-asignadas del excel
-      await this.validarAulasPreasignadas();
+      // Obtener nombre de carrera si se pasó ID
+      let nombreCarrera = null;
+      if (carreraId) {
+        const carrera = await Carrera.findByPk(carreraId);
+        if (carrera) nombreCarrera = carrera.carrera;
+      }
 
-      // PASO 2: Obtener todas las clases sin aula asignada
+      // PASO 0: Limpiar distribución previa de esta carrera para evitar duplicados/errores
+      console.log(`🧹 Limpiando distribución previa para ${nombreCarrera || 'GLOBAL'}...`);
+      const whereClasesLimpieza = {};
+      if (nombreCarrera) whereClasesLimpieza.carrera = nombreCarrera;
+
+      const clasesLimpieza = await Clase.findAll({
+        attributes: ['id'],
+        where: whereClasesLimpieza
+      });
+
+      if (clasesLimpieza.length > 0) {
+        const idsLimpieza = clasesLimpieza.map(c => c.id);
+        await Distribucion.destroy({
+          where: { clase_id: idsLimpieza }
+        });
+        console.log(`   ✅ Eliminados registros de distribución de ${idsLimpieza.length} clases.`);
+      }
+
+      // PASO 1: Validar aulas pre-asignadas (Solo de esta carrera si se especifica)
+      await this.validarAulasPreasignadas(nombreCarrera);
+
+      // PASO 2: Obtener clases PENDIENTES de distribución
+      // Si hay carreraId, solo buscamos las de esa carrera
+      const whereClases = {
+        aula_asignada: null
+      };
+
+      if (nombreCarrera) {
+        whereClases.carrera = nombreCarrera;
+      }
+
       const clases = await Clase.findAll({
-        where: {
-          aula_asignada: null
-        },
+        where: whereClases,
         order: [['num_estudiantes', 'DESC']]
       });
 
@@ -122,27 +152,23 @@ class DistribucionService {
         };
       }
 
-      // Obtener todas las aulas disponibles (excepto bloqueadas)
+      // Obtener todas las aulas disponibles
       const todasAulas = await Aula.findAll({
         where: {
-          estado: { [Op.iLike]: 'disponible' }
+          estado: { [Op.iLike]: 'DISPONIBLE' }
         },
         order: [['capacidad', 'ASC']]
       });
 
-      // Filtrar aulas bloqueadas (Auditorio)
       const aulas = todasAulas.filter(a => !aulaEstaBloqueada(a));
-      const aulasBloqueadas = todasAulas.length - aulas.length;
 
-      console.log(`🏛️  Aulas disponibles: ${aulas.length} (${aulasBloqueadas} bloqueadas por reglas)\n`);
-
-      // Registro de horarios ocupados por aula
+      // PASO CRITICO: Cargar ocupación GLOBAL (de TODAS las carreras)
+      // para no sobrescribir ni chocar con otras clases ya asignadas
       const aulasOcupadas = {};
-
-      // Cargar horarios de clases ya asignadas
       const clasesYaAsignadas = await Clase.findAll({
         where: { aula_asignada: { [Op.not]: null } }
       });
+
       for (const c of clasesYaAsignadas) {
         if (c.aula_asignada && c.dia && c.hora_inicio && c.hora_fin) {
           if (!aulasOcupadas[c.aula_asignada]) aulasOcupadas[c.aula_asignada] = [];
@@ -156,14 +182,11 @@ class DistribucionService {
 
       let exitosas = 0;
       let fallidas = 0;
-
-      // PASO 3: Primero asignar clases con aulas exclusivas/prioritarias
-      // (Informática a Labs, Derecho a Sala Audiencias, etc.)
       const clasesRestantes = [];
 
+      // PASO 3: Asignar (Igual que antes, pero 'clases' está filtrado)
       for (const clase of clases) {
         const aulaAsignada = this.buscarAulaOptima(clase, aulas, aulasOcupadas, true);
-
         if (aulaAsignada) {
           await this.confirmarAsignacion(clase, aulaAsignada, aulasOcupadas);
           exitosas++;
@@ -172,10 +195,9 @@ class DistribucionService {
         }
       }
 
-      // PASO 4: Asignar clases restantes a aulas generales
+      // PASO 4: Asignar restantes
       for (const clase of clasesRestantes) {
         const aulaAsignada = this.buscarAulaOptima(clase, aulas, aulasOcupadas, false);
-
         if (aulaAsignada) {
           await this.confirmarAsignacion(clase, aulaAsignada, aulasOcupadas);
           exitosas++;
@@ -184,13 +206,6 @@ class DistribucionService {
           console.log(`  ❌ ${clase.carrera} - ${clase.materia} (${clase.num_estudiantes} est.) → Sin aula disponible`);
         }
       }
-
-      console.log('\n' + '='.repeat(80));
-      console.log(`✅ Distribución completada:`);
-      console.log(`   • Total procesadas: ${clases.length}`);
-      console.log(`   • Exitosas: ${exitosas}`);
-      console.log(`   • Fallidas: ${fallidas}`);
-      console.log('='.repeat(80));
 
       return {
         success: true,
@@ -217,9 +232,9 @@ class DistribucionService {
     await Distribucion.create({
       clase_id: clase.id,
       aula_id: aula.id,
-      dia: clase.dia,
-      hora_inicio: clase.hora_inicio,
-      hora_fin: clase.hora_fin,
+      dia: clase.dia || null,
+      hora_inicio: clase.hora_inicio || null,
+      hora_fin: clase.hora_fin || null,
       estado: 'confirmada'
     });
 
@@ -324,9 +339,14 @@ class DistribucionService {
     try {
       const whereClause = {};
       if (carreraId) {
-        const carrera = await Carrera.findByPk(carreraId);
-        if (carrera) {
-          whereClause.carrera = carrera.carrera;
+        if (!isNaN(carreraId)) {
+          const carrera = await Carrera.findByPk(carreraId);
+          if (carrera) {
+            whereClause.carrera = carrera.carrera;
+          }
+        } else {
+          // Si es un string (nombre de carrera), usarlo directamente
+          whereClause.carrera = carreraId;
         }
       }
 
@@ -369,16 +389,23 @@ class DistribucionService {
 
   /**
    * Valida las aulas pre-asignadas del excel y detecta conflictos
+   * @param {string|null} nombreCarrera - Nombre de la carrera para filtrar (opcional)
    */
-  async validarAulasPreasignadas() {
+  async validarAulasPreasignadas(nombreCarrera = null) {
     try {
-      console.log('🔍 Validando aulas pre-asignadas del excel...\n');
+      console.log(`🔍 Validando aulas pre-asignadas del excel... ${nombreCarrera ? `(Carrera: ${nombreCarrera})` : '(VARIAS)'}\n`);
+
+      const whereClause = {
+        aula_asignada: { [Op.not]: null }
+      };
+
+      if (nombreCarrera) {
+        whereClause.carrera = nombreCarrera;
+      }
 
       // Obtener clases con aula ya asignada
       const clasesPreasignadas = await Clase.findAll({
-        where: {
-          aula_asignada: { [Op.not]: null }
-        },
+        where: whereClause,
         order: [['dia', 'ASC'], ['hora_inicio', 'ASC']]
       });
 
@@ -403,6 +430,14 @@ class DistribucionService {
         const aula = await Aula.findOne({ where: { codigo: aulaCode } });
         if (!aula) {
           console.log(`   ⚠️  Aula "${aulaCode}" no encontrada → Reasignando...`);
+          await clase.update({ aula_asignada: null });
+          reasignadas++;
+          continue;
+        }
+
+        // 1. Verificar estado base del aula
+        if (aula.estado && aula.estado.toUpperCase() !== 'DISPONIBLE') {
+          console.log(`   ⚠️  Aula ${aulaCode} no está DISPONIBLE (${aula.estado}) → Reasignando...`);
           await clase.update({ aula_asignada: null });
           reasignadas++;
           continue;
@@ -444,17 +479,36 @@ class DistribucionService {
           await clase.update({ aula_asignada: null });
           reasignadas++;
         } else {
-          // Confirmar asignación - crear registro en distribucion
+          // Confirmar asignación - crear registro en distribucion si no existe
           clasesParAula[aulaCode].push(clase);
 
-          await Distribucion.create({
-            clase_id: clase.id,
-            aula_id: aula.id,
-            dia: clase.dia,
-            hora_inicio: clase.hora_inicio,
-            hora_fin: clase.hora_fin,
-            estado: 'confirmada'
+          // Sanitize 'dia' to fit in VARCHAR(20)
+          let diaSanitized = (clase.dia || '').trim().replace(/\s+/g, ' ');
+          if (diaSanitized.length > 20) {
+            console.warn(`⚠️ Truncando día "${diaSanitized}" a 20 caracteres.`);
+            diaSanitized = diaSanitized.substring(0, 20);
+          }
+
+          const [distribucion, created] = await Distribucion.findOrCreate({
+            where: { clase_id: clase.id },
+            defaults: {
+              aula_id: aula.id,
+              dia: diaSanitized || null,
+              hora_inicio: clase.hora_inicio || null,
+              hora_fin: clase.hora_fin || null,
+              estado: 'confirmada'
+            }
           });
+
+          if (!created) {
+            await distribucion.update({
+              aula_id: aula.id,
+              dia: diaSanitized || null,
+              hora_inicio: clase.hora_inicio || null,
+              hora_fin: clase.hora_fin || null,
+              estado: 'confirmada'
+            });
+          }
 
           confirmadas++;
           console.log(`   ✅ ${clase.carrera} - ${clase.materia} → ${aulaCode} CONFIRMADA`);
@@ -493,7 +547,7 @@ class DistribucionService {
     try {
       // Limpiar tabla de distribución
       await Distribucion.destroy({ where: {}, truncate: true });
-      
+
       // Limpiar aula_asignada de todas las clases
       await Clase.update(
         { aula_asignada: null },

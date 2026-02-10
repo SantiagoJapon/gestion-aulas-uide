@@ -1,6 +1,10 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
+if (!process.env.DB_PASSWORD) {
+  console.warn('⚠️  ADVERTENCIA: DB_PASSWORD no está definido. Usando password por defecto. NO usar en producción.');
+}
+
 // Configuración PostgreSQL
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'gestion_aulas',
@@ -18,8 +22,8 @@ const sequelize = new Sequelize(
       updatedAt: 'updated_at'
     },
     pool: {
-      max: 5,
-      min: 0,
+      max: 20,
+      min: 2,
       acquire: 30000,
       idle: 10000
     }

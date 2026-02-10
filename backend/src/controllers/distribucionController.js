@@ -123,7 +123,8 @@ const ejecutarDistribucionAutomatica = async (req, res) => {
   try {
     console.log('🎯 Admin solicitó distribución automática');
 
-    const resultado = await distribucionService.ejecutarDistribucion();
+    const carreraId = req.query.carrera_id || req.body.carrera_id;
+    const resultado = await distribucionService.ejecutarDistribucion(carreraId);
 
     res.json(resultado);
   } catch (error) {
@@ -221,7 +222,7 @@ const obtenerMapaCalor = async (req, res) => {
     });
 
     const [statsAulas] = await sequelize.query(`
-      SELECT COUNT(*) as total FROM aulas WHERE estado = 'disponible'
+      SELECT COUNT(*) as total FROM aulas WHERE estado = 'DISPONIBLE'
     `, { type: QueryTypes.SELECT });
 
     const totalAulas = parseInt(statsAulas.total) || 1;
@@ -407,6 +408,237 @@ function convertirHora(hora) {
   return (parseInt(partes[0]) || 0) * 60 + (parseInt(partes[1]) || 0);
 }
 
+const updateClase = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes } = req.body;
+    const usuario = req.usuario;
+
+    // Buscar la clase
+    const [clase] = await sequelize.query(
+      'SELECT * FROM clases WHERE id = $1',
+      { bind: [id], type: QueryTypes.SELECT, transaction }
+    );
+
+    if (!clase) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Clase no encontrada' });
+    }
+
+    // Seguridad: Si es director, validar que la clase sea de su carrera
+    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para modificar esta clase' });
+    }
+
+    // Actualizar la clase
+    await sequelize.query(`
+      UPDATE clases 
+      SET materia = $1, dia = $2, hora_inicio = $3, hora_fin = $4, 
+          aula_asignada = $5, docente = $6, num_estudiantes = $7
+      WHERE id = $8
+    `, {
+      bind: [materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes, id],
+      type: QueryTypes.UPDATE,
+      transaction
+    });
+
+    // Si se asignó un aula, actualizar también la tabla de distribución
+    if (aula_asignada) {
+      // Buscar el ID numérico del aula a partir de su código
+      const [aulaRow] = await sequelize.query(
+        'SELECT id FROM aulas WHERE codigo = $1 LIMIT 1',
+        { bind: [aula_asignada], type: QueryTypes.SELECT, transaction }
+      );
+
+      if (aulaRow) {
+        await sequelize.query(`
+          INSERT INTO distribucion (clase_id, aula_id, dia, hora_inicio, hora_fin)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (clase_id) DO UPDATE
+          SET aula_id = EXCLUDED.aula_id,
+              dia = EXCLUDED.dia,
+              hora_inicio = EXCLUDED.hora_inicio,
+              hora_fin = EXCLUDED.hora_fin
+        `, {
+          bind: [id, aulaRow.id, dia, hora_inicio, hora_fin],
+          type: QueryTypes.INSERT,
+          transaction
+        });
+      }
+    }
+
+    await transaction.commit();
+    res.json({ success: true, mensaje: 'Clase actualizada correctamente' });
+  } catch (error) {
+    await transaction.rollback();
+    handle500(res, error, 'updateClase');
+  }
+};
+
+const checkDisponibilidad = async (req, res) => {
+  try {
+    const { dia, hora_inicio, hora_fin, capacidad_minima } = req.query;
+
+    if (!dia || !hora_inicio || !hora_fin) {
+      return res.status(400).json({ success: false, error: 'Faltan parámetros de tiempo' });
+    }
+
+    // Buscar aulas que NO estén ocupadas en ese rango y tengan capacidad
+    const aulasLibres = await sequelize.query(`
+      SELECT a.id, a.codigo, a.nombre, a.capacidad, a.edificio, a.tipo
+      FROM aulas a
+      WHERE a.estado = 'DISPONIBLE'
+      AND a.capacidad >= $1
+      AND a.codigo NOT IN (
+        SELECT aula_asignada FROM clases 
+        WHERE dia = $2 
+        AND aula_asignada IS NOT NULL
+        AND (
+          (hora_inicio < $3 AND hora_fin > $2) OR -- Solapamiento
+          (hora_inicio < $4 AND hora_fin > $3)
+        )
+      )
+      ORDER BY a.capacidad ASC
+    `, {
+      bind: [capacidad_minima || 0, dia, hora_inicio, hora_fin],
+      type: QueryTypes.SELECT
+    });
+
+    res.json({ success: true, aulas: aulasLibres });
+  } catch (error) {
+    handle500(res, error, 'checkDisponibilidad');
+  }
+};
+
+// ============================================
+// MI DISTRIBUCIÓN (para profesores/directores)
+// ============================================
+const getMiDistribucion = async (req, res) => {
+  try {
+    const usuario = req.usuario;
+    let whereClause = '';
+    const replacements = {};
+
+    // Filtrar según rol
+    if (usuario.rol === 'profesor' || usuario.rol === 'docente') {
+      // Buscar clases del docente por nombre
+      const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+      if (nombreCompleto) {
+        whereClause = 'WHERE LOWER(c.docente) LIKE LOWER(:docente)';
+        replacements.docente = `%${nombreCompleto}%`;
+      }
+    } else if (usuario.rol === 'director' && usuario.carrera_director) {
+      whereClause = 'WHERE c.carrera = :carrera';
+      replacements.carrera = usuario.carrera_director;
+    }
+
+    // Si hay carrera_id en query, usarlo como filtro adicional
+    if (req.query.carrera_id) {
+      const prefix = whereClause ? 'AND' : 'WHERE';
+      if (!isNaN(req.query.carrera_id)) {
+        whereClause += ` ${prefix} c.carrera_id = :carrera_id`;
+        replacements.carrera_id = parseInt(req.query.carrera_id);
+      }
+    }
+
+    const clases = await sequelize.query(`
+      SELECT
+        c.id, c.materia, c.carrera, c.ciclo, c.paralelo,
+        c.dia, c.hora_inicio, c.hora_fin,
+        c.num_estudiantes, c.docente, c.aula_asignada,
+        a.nombre as aula_nombre, a.capacidad as aula_capacidad, a.edificio
+      FROM clases c
+      LEFT JOIN aulas a ON a.codigo = c.aula_asignada
+      ${whereClause}
+      ORDER BY c.dia, c.hora_inicio
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    const total = clases.length;
+    const asignadas = clases.filter(c => c.aula_asignada).length;
+
+    res.json({
+      success: true,
+      rol: usuario.rol,
+      estadisticas: {
+        total_clases: total,
+        clases_asignadas: asignadas,
+        clases_pendientes: total - asignadas,
+        porcentaje_completado: total > 0 ? Math.round((asignadas / total) * 100) : 0
+      },
+      clases: clases.map(c => ({
+        ...c,
+        materia: fixEncoding(c.materia),
+        carrera: fixEncoding(c.carrera),
+        docente: fixEncoding(c.docente)
+      }))
+    });
+  } catch (error) {
+    handle500(res, error, 'getMiDistribucion');
+  }
+};
+
+// ============================================
+// REPORTE DE DISTRIBUCIÓN (resumen rápido)
+// ============================================
+const getReporteDistribucion = async (req, res) => {
+  try {
+    const carreraId = req.query.carrera_id;
+    let whereClause = '';
+    const replacements = {};
+
+    if (carreraId) {
+      if (!isNaN(carreraId)) {
+        whereClause = 'WHERE c.carrera_id = :carrera_id';
+        replacements.carrera_id = parseInt(carreraId);
+      } else {
+        whereClause = 'WHERE c.carrera = :carrera_id';
+        replacements.carrera_id = carreraId;
+      }
+    }
+
+    const clases = await sequelize.query(`
+      SELECT
+        c.carrera, c.materia, c.dia, c.hora_inicio, c.hora_fin,
+        c.num_estudiantes, c.docente, c.aula_asignada,
+        a.nombre as aula_nombre, a.capacidad as aula_capacidad
+      FROM clases c
+      LEFT JOIN aulas a ON a.codigo = c.aula_asignada
+      ${whereClause}
+      ORDER BY c.carrera, c.dia, c.hora_inicio
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    const total = clases.length;
+    const asignadas = clases.filter(c => c.aula_asignada).length;
+
+    res.json({
+      success: true,
+      formato: req.query.formato || 'json',
+      estadisticas: {
+        total_clases: total,
+        clases_asignadas: asignadas,
+        clases_pendientes: total - asignadas,
+        porcentaje_completado: total > 0 ? Math.round((asignadas / total) * 100) : 0
+      },
+      clases: clases.map(c => ({
+        ...c,
+        materia: fixEncoding(c.materia),
+        carrera: fixEncoding(c.carrera),
+        docente: fixEncoding(c.docente)
+      }))
+    });
+  } catch (error) {
+    handle500(res, error, 'getReporteDistribucion');
+  }
+};
+
 module.exports = {
   getEstadoDistribucion,
   forzarDistribucion,
@@ -414,7 +646,11 @@ module.exports = {
   obtenerHorario,
   limpiarDistribucion,
   obtenerMapaCalor,
-  getClasesDistribucion
+  getClasesDistribucion,
+  updateClase,
+  checkDisponibilidad,
+  getMiDistribucion,
+  getReporteDistribucion
 };
 
 // ============================================
@@ -427,7 +663,7 @@ const getDistribucionSimulada = async (req, res) => {
     const aulasDisponibles = await sequelize.query(`
       SELECT id, codigo, nombre, capacidad, edificio, tipo, estado
       FROM aulas
-      WHERE estado = 'disponible' AND codigo IS NOT NULL
+      WHERE estado = 'DISPONIBLE' AND codigo IS NOT NULL
       ORDER BY capacidad DESC
     `, { type: QueryTypes.SELECT });
 

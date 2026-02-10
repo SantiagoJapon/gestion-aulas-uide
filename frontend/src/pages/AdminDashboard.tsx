@@ -1,35 +1,20 @@
 import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { aulaService } from '../services/api';
-import { Navbar } from '../components/Navbar';
 import AulaTable from '../components/AulaTable';
 import CarreraTable from '../components/CarreraTable';
-import DistribucionWidget from '../components/DistribucionWidget';
-
-
 import DirectorAssignmentView from '../components/DirectorAssignmentView';
 import SubirEstudiantes from '../components/SubirEstudiantes';
-import { StatCard } from '../components/common/StatCard';
 import MapaCalor from '../components/MapaCalor';
 import PlanificacionesTable from '../components/PlanificacionesTable';
-import EjecutarDistribucion from '../components/EjecutarDistribucion';
+import CentroControlDistribucion from '../components/CentroControlDistribucion';
 import HorarioVisual from '../components/HorarioVisual';
-import DistribucionEspacios from '../components/DistribucionEspacios';
 import EspacioTable from '../components/EspacioTable';
 import AppearanceSettings from '../components/AppearanceSettings';
-import {
-  FaBuilding,
-  FaUsers,
-  FaCheckCircle,
-  FaExclamationTriangle,
-  FaChartLine,
-  FaFileUpload,
-  FaCog,
-  FaUserShield,
-  FaThLarge,
-  FaMapMarkerAlt,
-  FaDoorOpen
-} from 'react-icons/fa';
+import ReporteEjecutivo from '../components/ReporteEjecutivo';
+import EstudianteTable from '../components/EstudianteTable';
+import DashboardLayout from '../components/layout/DashboardLayout';
+import DashboardWidget from '../components/dashboard/DashboardWidget';
 
 export default function AdminDashboard() {
   const { user } = useContext(AuthContext);
@@ -40,10 +25,8 @@ export default function AdminDashboard() {
     noDisponibles: 0,
     capacidadTotal: 0,
   });
-  const [loadingStats, setLoadingStats] = useState(true);
-
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'espacios' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'espacios' | 'estudiantes' | 'reportes' | 'settings'>('general');
 
   useEffect(() => {
     loadStats();
@@ -51,284 +34,250 @@ export default function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      setLoadingStats(true);
       const response = await aulaService.getAulasStats();
-      setStats(response.stats);
+      setStats(response.stats || { total: 0, disponibles: 0, enMantenimiento: 0, noDisponibles: 0, capacidadTotal: 0 });
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
-    } finally {
-      setLoadingStats(false);
     }
   };
 
   const handleDistribucionCompletada = () => {
-    // Recargar el horario
     setHorarioKey(prev => prev + 1);
   };
 
-  /* Custom CSS for the new dashboard */
-  const styles = `
-    .glass-sidebar {
-      background: rgba(255, 255, 255, 0.7);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-right: 1px solid rgba(0, 0, 0, 0.05);
-    }
-    .dark .glass-sidebar {
-      background: rgba(16, 23, 34, 0.8);
-      border-right: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .mac-card {
-      background: white;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-      border: 1px solid rgba(0, 0, 0, 0.05);
-    }
-    .dark .mac-card {
-      background: #1a222f;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .sidebar-item-active {
-      background: rgba(0, 51, 102, 0.1); /* uide-blue with opacity */
-      color: #003366; /* uide-blue */
-    }
-  `;
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#f5f7f8] dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 antialiased transition-colors duration-300">
-      <style>{styles}</style>
-
-      {/* Sidebar Navigation */}
-      <aside className="glass-sidebar w-64 flex flex-col h-full sticky top-0 z-20 transition-all duration-300">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="size-10 bg-uide-blue rounded-xl flex items-center justify-center text-white shadow-lg shadow-uide-blue/20">
-              <span className="material-symbols-outlined font-bold">school</span>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-slate-900 dark:text-white text-lg font-bold leading-none tracking-tight">UIDE</h1>
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">Panel Administrativo</p>
-            </div>
-          </div>
-
-          <nav className="space-y-1.5">
-            <button
-              onClick={() => setActiveTab('general')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all group ${activeTab === 'general' ? 'sidebar-item-active' : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'}`}
-            >
-              <span className="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">dashboard</span>
-              <span className="text-sm font-semibold">Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('distribucion')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all group ${activeTab === 'distribucion' ? 'sidebar-item-active' : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'}`}
-            >
-              <span className="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">meeting_room</span>
-              <span className="text-sm font-medium">Distribución</span>
-            </button>
-
-            {user?.rol === 'admin' && (
-              <button
-                onClick={() => setActiveTab('espacios')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all group ${activeTab === 'espacios' ? 'sidebar-item-active' : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'}`}
-              >
-                <span className="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">door_open</span>
-                <span className="text-sm font-medium">Espacios</span>
-              </button>
-            )}
-
-            <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all group">
-              <span className="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">group</span>
-              <span className="text-sm font-medium">Estudiantes</span>
-            </button>
-
-            <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all group">
-              <span className="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">bar_chart</span>
-              <span className="text-sm font-medium">Reportes</span>
-            </button>
-          </nav>
-        </div>
-
-        <div className="mt-auto p-6">
-          <div className="bg-uide-blue/5 rounded-xl p-4 border border-uide-blue/10">
-            <p className="text-xs font-bold text-uide-blue uppercase tracking-wider mb-1">Plan Pro</p>
-            <p className="text-[11px] text-slate-500 mb-3">Gestión completa habilitada.</p>
-          </div>
-          <div className="mt-6 flex items-center gap-3 px-1">
-            <div className="size-9 rounded-full bg-uide-blue text-white flex items-center justify-center font-bold text-xs shadow-sm">
-              {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">{user?.nombre} {user?.apellido}</span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{user?.rol}</span>
-            </div>
-            <span
-              onClick={() => setActiveTab('settings')}
-              className={`material-symbols-outlined ml-auto text-lg cursor-pointer transition-colors ${activeTab === 'settings' ? 'text-uide-blue' : 'text-slate-400 hover:text-uide-blue'}`}
-            >
-              settings
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto scroll-smooth">
-        {activeTab === 'settings' ? (
-          <AppearanceSettings />
-        ) : (
-          <div className="max-w-6xl mx-auto p-8 space-y-8">
-
-            {/* Page Heading */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="space-y-1">
-                <h2 className="text-slate-900 dark:text-white text-3xl font-black tracking-tight leading-tight">👋 Bienvenido, {user?.nombre}</h2>
-                <p className="text-slate-500 dark:text-slate-400 text-base font-medium">Aquí tienes el resumen de la universidad para hoy.</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={loadStats} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-slate-700 dark:text-slate-200">
-                  <span className="material-symbols-outlined text-lg">refresh</span>
-                  Actualizar
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-uide-blue text-white rounded-lg text-sm font-semibold shadow-md shadow-uide-blue/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                  <span className="material-symbols-outlined text-lg">add</span>
-                  Nuevo Reporte
-                </button>
-              </div>
-            </div>
-
-            {activeTab === 'general' && (
-              <>
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="mac-card p-6 rounded-xl flex flex-col gap-2 group hover:translate-y-[-2px] transition-all">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Aulas</p>
-                      <span className="material-symbols-outlined text-uide-blue group-hover:scale-110 transition-transform">meeting_room</span>
-                    </div>
-                    <p className="text-slate-900 dark:text-white text-3xl font-black">{loadingStats ? '-' : stats.total}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>
-                      <p className="text-emerald-500 text-xs font-bold">{stats.disponibles} disponibles</p>
-                    </div>
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'general':
+        return (
+          <div className="space-y-10 pb-20 animate-fade-in">
+            {/* 1. KPIs PANORÁMICOS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Aulas Totales', value: stats.total, icon: 'door_open', color: 'blue', desc: 'Espacios físicos' },
+                { label: 'Disponibles', value: stats.disponibles, icon: 'check_circle', color: 'emerald', desc: 'Listas para uso' },
+                { label: 'En Uso / Manten.', value: stats.noDisponibles + stats.enMantenimiento, icon: 'block', color: 'orange', desc: 'Ocupadas u obras' },
+                { label: 'Capacidad', value: stats.capacidadTotal, icon: 'groups', color: 'indigo', desc: 'Aforo total UIDE' }
+              ].map((kpi, i) => (
+                <div key={i} className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all group">
+                  <div className={`size-12 rounded-2xl bg-${kpi.color}-500/10 flex items-center justify-center text-${kpi.color}-600 mb-4 group-hover:scale-110 transition-transform`}>
+                    <span className="material-symbols-outlined text-2xl">{kpi.icon}</span>
                   </div>
-
-                  <div className="mac-card p-6 rounded-xl flex flex-col gap-2 group hover:translate-y-[-2px] transition-all">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Capacidad Total</p>
-                      <span className="material-symbols-outlined text-uide-orange group-hover:scale-110 transition-transform">groups</span>
-                    </div>
-                    <p className="text-slate-900 dark:text-white text-3xl font-black">{loadingStats ? '-' : stats.capacidadTotal}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="material-symbols-outlined text-uide-orange text-sm">school</span>
-                      <p className="text-uide-orange text-xs font-bold">Estudiantes simultáneos</p>
-                    </div>
-                  </div>
-
-                  <div className="mac-card p-6 rounded-xl flex flex-col gap-2 group hover:translate-y-[-2px] transition-all">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Mantenimiento</p>
-                      <span className="material-symbols-outlined text-yellow-600 group-hover:scale-110 transition-transform">build</span>
-                    </div>
-                    <p className="text-slate-900 dark:text-white text-3xl font-black">{loadingStats ? '-' : stats.enMantenimiento}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="material-symbols-outlined text-yellow-600 text-sm">warning</span>
-                      <p className="text-yellow-600 text-xs font-bold">{stats.noDisponibles} no operativas</p>
-                    </div>
-                  </div>
-
-                  <div className="mac-card p-6 rounded-xl flex flex-col gap-2 group hover:translate-y-[-2px] transition-all">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Ocupación</p>
-                      <span className="material-symbols-outlined text-uide-blue group-hover:scale-110 transition-transform">percent</span>
-                    </div>
-                    <p className="text-slate-900 dark:text-white text-3xl font-black">
-                      {stats.total > 0 ? Math.round(((stats.total - stats.disponibles) / stats.total) * 100) : 0}%
-                    </p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="material-symbols-outlined text-slate-400 text-sm">info</span>
-                      <p className="text-slate-400 text-xs font-bold">Porcentaje de uso</p>
-                    </div>
-                  </div>
+                  <h4 className="text-4xl font-black text-foreground tracking-tighter leading-none">{kpi.value}</h4>
+                  <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest mt-2">{kpi.label}</p>
+                  <p className="text-[9px] text-muted-foreground/60 font-medium uppercase mt-1">{kpi.desc}</p>
                 </div>
+              ))}
+            </div>
 
-                {/* Main funcionality components wrapped in new design */}
-                <div className="grid grid-cols-1 gap-6">
+            {/* 2. GRID PRINCIPAL (Tabla + Historial) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-                  {/* Gestión de Aulas */}
-                  <div className="mac-card rounded-xl p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span className="material-symbols-outlined text-uide-blue">meeting_room</span>
-                        Gestión de Aulas
-                      </h2>
-                    </div>
+              {/* Listado de Aulas (8/12) */}
+              <div className="lg:col-span-8">
+                <DashboardWidget
+                  title="Control de Inventario"
+                  subtitle="Gestión detallada de aulas y laboratorios"
+                  icon="inventory_2"
+                >
+                  <div className="p-1">
                     <AulaTable />
                   </div>
+                </DashboardWidget>
+              </div>
 
-                  {/* Asignación de Directores */}
-                  {/* Asignación de Directores (New Visual Interface) */}
-                  <div className="mac-card rounded-xl p-0 overflow-hidden h-[600px] border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <DirectorAssignmentView />
+              {/* Barra Lateral (4/12) */}
+              <div className="lg:col-span-4 space-y-8">
+                <DashboardWidget
+                  title="Planificaciones"
+                  subtitle="Cargas de archivos recientes"
+                  icon="history"
+                >
+                  <div className="max-h-[500px] overflow-y-auto pr-1">
+                    <PlanificacionesTable />
                   </div>
+                </DashboardWidget>
 
-
-
-                  {/* Subir Estudiantes */}
-                  <div className="mac-card rounded-xl p-6">
-                    <SubirEstudiantes />
+                {/* Info Card Quick Action */}
+                <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                  <div className="relative z-10">
+                    <h4 className="text-2xl font-black tracking-tighter leading-none mb-2">Asignación <br />Estratégica</h4>
+                    <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-6">Módulo de IA actvado</p>
+                    <button
+                      onClick={() => setActiveTab('distribucion')}
+                      className="bg-white text-primary p-3 px-6 rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg active:scale-95 hover:bg-slate-50"
+                    >
+                      Ir al Centro de Mando
+                    </button>
                   </div>
-
-                  {/* Otras Tablas importantes */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="mac-card rounded-xl p-6">
-                      <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white">Carreras Habilitadas</h3>
-                      <CarreraTable />
-                    </div>
-                    <div className="mac-card rounded-xl p-6">
-                      <h3 className="text-lg font-bold mb-4 text-slate-900 dark:text-white">Planificaciones</h3>
-                      <PlanificacionesTable />
-                    </div>
-                  </div>
-
-                  {/* Ejecutar Distribución */}
-                  <div className="mac-card rounded-xl p-6 bg-slate-50 dark:bg-slate-800/50 border-dashed border-2 border-slate-200 dark:border-slate-700">
-                    <EjecutarDistribucion onDistribucionCompletada={handleDistribucionCompletada} />
-                  </div>
-
-                  {/* Horario Visual */}
-                  <div className="mac-card rounded-xl p-6">
-                    <HorarioVisual key={horarioKey} />
-                  </div>
-
-                  {/* Mapa Calor */}
-                  <div className="mac-card rounded-xl p-6">
-                    <MapaCalor titulo="Mapa de Calor - Todas las Carreras" showExport={true} />
-                  </div>
-
+                  <span className="material-symbols-outlined text-[10rem] absolute -bottom-10 -right-10 text-white/10 group-hover:scale-110 transition-transform">auto_fix</span>
                 </div>
-              </>
-            )}
-
-            {activeTab === 'distribucion' && (
-              <div className="mac-card rounded-xl p-6 animate-fade-in">
-                <DistribucionEspacios />
               </div>
-            )}
+            </div>
 
-            {activeTab === 'espacios' && (
-              <div className="mac-card rounded-xl p-6 animate-fade-in">
-                <EspacioTable />
-              </div>
-            )}
+            {/* 3. HORARIO MAESTRO (Full Width) */}
+            <div className="pt-4">
+              <DashboardWidget
+                title="Horario Maestro"
+                subtitle="Visualización cronológica global de todas las facultades"
+                icon="calendar_view_week"
+                noPadding
+              >
+                <div className="p-2 min-h-[500px] overflow-hidden rounded-[2rem]">
+                  <HorarioVisual key={horarioKey} />
+                </div>
+              </DashboardWidget>
+            </div>
 
+            {/* 4. MAPA DE CALOR (Full Width) */}
+            <div className="pt-6 border-t border-border/50">
+              <DashboardWidget
+                title="Saturación Institucional"
+                subtitle="Mapa de calor detallado por franjas horarias y días"
+                icon="grid_view"
+                noPadding
+              >
+                <div className="p-4 overflow-hidden rounded-[2rem] bg-background">
+                  <MapaCalor />
+                </div>
+              </DashboardWidget>
+            </div>
           </div>
-        )}
-      </main>
-    </div>
+        );
+
+      case 'distribucion':
+        return (
+          <div className="space-y-12 animate-fade-in pb-20">
+            {/* El Centro de Mando debe ser el protagonista absoluto */}
+            <div className="bg-slate-900 rounded-[3rem] p-4 shadow-2xl border border-white/5">
+              <CentroControlDistribucion onDistribucionCompletada={handleDistribucionCompletada} />
+            </div>
+
+            {/* Asignación de Roles - Ahora en ancho completo para evitar amontonamiento */}
+            <div className="space-y-12">
+              <DashboardWidget
+                title="Gestión de Liderazgo Académico"
+                subtitle="Vincule directores a sus respectivas carreras para otorgar permisos"
+                icon="person_pin"
+              >
+                <div className="px-1">
+                  <DirectorAssignmentView />
+                </div>
+              </DashboardWidget>
+
+              <DashboardWidget
+                title="Estructura Curricular"
+                subtitle="Configure las carreras habilitadas y sus estados institucionales"
+                icon="account_tree"
+              >
+                <div className="px-1">
+                  <CarreraTable />
+                </div>
+              </DashboardWidget>
+            </div>
+          </div>
+        );
+
+      case 'espacios':
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <DashboardWidget title="Gestión de Espacios Adicionales" icon="space_dashboard">
+              <EspacioTable />
+            </DashboardWidget>
+          </div>
+        );
+
+      case 'estudiantes':
+        return (
+          <div className="space-y-10 animate-fade-in pb-20">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+              <div className="lg:col-span-8">
+                <DashboardWidget title="Listado General de Estudiantes" subtitle="Base de datos oficial" icon="group">
+                  <EstudianteTable />
+                </DashboardWidget>
+              </div>
+              <div className="lg:col-span-4">
+                <DashboardWidget title="Carga Masiva" subtitle="Importación desde Excel" icon="upload_file">
+                  <SubirEstudiantes />
+                </DashboardWidget>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'reportes':
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <DashboardWidget title="Reportes Institucionales" icon="description">
+              <ReporteEjecutivo />
+            </DashboardWidget>
+          </div>
+        );
+
+      case 'settings':
+        return (
+          <div className="max-w-4xl space-y-8 animate-fade-in pb-20">
+            <DashboardWidget title="Personalización del Sistema" icon="palette">
+              <AppearanceSettings />
+            </DashboardWidget>
+
+            <div className="bg-white dark:bg-slate-900 border border-border p-8 rounded-[2.5rem] flex items-center gap-6">
+              <div className="size-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center font-black text-3xl">
+                {user?.nombre?.[0]}{user?.apellido?.[0]}
+              </div>
+              <div>
+                <h4 className="font-black text-xl leading-none uppercase tracking-tighter mb-1 text-foreground">
+                  {user?.nombre} {user?.apellido}
+                </h4>
+                <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest">
+                  Administrador del Sistema • UIDE Online
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-[9px] font-black rounded-full uppercase border border-emerald-500/20">Acceso Total</span>
+                  <span className="px-3 py-1 bg-blue-500/10 text-blue-600 text-[9px] font-black rounded-full uppercase border border-blue-500/20">Soporte IT</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <DashboardLayout
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      title="Administrador"
+      subtitle="UIDE Gestión"
+    >
+      <div className="mb-12 px-2 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h2 className="text-5xl font-black text-foreground tracking-tighter leading-none mb-3">
+            {user ? `${user.nombre}` : 'Panel de Control'}
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+              <span className="size-1.5 bg-emerald-500 rounded-full mr-2 animate-pulse"></span>
+              Estado: Operativo
+            </span>
+            <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px]">
+              {new Date().toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={loadStats}
+          className="size-14 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-border flex items-center justify-center text-muted-foreground hover:text-primary transition-all active:scale-95 group"
+          title="Refrescar métricas"
+        >
+          <span className="material-symbols-outlined text-[24px] group-hover:rotate-180 transition-transform duration-500">refresh</span>
+        </button>
+      </div>
+
+      {renderContent()}
+    </DashboardLayout>
   );
 }
-
-
-
-

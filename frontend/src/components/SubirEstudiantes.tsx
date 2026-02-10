@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
-import { 
-  FaUpload, FaFileExcel, FaCheckCircle, FaTimesCircle, 
-  FaExclamationTriangle, FaSyncAlt 
+import {
+  FaUpload, FaFileExcel, FaCheckCircle, FaTimesCircle,
+  FaSyncAlt, FaInfoCircle
 } from 'react-icons/fa';
+import { estudianteService } from '../services/api';
+import { Button } from './common/Button';
 
 interface HistorialCarga {
   id: number;
@@ -15,7 +16,12 @@ interface HistorialCarga {
   detalles: any;
 }
 
-export default function SubirEstudiantes() {
+interface SubirEstudiantesProps {
+  carreraNombre?: string;
+  isCompact?: boolean;
+}
+
+export default function SubirEstudiantes({ carreraNombre, isCompact = false }: SubirEstudiantesProps) {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<any>(null);
@@ -23,49 +29,37 @@ export default function SubirEstudiantes() {
   const [historial, setHistorial] = useState<HistorialCarga[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cargar historial al montar
   useEffect(() => {
     cargarHistorial();
   }, []);
 
-  // Cargar historial de cargas
   const cargarHistorial = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(
-        'http://localhost:3000/api/estudiantes/historial-cargas?tipo=estudiantes',
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setHistorial(response.data.historial);
+      const data = await estudianteService.getHistorialCargas('estudiantes');
+      setHistorial(data.historial || []);
     } catch (error) {
       console.error('Error al cargar historial:', error);
     }
   };
 
-  // Manejar selección de archivo
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar extensión
       if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
         setError('Solo se permiten archivos Excel (.xlsx, .xls)');
         return;
       }
-      
-      // Validar tamaño (10MB máximo)
       if (file.size > 10 * 1024 * 1024) {
         setError('El archivo no debe superar los 10MB');
         return;
       }
-      
       setArchivo(file);
       setError('');
       setResultado(null);
     }
   };
 
-  // Subir archivo
-  const subirArchivo = async () => {
+  const handleUpload = async () => {
     if (!archivo) {
       setError('Selecciona un archivo primero');
       return;
@@ -78,30 +72,19 @@ export default function SubirEstudiantes() {
     try {
       const formData = new FormData();
       formData.append('archivo', archivo);
+      if (carreraNombre) {
+        formData.append('escuela', carreraNombre);
+      }
 
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'http://localhost:3000/api/estudiantes/subir',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${token}`
-          },
-          timeout: 120000 // 2 minutos
-        }
-      );
+      const response = await estudianteService.subirEstudiantes(formData);
 
-      setResultado(response.data.resultado);
+      setResultado(response.resultado);
       setArchivo(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      
-      // Recargar historial
       cargarHistorial();
-
     } catch (err: any) {
       setError(
-        err.response?.data?.mensaje || 
+        err.response?.data?.mensaje ||
         err.response?.data?.error ||
         'Error al procesar el archivo'
       );
@@ -110,7 +93,6 @@ export default function SubirEstudiantes() {
     }
   };
 
-  // Limpiar selección
   const limpiar = () => {
     setArchivo(null);
     setError('');
@@ -119,236 +101,197 @@ export default function SubirEstudiantes() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-3">
-          <FaFileExcel className="text-primary" />
-          Subir Listado de Estudiantes
-        </h1>
-        <p className="text-muted-foreground">
-          Carga un archivo Excel con los datos de estudiantes y sus materias inscritas
-        </p>
-      </div>
-
-      {/* Información sobre procesamiento directo */}
-      <div className="mb-6">
-        <div className="p-4 rounded-lg flex items-center gap-3 border bg-blue-50 border-blue-200">
-          <FaFileExcel className="text-blue-600 text-2xl" />
-          <div className="flex-grow">
-            <p className="font-semibold text-blue-900">
-              Procesamiento directo de Excel
-            </p>
-            <p className="text-sm text-blue-700">
-              El archivo se procesa inmediatamente en el servidor sin dependencias externas
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Área de carga */}
-      <div className="bg-card rounded-lg shadow-card border border-border p-6 mb-6">
-        <h2 className="text-xl font-semibold text-foreground mb-4">1. Seleccionar Archivo</h2>
-        
-        {/* Zona de drop */}
-        <div 
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            archivo 
-              ? 'border-green-300 bg-green-50' 
-              : 'border-border bg-muted/30 hover:bg-muted/50'
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileChange}
-            className="hidden"
-            id="file-upload"
-          />
-          
-          {!archivo ? (
-            <label 
-              htmlFor="file-upload" 
-              className="cursor-pointer flex flex-col items-center"
-            >
-              <FaUpload className="text-muted-foreground mb-3" size={48} />
-              <p className="text-lg text-foreground mb-2">
-                Haz clic o arrastra un archivo Excel aquí
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Formatos soportados: .xlsx, .xls (máximo 10MB)
-              </p>
-            </label>
-          ) : (
-            <div className="flex items-center justify-center gap-3">
-              <FaFileExcel className="text-green-600" size={32} />
-              <div className="text-left">
-                <p className="font-semibold text-foreground">{archivo.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {(archivo.size / 1024).toFixed(2)} KB
-                </p>
-              </div>
-              <button
-                onClick={limpiar}
-                className="ml-4 px-3 py-1 text-sm text-destructive hover:bg-destructive/10 rounded transition"
-              >
-                Cambiar
-              </button>
+    <div className={`animate-fade-in ${isCompact ? '' : 'p-0 sm:p-2 lg:p-4 max-w-5xl mx-auto'}`}>
+      {!isCompact && (
+        <div className="mb-8">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground flex items-center gap-4">
+            <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+              <FaFileExcel />
             </div>
-          )}
+            Subida de Estudiantes
+          </h1>
+          <p className="text-muted-foreground text-sm mt-3 ml-1">
+            Sincroniza el listado oficial de estudiantes y sus inscripciones mediante Excel.
+          </p>
         </div>
+      )}
 
-        {/* Información sobre el formato */}
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="font-semibold mb-2 flex items-center gap-2 text-blue-900">
-            <FaExclamationTriangle size={20} className="text-blue-600" />
-            Formato del Excel
-          </h3>
-          <div className="text-sm text-blue-900 space-y-2">
-            <p><strong>Sheet1: Estudiantes</strong></p>
-            <p className="ml-4">Columnas: cedula, nombres, apellidos, email, telefono, carrera_id, nivel</p>
-            
-            <p className="mt-3"><strong>Sheet2: Materias Inscritas</strong></p>
-            <p className="ml-4">Columnas: cedula_estudiante, codigo_materia, nivel, paralelo</p>
-            
-            <p className="text-xs text-blue-700 mt-2">
-              Las materias deben existir previamente en la tabla de clases
-            </p>
+      <div className={`grid grid-cols-1 ${isCompact ? 'gap-4' : 'lg:grid-cols-3 gap-8'}`}>
+        {/* Lado Izquierdo: Formulario de Carga */}
+        <div className={isCompact ? 'col-span-1' : 'lg:col-span-2'}>
+          <div className={isCompact ? '' : 'mac-card p-6 sm:p-8 rounded-3xl border border-border shadow-sm'}>
+            <div
+              className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all ${archivo
+                ? 'border-emerald-300 bg-emerald-50/30'
+                : 'border-border bg-muted/50'
+                }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                id="file-upload"
+              />
+
+
+              {carreraNombre && (
+                <div className="absolute top-4 left-0 w-full flex justify-center z-10">
+                  <span className="px-3 py-1 bg-uide-blue/10 text-uide-blue text-[10px] font-black uppercase rounded-full border border-uide-blue/20">
+                    Cargando para: {carreraNombre}
+                  </span>
+                </div>
+              )}
+
+              {!archivo ? (
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-4">
+                    <FaUpload size={28} />
+                  </div>
+                  <p className="text-base font-black text-foreground uppercase tracking-tight">
+                    Arrastra tu archivo Excel
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-2">
+                    Formatos .xlsx / .xls (Máx 10MB)
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center animate-fade-in">
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-4">
+                    <FaCheckCircle size={28} />
+                  </div>
+                  <p className="text-base font-black text-foreground truncate max-w-xs">{archivo.name}</p>
+                  <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mt-1">
+                    {(archivo.size / 1024).toFixed(2)} KB • Listo para procesar
+                  </p>
+                  <button
+                    onClick={limpiar}
+                    className="mt-4 px-3 py-1 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 rounded-lg transition"
+                  >
+                    Cambiar archivo
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Error / Resultado */}
+            {error && (
+              <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl animate-fade-in flex items-center gap-4">
+                <FaTimesCircle className="text-red-500 text-xl shrink-0" />
+                <p className="text-xs font-bold text-red-700">{error}</p>
+              </div>
+            )}
+
+            {resultado && (
+              <div className="mt-6 p-5 bg-emerald-50 border border-emerald-100 rounded-2xl animate-fade-in">
+                <div className="flex items-start gap-4">
+                  <FaCheckCircle className="text-emerald-500 text-2xl shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-black text-emerald-900 uppercase tracking-tight mb-3">¡Carga Completada!</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white/50 p-3 rounded-xl border border-emerald-100">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase">Estudiantes</p>
+                        <p className="text-xl font-black text-emerald-900">{resultado.estudiantes_guardados}</p>
+                      </div>
+                      <div className="bg-white/50 p-3 rounded-xl border border-emerald-100">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase">Inscripciones</p>
+                        <p className="text-xl font-black text-emerald-900">{resultado.inscripciones_guardadas}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Botón Principal */}
+            <div className="mt-8">
+              <Button
+                onClick={handleUpload}
+                disabled={!archivo || cargando}
+                loading={cargando}
+                fullWidth
+                variant="primary"
+                className="py-4"
+              >
+                {!cargando && <FaUpload className="mr-2 inline" />}
+                {cargando ? 'Procesando Datos...' : 'Subir y Procesar'}
+              </Button>
+            </div>
+          </div>
+
+          <div className={`rounded-3xl p-5 flex items-start gap-4 animate-fade-in mt-6 ${isCompact ? 'bg-transparent border-0 p-0' : 'bg-primary/5 border border-primary/10'}`}>
+            <FaInfoCircle className="text-primary mt-1 shrink-0" size={16} />
+            <div>
+              <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Nota importante</p>
+              <p className="text-[10px] text-primary/70 font-bold leading-relaxed">
+                El sistema procesa automáticamente las hojas "Estudiantes" y "Materias Inscritas".
+                Asegúrese de respetar los encabezados de columna.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Botones de acción */}
-        <div className="mt-6 flex gap-3">
-          <button
-            onClick={subirArchivo}
-            disabled={!archivo || cargando}
-            className="flex-grow px-6 py-3 bg-primary text-primary-foreground rounded-lg 
-                     hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed
-                     flex items-center justify-center gap-2 font-semibold transition shadow-lg"
-          >
-            {cargando ? (
-              <>
-                <FaSyncAlt className="animate-spin" size={20} />
-                Procesando...
-              </>
-            ) : (
-              <>
-                <FaUpload size={20} />
-                Subir y Procesar
-              </>
-            )}
-          </button>
-          
-          {archivo && (
-            <button
-              onClick={limpiar}
-              disabled={cargando}
-              className="px-6 py-3 border border-border rounded-lg hover:bg-muted
-                       disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              Cancelar
-            </button>
-          )}
-        </div>
 
-        {/* Resultado */}
-        {resultado && (
-          <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
-            <div className="flex items-start gap-3">
-              <FaCheckCircle className="text-green-600 flex-shrink-0" size={24} />
-              <div>
-                <h3 className="font-semibold text-green-900 mb-2">
-                  ¡Archivo procesado exitosamente!
-                </h3>
-                <div className="text-sm text-green-800 space-y-1">
-                  <p>✅ Estudiantes guardados: <strong>{resultado.estudiantes_guardados}</strong></p>
-                  <p>✅ Inscripciones guardadas: <strong>{resultado.inscripciones_guardadas}</strong></p>
-                  <p className="text-xs text-green-600 mt-2">
-                    {new Date(resultado.timestamp).toLocaleString('es-EC')}
-                  </p>
+        {/* Lado Derecho: Formato e Historial - Solo visible en modo completo */}
+        {!isCompact && (
+          <div className="space-y-6">
+            <div className="mac-card p-6 rounded-3xl border border-border shadow-sm">
+              <h3 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-4">Guía de Formato</h3>
+              <div className="space-y-4">
+                <div className="p-4 bg-muted/50 rounded-2xl border border-border">
+                  <div className="text-[10px] font-black text-foreground uppercase mb-2 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-primary rounded-full"></div> Sheet 1: Estudiantes
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {['cedula', 'nombres', 'apellidos', 'email', 'telefono', 'carrera_id'].map(c => (
+                      <span key={c} className="px-1.5 py-0.5 bg-card text-muted-foreground text-[8px] font-bold lowercase rounded border border-border">{c}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-4 bg-muted/50 rounded-2xl border border-border">
+                  <div className="text-[10px] font-black text-foreground uppercase mb-2 flex items-center gap-2">
+                    <div className="w-1.5 h-4 bg-emerald-500 rounded-full"></div> Sheet 2: Materias
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {['cedula_estudiante', 'codigo_materia', 'nivel', 'paralelo'].map(c => (
+                      <span key={c} className="px-1.5 py-0.5 bg-card text-muted-foreground text-[8px] font-bold lowercase rounded border border-border">{c}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Error */}
-        {error && (
-          <div className="mt-6 p-4 bg-destructive/10 border border-destructive rounded-lg animate-fade-in">
-            <div className="flex items-start gap-3">
-              <FaTimesCircle className="text-destructive flex-shrink-0" size={24} />
-              <div>
-                <h3 className="font-semibold text-destructive mb-1">Error al procesar</h3>
-                <p className="text-sm text-destructive/90">{error}</p>
+            <div className="mac-card p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Actividad Reciente</h3>
+                <button
+                  onClick={cargarHistorial}
+                  className="text-uide-blue hover:scale-110 transition-transform"
+                >
+                  <FaSyncAlt size={12} />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {historial.length > 0 ? (
+                  historial.map((item) => (
+                    <div key={item.id} className="p-3 bg-slate-50/30 dark:bg-slate-900/30 rounded-xl border border-slate-50 dark:border-slate-800 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-slate-800 dark:text-white truncate">{item.archivo_nombre}</p>
+                        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                          {new Date(item.fecha_carga).toLocaleDateString()} • {item.registros_procesados} reg.
+                        </p>
+                      </div>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.estado === 'completado' ? 'bg-emerald-500' : 'bg-red-500'
+                        }`}></span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-center text-slate-400 font-bold uppercase mt-8">Sin registros previos</p>
+                )}
               </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Historial de cargas */}
-      <div className="bg-card rounded-lg shadow-card border border-border p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-foreground">Historial de Cargas</h2>
-          <button
-            onClick={cargarHistorial}
-            className="p-2 hover:bg-muted rounded-lg transition"
-            title="Refrescar"
-          >
-            <FaSyncAlt size={20} />
-          </button>
-        </div>
-
-        {historial.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Archivo
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Registros
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Estado
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {historial.map((item) => (
-                  <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 text-sm text-foreground">
-                      {new Date(item.fecha_carga).toLocaleString('es-EC')}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-foreground">
-                      {item.archivo_nombre}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground">
-                      {item.registros_procesados} estudiantes
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        item.estado === 'completado' 
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {item.estado}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <FaFileExcel className="mx-auto mb-3 text-4xl text-muted-foreground/50" />
-            <p>No hay cargas registradas</p>
           </div>
         )}
       </div>

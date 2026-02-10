@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 // ========================================
 // CORS - Configuración para permitir peticiones del frontend
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     const allowed = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',');
     // Permitir requests sin origin (mismo servidor, curl, etc)
     if (!origin || allowed.includes(origin)) {
@@ -32,10 +32,10 @@ app.use(cors({
 // ========================================
 
 // Seguridad mejorada
-const { 
-  helmetConfig, 
-  authLimiter, 
-  apiLimiter, 
+const {
+  helmetConfig,
+  authLimiter,
+  apiLimiter,
   writeLimiter,
   sanitizeInput,
   securityLogger,
@@ -247,6 +247,10 @@ app.use('/api/bot', botRoutes);
 const espacioRoutes = require('./routes/espacioRoutes');
 app.use('/api/espacios', espacioRoutes);
 
+// Rutas de Reportes
+const reporteRoutes = require('./routes/reporteRoutes');
+app.use('/api/reportes', reporteRoutes);
+
 const { sequelize } = require('./config/database');
 const { QueryTypes } = require('sequelize');
 
@@ -356,10 +360,10 @@ app.use((err, req, res, next) => {
   });
 
   const statusCode = err.statusCode || 500;
-  
+
   // En producción, no exponer detalles del error
   const isDevelopment = process.env.NODE_ENV === 'development';
-  
+
   // Mensaje genérico para errores del servidor
   const message = statusCode === 500 && !isDevelopment
     ? 'Error interno del servidor'
@@ -367,9 +371,9 @@ app.use((err, req, res, next) => {
 
   res.status(statusCode).json({
     error: message,
-    ...(isDevelopment && { 
+    ...(isDevelopment && {
       stack: err.stack,
-      details: err.details 
+      details: err.details
     })
   });
 });
@@ -387,7 +391,7 @@ const iniciarServidor = async () => {
     console.log('🔄 Sincronizando modelos con PostgreSQL...');
     await syncDatabase({
       alter: false,
-      force: false  // NO borrar datos existentes
+      force: false
     });
     console.log('✅ Modelos sincronizados');
 
@@ -418,9 +422,9 @@ const iniciarServidor = async () => {
           codigo: codigo,
           capacidad: 30,
           edificio: 'Principal',
-          piso: Math.floor((i-1) / 5) + 1,
+          piso: Math.floor((i - 1) / 5) + 1,
           tipo: 'AULA',
-          disponible: true
+          estado: 'DISPONIBLE'
         });
       }
 
@@ -454,7 +458,7 @@ const iniciarServidor = async () => {
           email: dir.email,
           password: 'uide2024',  // Sin hashear - el hook lo hará
           rol: 'director',
-          carrera_director: carreras[dir.carrera].id,
+          carrera_director: carreras[dir.carrera].carrera,
           estado: 'activo'
         });
       }

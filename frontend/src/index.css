@@ -3,83 +3,129 @@
 @tailwind utilities;
 
 :root {
+  /* Paleta institucional UIDE */
+  --e-global-color-primary: #910048;
+  --e-global-color-secondary: #EAAA00;
+  --e-global-color-text: #333333;
+  --e-global-color-accent: #FFFFFF;
+  --e-global-color-5e44a25: #002D72;
+
+  /* Mapeo exacto de la paleta institucional */
   --background: 0 0% 98%;
-  --foreground: 0 0% 20%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 20%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 20%;
-  --primary: 330 100% 28%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 44 100% 46%;
-  --secondary-foreground: 0 0% 20%;
+  --foreground: 0 0% 20%; /* #333333 */
+  --card: 0 0% 100%; /* #FFFFFF */
+  --card-foreground: 0 0% 20%; /* #333333 */
+  --popover: 0 0% 100%; /* #FFFFFF */
+  --popover-foreground: 0 0% 20%; /* #333333 */
+  --primary: 330 100% 28%; /* #910048 */
+  --primary-foreground: 0 0% 100%; /* #FFFFFF */
+  --secondary: 44 100% 46%; /* #EAAA00 */
+  --secondary-foreground: 0 0% 20%; /* #333333 */
   --muted: 0 0% 96%;
   --muted-foreground: 0 0% 40%;
-  --accent: 0 0% 100%;
-  --accent-foreground: 0 0% 20%;
+  --accent: 0 0% 100%; /* #FFFFFF */
+  --accent-foreground: 0 0% 20%; /* #333333 */
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
   --border: 0 0% 90%;
   --input: 0 0% 90%;
-  --ring: 330 100% 28%;
-  --brand-navy: 216 100% 22%;
-  --chart-1: 216 100% 22%;
-  --chart-2: 44 100% 46%;
+  --ring: 330 100% 28%; /* #910048 */
+  --brand-navy: 216 100% 22%; /* #002D72 */
+  --chart-1: 215 100% 22%;
+  --chart-2: 43 100% 46%;
   --chart-3: 330 100% 28%;
   --chart-4: 0 0% 20%;
   --chart-5: 0 0% 100%;
   --radius: 0.75rem;
 }
 
+/* Modo oscuro: paleta específica solicitada
+   --text: #eae9fc;
+   --background: #010104;
+   --primary: #ff7092;
+   --secondary: #ffc014;
+   --accent: #000000;
+*/
 .dark {
-  --background: 222 47% 8%;
-  --foreground: 0 0% 98%;
-  --card: 222 47% 11%;
-  --card-foreground: 0 0% 98%;
-  --popover: 222 47% 11%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 330 100% 70%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 44 100% 60%;
-  --secondary-foreground: 222 47% 11%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 0 0% 70%;
-  --accent: 217 33% 17%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62% 40%;
+  /* fondo casi negro #010104 */
+  --background: 240 60% 1%;
+  /* texto principal #eae9fc */
+  --foreground: 243 76% 95%;
+
+  /* tarjetas apenas más claras que el fondo */
+  --card: 240 25% 6%;
+  --card-foreground: 243 76% 95%;
+
+  --popover: 240 25% 6%;
+  --popover-foreground: 243 76% 95%;
+
+  /* primary #ff7092 */
+  --primary: 346 100% 72%;
+  --primary-foreground: 0 0% 0%;
+
+  /* secondary #ffc014 */
+  --secondary: 44 100% 54%;
+  --secondary-foreground: 240 60% 1%;
+
+  /* texto suavizado y fondos neutros */
+  --muted: 240 20% 14%;
+  --muted-foreground: 243 25% 75%;
+
+  /* accent #000000 */
+  --accent: 0 0% 0%;
+  --accent-foreground: 243 76% 95%;
+
+  --destructive: 0 55% 45%;
   --destructive-foreground: 0 0% 98%;
-  --border: 217 33% 20%;
-  --input: 217 33% 20%;
-  --ring: 330 100% 70%;
-  --brand-navy: 216 100% 45%;
-  --chart-1: 216 100% 45%;
-  --chart-2: 44 100% 60%;
-  --chart-3: 330 100% 70%;
-  --chart-4: 0 0% 98%;
-  --chart-5: 0 0% 20%;
+
+  /* bordes / inputs ligeramente por encima del fondo */
+  --border: 240 18% 18%;
+  --input: 240 18% 18%;
+
+  /* anillos de foco usando primary */
+  --ring: 346 100% 72%;
+
+  /* azules para gráficas/coinciden con brand blue */
+  --brand-navy: 215 100% 35%;
+  --chart-1: 215 100% 35%;
+  --chart-2: 44 100% 54%;
+  --chart-3: 346 100% 72%;
+  --chart-4: 243 76% 95%;
+  --chart-5: 240 60% 1%;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-  
+
+  html {
+    @apply antialiased;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.25s ease, color 0.2s ease;
   }
 }
 
 @layer components {
+
   /* Animaciones personalizadas */
   @keyframes fadeIn {
     from {
       opacity: 0;
       transform: translateY(10px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -90,18 +136,51 @@
     animation: fadeIn 0.3s ease-out;
   }
 
-  /* Scrollbar personalizado */
+  /* Scrollbar: claro y oscuro */
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-gray-100 rounded;
+    @apply bg-gray-100 dark:bg-white/5 rounded;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded hover:bg-gray-400;
+    @apply bg-gray-300 dark:bg-white/20 rounded hover:bg-gray-400 dark:hover:bg-white/30 transition-colors;
+  }
+
+  /* Sidebar y cards: transición suave con el tema */
+  .glass-sidebar {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color 0.25s ease, border-color 0.2s ease;
+  }
+
+  .dark .glass-sidebar {
+    background: hsl(224, 28%, 13%, 0.85);
+    border-right: 1px solid hsl(224, 18%, 22%);
+  }
+
+  .mac-card {
+    @apply bg-card text-card-foreground border border-border rounded-3xl shadow-sm transition-all duration-300;
+  }
+
+  .mac-card-hover {
+    @apply hover:shadow-xl hover:-translate-y-1 dark:hover:shadow-none;
+  }
+
+  .glass-morphism {
+    @apply bg-white/70 dark:bg-card/80 backdrop-blur-xl border border-border;
   }
 }
 
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }  .apple-spring {
+    transition-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+}

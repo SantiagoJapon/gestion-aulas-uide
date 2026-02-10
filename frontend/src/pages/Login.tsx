@@ -1,14 +1,26 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+
+const REMEMBER_EMAIL_KEY = 'login_remember_email';
 
 export default function Login() {
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem(REMEMBER_EMAIL_KEY) || '');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(REMEMBER_EMAIL_KEY));
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (rememberMe && email) {
+      localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+    } else if (!rememberMe) {
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+  }, [rememberMe, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,9 +28,9 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      // Redirigir según el rol (se hará en AuthContext o aquí)
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      await login(email, password, rememberMe);
+      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const user = JSON.parse(storedUser || '{}');
       const rolePath: Record<string, string> = {
         admin: '/admin',
         director: '/director',
@@ -28,28 +40,15 @@ export default function Login() {
       };
       navigate(rolePath[user.rol] || '/');
     } catch (err: any) {
-      console.error('Error completo al iniciar sesión:', err);
-      
-      // Extraer mensaje de error más detallado
       let errorMessage = 'Error al iniciar sesión';
-      
       if (err.response?.data?.error) {
         errorMessage = err.response.data.error;
-      } else if (err.response?.data?.detalles) {
-        // Si hay errores de validación detallados
-        const detalles = Array.isArray(err.response.data.detalles) 
-          ? err.response.data.detalles.map((d: any) => d.mensaje || d.message).join(', ')
-          : err.response.data.detalles;
-        errorMessage = `Errores de validación: ${detalles}`;
-      } else if (err.message) {
-        errorMessage = err.message;
       } else if (err.response?.data?.mensaje) {
         errorMessage = err.response.data.mensaje;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
-      
       setError(errorMessage);
-      
-      // Si el error es de conexión, mostrar mensaje más específico
       if (!err.response) {
         setError('No se pudo conectar con el servidor. Verifica que el backend esté corriendo.');
       }
@@ -59,82 +58,123 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10 flex items-center justify-center p-6">
-      <div className="bg-card rounded-2xl shadow-card border border-border w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Iniciar Sesión</h1>
-          <p className="text-muted-foreground">Sistema de Gestión de Aulas UIDE</p>
-        </div>
-
-        {error && (
-          <div className="bg-destructive/10 border-l-4 border-destructive text-destructive p-4 mb-6 rounded-lg animate-fade-in">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-destructive mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+    <div className="min-h-screen bg-background flex items-center justify-center p-6 transition-colors duration-300">
+      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-md overflow-hidden transition-colors duration-300">
+        <div className="p-8 sm:p-10">
+          {/* Logo + Título */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground mb-5 shadow-lg shadow-primary/25">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              <div className="flex-1">
-                <p className="font-medium mb-1">Error al iniciar sesión</p>
-                <p className="text-sm">{error}</p>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+              Bienvenido al Panel de Administración
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Acceso Institucional Seguro
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2 animate-fade-in">
+              <span className="material-symbols-outlined text-lg flex-shrink-0">error</span>
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Correo Institucional */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
+                Correo Institucional
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                  <span className="material-symbols-outlined text-xl">mail</span>
+                </span>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="usuario@uide.edu.ec"
+                  required
+                  className="w-full pl-11 pr-4 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
+                />
               </div>
             </div>
+
+            {/* Contraseña */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
+                Contraseña
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                  <span className="material-symbols-outlined text-xl">lock</span>
+                </span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full pl-11 pr-12 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition p-1"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  <span className="material-symbols-outlined text-xl">
+                    {showPassword ? 'visibility_off' : 'visibility'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Recordarme + Olvidaste contraseña */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-input bg-muted text-primary focus:ring-primary"
+                />
+                <span className="text-sm text-muted-foreground">Recordarme</span>
+              </label>
+              <a
+                href="/login"
+                className="text-sm font-medium text-primary hover:opacity-90 hover:underline transition"
+              >
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
+
+            {/* Botón */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25 mt-2"
+            >
+              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              ¿No tienes cuenta?{' '}
+              <a href="/register" className="text-primary font-medium hover:underline">
+                Regístrate aquí
+              </a>
+            </p>
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-muted-foreground mb-2">
-              Email Institucional
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@uide.edu.ec"
-              required
-              className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-muted-foreground mb-2">
-              Contraseña
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            ¿No tienes cuenta?{' '}
-            <a href="/register" className="text-primary hover:underline font-medium">
-              Regístrate aquí
-            </a>
-          </p>
         </div>
       </div>
     </div>
   );
 }
-
-
-
-
-
-

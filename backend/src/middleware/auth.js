@@ -81,11 +81,13 @@ const verificarRol = (...rolesPermitidos) => {
       });
     }
 
-    if (!rolesPermitidos.includes(req.usuario.rol)) {
+    const rol = req.usuarioRol || (req.usuario ? req.usuario.rol : null);
+
+    if (!rolesPermitidos.includes(rol)) {
       return res.status(403).json({
-        error: 'No tienes permisos para acceder a este recurso',
+        error: `[ERROR_403_LOG] No tienes permisos para acceder a este recurso (Rol: ${rol})`,
         rolRequerido: rolesPermitidos,
-        rolActual: req.usuario.rol
+        rolActual: rol
       });
     }
 

@@ -41,7 +41,7 @@ class N8nService {
 
       if (error.code === 'ECONNREFUSED') {
         throw new Error(
-          'n8n no está disponible. Verifica que esté corriendo.'
+          'n8n no está DISPONIBLE. Verifica que esté corriendo.'
         );
       }
 

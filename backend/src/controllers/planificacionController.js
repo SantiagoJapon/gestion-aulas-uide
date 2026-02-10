@@ -5,12 +5,11 @@
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const multer = require('multer');
-const XLSX = require('xlsx');
 const axios = require('axios');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
-const { analizarExcelConIA, esOpenAIConfigurado } = require('../services/openai.service');
+const { processExcel } = require('../services/excel-parser.service');
 
 const eventEmitter = new EventEmitter();
 
@@ -48,6 +47,7 @@ exports.subirPlanificacion = async (req, res) => {
 
   try {
     if (!req.file) {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
         mensaje: 'No se recibió archivo'
@@ -58,6 +58,7 @@ exports.subirPlanificacion = async (req, res) => {
     const usuario_id = req.usuario?.id || 1;
 
     if (!carrera_id) {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
         mensaje: 'carrera_id es requerido'
@@ -79,174 +80,17 @@ exports.subirPlanificacion = async (req, res) => {
     const nombreCarrera = carreraObj.carrera || `Carrera ${carrera_id}`;
     console.log('📁 Procesando planificación de carrera:', nombreCarrera);
 
-    // Leer Excel
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet);
-
-    console.log(`📚 ${data.length} filas en el Excel`);
-
     // ==========================================
-    // 🤖 ANÁLISIS INTELIGENTE DE COLUMNAS
+    // 📊 PARSEAR EXCEL CON NUEVO SERVICIO INTELIGENTE
     // ==========================================
-    const columnas = data.length > 0 ? Object.keys(data[0]) : [];
-    console.log('📋 Columnas encontradas:', columnas);
+    const parseResult = processExcel(req.file.buffer);
 
-    // Función para buscar columna por palabras clave (case-insensitive, con similitud)
-    const buscarColumna = (palabrasClave) => {
-      const columnaNormalizada = columnas.find(col => {
-        const colLower = col.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return palabrasClave.some(palabra => colLower.includes(palabra.toLowerCase()));
-      });
-      return columnaNormalizada || null;
-    };
+    console.log(`📚 Excel procesado: ${parseResult.clases.length} clases de hoja "${parseResult.hojaUsada}"`);
 
-    // Detectar automáticamente las columnas relevantes
-    const colMateria = buscarColumna(['materia', 'asignatura', 'curso', 'subject']);
-    const colCiclo = buscarColumna(['ciclo', 'nivel', 'semestre', 'year']);
-    const colParalelo = buscarColumna(['paralelo', 'grupo', 'seccion', 'group']);
-    const colDia = buscarColumna(['dia', 'day', 'jornada']);
-    const colHora = buscarColumna(['hora', 'horario', 'time', 'schedule']);
-    const colHoraInicio = buscarColumna(['hora_inicio', 'inicio', 'start', 'hora inicio']);
-    const colHoraFin = buscarColumna(['hora_fin', 'fin', 'end', 'hora fin']);
-    const colEstudiantes = buscarColumna(['estudiante', 'alumno', 'student', 'nro', 'num', 'cantidad']);
-    const colDocente = buscarColumna(['docente', 'profesor', 'teacher', 'instructor']);
-    const colAula = buscarColumna(['aula', 'salon', 'lab', 'classroom', 'room']);
+    if (parseResult.clases.length === 0) {
+      await transaction.rollback();
 
-    console.log('🔍 Mapeo de columnas detectado:');
-    console.log('  - Materia:', colMateria || 'NO ENCONTRADA');
-    console.log('  - Ciclo:', colCiclo || 'no encontrada');
-    console.log('  - Paralelo:', colParalelo || 'no encontrada');
-    console.log('  - Día:', colDia || 'no encontrada');
-    console.log('  - Hora:', colHora || 'no encontrada');
-    console.log('  - Hora Inicio:', colHoraInicio || 'no encontrada');
-    console.log('  - Hora Fin:', colHoraFin || 'no encontrada');
-    console.log('  - Estudiantes:', colEstudiantes || 'no encontrada');
-    console.log('  - Docente:', colDocente || 'no encontrada');
-    console.log('  - Aula:', colAula || 'no encontrada');
-
-    if (!colMateria) {
-      console.log('⚠️  No se encontró columna de MATERIA con detección automática.');
-
-      // Intentar con ChatGPT antes de guardar para revisión manual
-      if (esOpenAIConfigurado()) {
-        console.log('🤖 Intentando análisis con ChatGPT...');
-
-        try {
-          const resultadoIA = await analizarExcelConIA(data, nombreCarrera);
-
-          if (resultadoIA && resultadoIA.clases && resultadoIA.clases.length > 0) {
-            console.log(`✅ ChatGPT detectó ${resultadoIA.clases.length} clases exitosamente`);
-
-            // Eliminar clases antiguas
-            const { Clase } = require('../models');
-            const clasesEliminadas = await Clase.destroy({
-              where: { carrera_id: carrera_id },
-              transaction
-            });
-            console.log(`✅ ${clasesEliminadas} clases antiguas eliminadas`);
-
-            // Guardar clases detectadas por IA
-            let clasesGuardadas = 0;
-            for (const claseIA of resultadoIA.clases) {
-              // Si el excel trae un aula sugerida, intentar buscar el código correspondiente
-              let aulaCodigo = null;
-              if (claseIA.aula) {
-                const { Aula } = require('../models');
-                // Buscar aula por nombre o código
-                const aulaEncontrada = await Aula.findOne({
-                  where: sequelize.where(
-                    sequelize.fn('LOWER', sequelize.col('nombre')),
-                    'LIKE',
-                    `%${String(claseIA.aula).toLowerCase().trim()}%`
-                  )
-                });
-                if (aulaEncontrada) {
-                  aulaCodigo = aulaEncontrada.codigo;
-                  console.log(`   ✅ Aula "${claseIA.aula}" → ${aulaCodigo}`);
-                } else {
-                  console.log(`   ⚠️  Aula "${claseIA.aula}" no encontrada en BD`);
-                }
-              }
-
-              await Clase.create({
-                carrera_id: carrera_id,
-                carrera: nombreCarrera,
-                materia: String(claseIA.materia || '').trim(),
-                ciclo: String(claseIA.ciclo || '').trim(),
-                paralelo: String(claseIA.paralelo || 'A').trim(),
-                dia: String(claseIA.dia || '').trim(),
-                hora_inicio: String(claseIA.hora_inicio || '').trim(),
-                hora_fin: String(claseIA.hora_fin || '').trim(),
-                num_estudiantes: claseIA.num_estudiantes || 0,
-                docente: String(claseIA.docente || '').trim(),
-                aula_asignada: aulaCodigo  // Guardar aula si se encontró en BD
-              }, { transaction });
-              clasesGuardadas++;
-            }
-
-            // Guardar archivo
-            const { PlanificacionSubida } = require('../models');
-            const timestamp = Date.now();
-            const nombreArchivoGuardado = `${timestamp}-${carrera_id}-${req.file.originalname}`;
-            const rutaArchivo = path.join(UPLOADS_DIR, nombreArchivoGuardado);
-            fs.writeFileSync(rutaArchivo, req.file.buffer);
-
-            await PlanificacionSubida.create({
-              carrera_id: carrera_id,
-              usuario_id: usuario_id,
-              nombre_archivo_original: req.file.originalname,
-              nombre_archivo_guardado: nombreArchivoGuardado,
-              ruta_archivo: rutaArchivo,
-              total_clases: clasesGuardadas,
-              estado: 'procesado'
-            }, { transaction });
-
-            await transaction.commit();
-
-            // Disparar distribución automática
-            try {
-              await axios.post(
-                process.env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook/maestro',
-                {
-                  accion: 'distribuir_aulas',
-                  carrera_id: carrera_id,
-                  trigger: 'auto',
-                  origen: 'nueva_planificacion_ia'
-                },
-                { timeout: 120000 }
-              );
-
-              return res.json({
-                success: true,
-                mensaje: 'Excel analizado con IA y procesado exitosamente',
-                resultado: {
-                  clases_guardadas: clasesGuardadas,
-                  metodo: 'chatgpt',
-                  distribucion: { estado: 'en_progreso' }
-                }
-              });
-            } catch (n8nError) {
-              return res.json({
-                success: true,
-                mensaje: 'Excel procesado con IA. Distribución debe ejecutarse manualmente',
-                resultado: {
-                  clases_guardadas: clasesGuardadas,
-                  metodo: 'chatgpt',
-                  distribucion: { estado: 'pendiente' }
-                }
-              });
-            }
-          }
-        } catch (iaError) {
-          console.error('❌ Error en análisis con ChatGPT:', iaError.message);
-          // Continuar con guardado para revisión manual
-        }
-      }
-
-      // Si ChatGPT no está configurado o falló, guardar para revisión manual
-      console.log('📁 Guardando archivo Excel para revisión manual del administrador...');
-
+      // Guardar archivo para revisión manual
       const fileName = `${Date.now()}-${req.file.originalname}`;
       const filePath = path.join(UPLOADS_DIR, fileName);
       fs.writeFileSync(filePath, req.file.buffer);
@@ -260,25 +104,21 @@ exports.subirPlanificacion = async (req, res) => {
         ruta_archivo: filePath,
         total_clases: 0,
         estado: 'pendiente'
-      }, { transaction });
-
-      await transaction.commit();
-
-      console.log('✅ Archivo guardado para revisión manual');
+      });
 
       return res.status(200).json({
-        success: true,
-        mensaje: 'Excel guardado. Requiere revisión manual del administrador.',
+        success: false,
+        mensaje: 'No se pudieron extraer clases del Excel. Requiere revisión manual.',
         archivo: req.file.originalname,
         estado: 'pendiente',
-        nota: 'El administrador puede descargar y revisar este archivo.'
+        debug: parseResult.debug
       });
     }
 
     // ==========================================
     // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
     // ==========================================
-    const { Clase } = require('../models');
+    const { Clase, Aula } = require('../models');
 
     console.log(`🗑️ Eliminando clases antiguas de ${nombreCarrera}...`);
     const clasesEliminadas = await Clase.destroy({
@@ -291,78 +131,30 @@ exports.subirPlanificacion = async (req, res) => {
     let clasesGuardadas = 0;
     let errores = [];
 
-    // Procesar cada clase
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
+    // ==========================================
+    // 💾 GUARDAR CLASES EXTRAÍDAS
+    // ==========================================
+    for (let i = 0; i < parseResult.clases.length; i++) {
+      const clase = parseResult.clases[i];
 
       try {
-        // Debug: Ver las primeras filas completas
-        if (i < 3) {
-          console.log(`\n[DEBUG] Fila ${i + 1}:`);
-          console.log('  Materia:', row[colMateria]);
-          console.log('  Estudiantes:', row[colEstudiantes]);
-          console.log('  Día:', row[colDia]);
-          console.log('  Hora:', row[colHora]);
-        }
-
-        // Extraer valores usando las columnas detectadas
-        const materia = colMateria ? row[colMateria] : '';
-
-        // Validar campos mínimos requeridos
-        if (!materia || String(materia).trim().length === 0) {
+        // Validar que tiene materia
+        if (!clase.materia || clase.materia.trim().length === 0) {
           continue;
         }
 
-        const ciclo = colCiclo ? row[colCiclo] : '';
-        const paralelo = colParalelo ? row[colParalelo] : 'A';
-        const dia = colDia ? row[colDia] : '';
-
-        // Número de estudiantes - extraer números de cualquier formato
-        let numEstudiantes = 0;
-        if (colEstudiantes && row[colEstudiantes]) {
-          const estudiantesStr = String(row[colEstudiantes]).replace(/\D/g, '');
-          numEstudiantes = parseInt(estudiantesStr) || 0;
-        }
-
-        // HORA - manejar múltiples formatos
-        let horaInicio = '';
-        let horaFin = '';
-
-        if (colHoraInicio && colHoraFin) {
-          // Formato separado
-          horaInicio = String(row[colHoraInicio] || '').trim();
-          horaFin = String(row[colHoraFin] || '').trim();
-        } else if (colHora) {
-          // Formato "HH:MM - HH:MM" o "HH:MM-HH:MM"
-          const horaCompleta = String(row[colHora] || '');
-          if (horaCompleta.includes('-')) {
-            const partes = horaCompleta.split('-').map(p => p.trim());
-            if (partes.length >= 2) {
-              horaInicio = partes[0];
-              horaFin = partes[1];
-            }
-          }
-        }
-
-        const docente = colDocente ? row[colDocente] : '';
-        const aulaOriginal = colAula ? row[colAula] : '';
-
         // Si el excel trae un aula, buscar su código en la BD
         let aulaCodigo = null;
-        if (aulaOriginal && String(aulaOriginal).trim().length > 0) {
-          const { Aula } = require('../models');
+        if (clase.aula && clase.aula.trim().length > 0) {
           const aulaEncontrada = await Aula.findOne({
             where: sequelize.where(
               sequelize.fn('LOWER', sequelize.col('nombre')),
               'LIKE',
-              `%${String(aulaOriginal).toLowerCase().trim()}%`
+              `%${clase.aula.toLowerCase().trim()}%`
             )
           });
           if (aulaEncontrada) {
             aulaCodigo = aulaEncontrada.codigo;
-            if (i < 3) {
-              console.log(`  Aula: "${aulaOriginal}" → ${aulaCodigo}`);
-            }
           }
         }
 
@@ -370,27 +162,27 @@ exports.subirPlanificacion = async (req, res) => {
         await Clase.create({
           carrera_id: carrera_id,
           carrera: nombreCarrera,
-          materia: String(materia).trim(),
-          ciclo: String(ciclo || '').trim(),
-          paralelo: String(paralelo || 'A').trim(),
-          dia: String(dia || '').trim(),
-          hora_inicio: String(horaInicio || '').trim(),
-          hora_fin: String(horaFin || '').trim(),
-          num_estudiantes: numEstudiantes,
-          docente: String(docente || '').trim(),
-          aula_asignada: aulaCodigo  // Guarda el código si se encontró, null si no
+          materia: clase.materia.trim(),
+          ciclo: clase.ciclo || '',
+          paralelo: clase.paralelo || 'A',
+          dia: clase.dia || '',
+          hora_inicio: clase.hora_inicio || '',
+          hora_fin: clase.hora_fin || '',
+          num_estudiantes: clase.num_estudiantes || 0,
+          docente: clase.docente || '',
+          aula_asignada: aulaCodigo
         }, { transaction });
 
         clasesGuardadas++;
 
-        // Log detallado cada 10 clases
-        if (clasesGuardadas % 10 === 0) {
-          console.log(`   ✅ ${clasesGuardadas} clases procesadas...`);
+        // Log detallado cada 20 clases
+        if (clasesGuardadas % 20 === 0) {
+          console.log(`   ✅ ${clasesGuardadas} clases guardadas...`);
         }
 
       } catch (error) {
-        errores.push(`Fila ${i + 2}: ${error.message}`);
-        console.error(`Error en fila ${i + 2}:`, error.message);
+        errores.push(`Clase ${i + 1}: ${error.message}`);
+        console.error(`Error guardando clase ${i + 1}:`, error.message);
       }
     }
 
@@ -413,70 +205,36 @@ exports.subirPlanificacion = async (req, res) => {
       nombre_archivo_guardado: nombreArchivoGuardado,
       ruta_archivo: rutaArchivo,
       total_clases: clasesGuardadas,
-      estado: 'procesado'
+      estado: 'pendiente' // El estado inicial ahora es pendiente de revisión
     }, { transaction });
 
     await transaction.commit();
 
-    console.log(`✅ Planificación guardada: ${clasesGuardadas} clases`);
+    console.log(`✅ Planificación guardada: ${clasesGuardadas} clases (Pendiente de revisión)`);
 
-    // ==========================================
-    // 🚀 TRIGGER AUTOMÁTICO: Ejecutar distribución
-    // ==========================================
-
+    // Notificar al sistema interno que hay nueva data, pero NO disparar n8n de distribución todavía
     eventEmitter.emit('nueva_planificacion', {
       carrera_id: carrera_id,
       total_clases: clasesGuardadas,
       usuario_id: usuario_id,
-      timestamp: new Date()
+      timestamp: new Date(),
+      estado: 'pendiente'
     });
 
-    // Llamar a n8n para distribución automática
-    try {
-      console.log('🤖 Activando distribución automática en n8n...');
-
-      const n8nResponse = await axios.post(
-        process.env.N8N_WEBHOOK_URL || 'http://n8n:5678/webhook/maestro',
-        {
-          accion: 'distribuir_aulas',
-          carrera_id: carrera_id,
-          trigger: 'auto',
-          origen: 'nueva_planificacion'
-        },
-        { timeout: 120000 }
-      );
-
-      console.log('✅ Distribución automática iniciada');
-
-      res.json({
-        success: true,
-        mensaje: 'Planificación subida. Distribución automática en progreso...',
-        resultado: {
-          clases_guardadas: clasesGuardadas,
-          errores: errores.length > 0 ? errores : null,
-          distribucion: {
-            estado: 'en_progreso',
-            mensaje: 'La distribución de aulas se está procesando automáticamente'
-          }
+    res.json({
+      success: true,
+      mensaje: 'Planificación subida exitosamente. Pendiente de revisión por administración.',
+      resultado: {
+        clases_guardadas: clasesGuardadas,
+        hoja_usada: parseResult.hojaUsada,
+        total_hojas: parseResult.totalHojas,
+        errores: errores.length > 0 ? errores : null,
+        distribucion: {
+          estado: 'pendiente',
+          mensaje: 'La planificación está en cola para revisión anual/mensual por administración'
         }
-      });
-
-    } catch (n8nError) {
-      console.warn('⚠️ No se pudo activar distribución automática:', n8nError.message);
-
-      res.json({
-        success: true,
-        mensaje: 'Planificación subida exitosamente',
-        resultado: {
-          clases_guardadas: clasesGuardadas,
-          errores: errores.length > 0 ? errores : null,
-          distribucion: {
-            estado: 'pendiente',
-            mensaje: 'Distribución debe ejecutarse manualmente'
-          }
-        }
-      });
-    }
+      }
+    });
 
   } catch (error) {
     await transaction.rollback();
@@ -660,7 +418,14 @@ exports.listarPlanificaciones = async (req, res) => {
     // Construir filtro según rol
     const whereClause = {};
     if (usuario.rol === 'director' && usuario.carrera_director) {
-      whereClause.carrera_id = usuario.carrera_director;
+      const { Carrera } = require('../models');
+      const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+      if (carreraObj) {
+        whereClause.carrera_id = carreraObj.id;
+      } else {
+        // Si no se encuentra la carrera asignada, el director no debería ver nada
+        whereClause.carrera_id = -1;
+      }
     }
     // Admin ve todas (no filtro)
 

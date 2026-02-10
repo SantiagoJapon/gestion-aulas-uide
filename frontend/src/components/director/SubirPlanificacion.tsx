@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
+import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
-import { 
-  Upload, FileSpreadsheet, CheckCircle, XCircle, 
+import {
+  Upload, FileSpreadsheet, CheckCircle, XCircle,
   AlertCircle, Download, RefreshCw, Activity, TrendingUp, Clock
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
 export default function SubirPlanificacion() {
+  const { user } = useContext(AuthContext);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<any>(null);
@@ -15,17 +17,18 @@ export default function SubirPlanificacion() {
   const [distribucionEnProgreso, setDistribucionEnProgreso] = useState(false);
   const [estadoDistribucion, setEstadoDistribucion] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // TODO: Obtener del contexto del usuario logueado
-  const carrera_id = 1;
+
+  const carrera_id = user?.carrera_director || 1;
 
   useEffect(() => {
-    cargarEstadoDistribucion();
-  }, []);
+    if (carrera_id) {
+      cargarEstadoDistribucion();
+    }
+  }, [carrera_id]);
 
   const cargarEstadoDistribucion = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
       const response = await axios.get(
         `${API_BASE_URL}/planificaciones/distribucion/${carrera_id}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -69,8 +72,8 @@ export default function SubirPlanificacion() {
       formData.append('archivo', archivo);
       formData.append('carrera_id', carrera_id.toString());
 
-      const token = localStorage.getItem('token');
-      
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+
       const response = await axios.post(
         `${API_BASE_URL}/planificaciones/subir`,
         formData,
@@ -109,20 +112,20 @@ export default function SubirPlanificacion() {
 
     const interval = setInterval(async () => {
       intentos++;
-      
+
       try {
         await cargarEstadoDistribucion();
-        
+
         if (estadoDistribucion && estadoDistribucion.estadisticas.pendientes === 0) {
           setDistribucionEnProgreso(false);
           clearInterval(interval);
         }
-        
+
         if (intentos >= maxIntentos) {
           setDistribucionEnProgreso(false);
           clearInterval(interval);
         }
-        
+
       } catch (error) {
         console.error('Error verificando:', error);
       }
@@ -151,7 +154,7 @@ export default function SubirPlanificacion() {
             <Activity size={20} className="text-blue-600" />
             Estado Actual de Distribución
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
               <p className="text-sm text-gray-600 mb-1">Total Clases</p>
@@ -159,21 +162,21 @@ export default function SubirPlanificacion() {
                 {estadoDistribucion.estadisticas.total}
               </p>
             </div>
-            
+
             <div className="bg-green-50 rounded-lg p-4 shadow-sm border border-green-200">
               <p className="text-sm text-gray-600 mb-1">Asignadas</p>
               <p className="text-3xl font-bold text-green-600">
                 {estadoDistribucion.estadisticas.asignadas}
               </p>
             </div>
-            
+
             <div className="bg-orange-50 rounded-lg p-4 shadow-sm border border-orange-200">
               <p className="text-sm text-gray-600 mb-1">Pendientes</p>
               <p className="text-3xl font-bold text-orange-600">
                 {estadoDistribucion.estadisticas.pendientes}
               </p>
             </div>
-            
+
             <div className="bg-blue-50 rounded-lg p-4 shadow-sm border border-blue-200">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-sm text-gray-600">Progreso</p>
@@ -183,7 +186,7 @@ export default function SubirPlanificacion() {
                 {estadoDistribucion.estadisticas.porcentaje}%
               </p>
               <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
-                <div 
+                <div
                   className="bg-blue-600 h-2 rounded-full transition-all duration-500"
                   style={{ width: `${estadoDistribucion.estadisticas.porcentaje}%` }}
                 ></div>
@@ -194,14 +197,13 @@ export default function SubirPlanificacion() {
       )}
 
       {/* Área de Subida */}
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-200">
-        <h2 className="text-xl font-semibold mb-4">1. Seleccionar Archivo</h2>
-        
-        <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-          archivo 
-            ? 'border-green-400 bg-green-50' 
-            : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'
-        }`}>
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 mb-6 border border-slate-200 dark:border-slate-800">
+        <h2 className="text-xl font-semibold mb-4 text-slate-900 dark:text-white">1. Seleccionar Archivo</h2>
+
+        <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${archivo
+          ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/10'
+          : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-uide-blue/50'
+          }`}>
           <input
             ref={fileInputRef}
             type="file"
@@ -211,26 +213,26 @@ export default function SubirPlanificacion() {
             id="file-upload-planificacion"
             disabled={cargando}
           />
-          
+
           {!archivo ? (
-            <label 
-              htmlFor="file-upload-planificacion" 
+            <label
+              htmlFor="file-upload-planificacion"
               className="cursor-pointer flex flex-col items-center"
             >
-              <Upload className="text-gray-400 mb-3" size={48} />
-              <p className="text-lg font-medium mb-2 text-gray-700">
+              <Upload className="text-slate-400 mb-3" size={48} />
+              <p className="text-lg font-medium mb-2 text-slate-700 dark:text-slate-200">
                 Haz clic o arrastra un archivo Excel
               </p>
-              <p className="text-sm text-gray-500">
-                .xlsx, .xls (máximo 10MB)
+              <p className="text-sm text-slate-500">
+                Formatos soportados: .xlsx, .xls (máximo 10MB)
               </p>
             </label>
           ) : (
             <div className="flex items-center justify-center gap-3">
-              <FileSpreadsheet className="text-green-600" size={32} />
+              <FileSpreadsheet className="text-emerald-600" size={32} />
               <div className="text-left">
-                <p className="font-semibold text-gray-900">{archivo.name}</p>
-                <p className="text-sm text-gray-500">
+                <p className="font-semibold text-slate-900 dark:text-white">{archivo.name}</p>
+                <p className="text-sm text-slate-500">
                   {(archivo.size / 1024).toFixed(2)} KB
                 </p>
               </div>
@@ -240,7 +242,7 @@ export default function SubirPlanificacion() {
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 disabled={cargando}
-                className="ml-4 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                className="ml-4 px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
               >
                 Cambiar
               </button>
@@ -248,88 +250,65 @@ export default function SubirPlanificacion() {
           )}
         </div>
 
-        {/* Información */}
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="font-semibold mb-2 flex items-center gap-2 text-blue-900">
-            <AlertCircle size={20} className="text-blue-600" />
-            Formato del Excel
+        {/* Información y Ayuda */}
+        <div className="mt-4 p-4 bg-uide-blue/5 dark:bg-uide-blue/10 rounded-xl border border-uide-blue/10">
+          <h3 className="font-semibold mb-2 flex items-center gap-2 text-uide-blue">
+            <AlertCircle size={20} />
+            Importante para la Distribución
           </h3>
-          <div className="text-sm text-gray-700 space-y-2">
-            <p><strong>Columnas requeridas:</strong></p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 ml-4 text-xs">
-              <div>• codigo_materia</div>
-              <div>• nombre_materia</div>
-              <div>• nivel</div>
-              <div>• paralelo</div>
-              <div>• numero_estudiantes</div>
-              <div>• horario_dia</div>
-              <div>• horario_inicio</div>
-              <div>• horario_fin</div>
-              <div>• docente</div>
-            </div>
-            
+          <div className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
+            <p>Al subir este archivo, la planificación entrará en estado <span className="font-bold text-amber-600">Pendiente de Revisión</span>.</p>
+            <p>La administración central revisará que no existan conflictos globales antes de ejecutar la distribución definitiva.</p>
+
             <button
               onClick={descargarPlantilla}
-              className="mt-3 flex items-center gap-2 text-blue-600 hover:underline text-sm font-medium"
+              className="mt-3 flex items-center gap-2 text-uide-blue hover:underline text-sm font-bold"
             >
               <Download size={16} />
-              Descargar plantilla de ejemplo
+              Descargar estructura oficial (.xlsx)
             </button>
           </div>
         </div>
 
-        {/* Botón */}
+        {/* Botón de envío */}
         <div className="mt-6">
           <button
             onClick={subirPlanificacion}
             disabled={!archivo || cargando}
-            className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg 
-                     hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
-                     flex items-center justify-center gap-2 font-semibold transition-all
-                     shadow-lg hover:shadow-xl text-lg"
+            className="w-full px-6 py-4 bg-uide-blue text-white rounded-xl shadow-lg shadow-uide-blue/20
+                     hover:bg-uide-blue/90 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed
+                     flex items-center justify-center gap-2 font-black transition-all
+                     active:scale-95 text-lg uppercase tracking-tight"
           >
             {cargando ? (
               <>
                 <RefreshCw className="animate-spin" size={24} />
-                Procesando planificación...
+                Procesando datos...
               </>
             ) : (
               <>
                 <Upload size={24} />
-                Subir y Distribuir Automáticamente
+                Enviar para Revisión por Administración
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Distribución en Progreso */}
-      {distribucionEnProgreso && (
-        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6 mb-6 shadow-lg">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="relative">
-              <RefreshCw className="animate-spin text-yellow-600" size={28} />
-              <div className="absolute inset-0 animate-ping">
-                <RefreshCw className="text-yellow-400 opacity-75" size={28} />
-              </div>
+      {/* Mensaje de espera (Sustituye a la distribución en progreso) */}
+      {(distribucionEnProgreso || (resultado && resultado.distribucion.estado === 'pendiente')) && (
+        <div className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-xl p-6 mb-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="bg-amber-100 dark:bg-amber-500/20 p-3 rounded-xl text-amber-600">
+              <Clock size={32} className="animate-pulse" />
             </div>
             <div>
-              <h3 className="font-bold text-yellow-900 text-lg">Distribución en Progreso</h3>
-              <p className="text-sm text-yellow-700 flex items-center gap-2">
-                <Clock size={14} />
-                El sistema está asignando aulas automáticamente. Esto puede tardar hasta 2 minutos...
+              <h3 className="font-bold text-amber-900 dark:text-amber-400 text-lg">Enviado Existoxamente</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-500/80 mt-1 max-w-2xl">
+                Tus datos han sido validados. La administración ha sido notificada y procederá a la distribución global de aulas en las próximas 24-48 horas. Se te notificará cualquier cambio o conflicto.
               </p>
             </div>
           </div>
-          
-          {estadoDistribucion && (
-            <div className="w-full bg-yellow-200 rounded-full h-3 overflow-hidden shadow-inner">
-              <div 
-                className="bg-gradient-to-r from-yellow-500 to-yellow-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${estadoDistribucion.estadisticas.porcentaje}%` }}
-              ></div>
-            </div>
-          )}
         </div>
       )}
 
@@ -351,11 +330,10 @@ export default function SubirPlanificacion() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Estado distribución:</span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    resultado.distribucion.estado === 'en_progreso'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${resultado.distribucion.estado === 'en_progreso'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-blue-100 text-blue-800'
+                    }`}>
                     {resultado.distribucion.mensaje}
                   </span>
                 </div>

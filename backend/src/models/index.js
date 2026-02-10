@@ -10,6 +10,7 @@ const Periodo = require('./Periodo');
 const Docente = require('./Docente');
 const MateriaCatalogo = require('./MateriaCatalogo');
 const Espacio = require('./Espacio');
+const ReporteHistorial = require('./ReporteHistorial');
 
 // ============================================
 // RELACIONES ENTRE MODELOS
@@ -40,13 +41,17 @@ Carrera.hasMany(PlanificacionSubida, { foreignKey: 'carrera_id', as: 'planificac
 PlanificacionSubida.belongsTo(User, { foreignKey: 'usuario_id', as: 'usuario' });
 User.hasMany(PlanificacionSubida, { foreignKey: 'usuario_id', as: 'planificaciones' });
 
+// ReporteHistorial <-> User
+ReporteHistorial.belongsTo(User, { foreignKey: 'usuario_id', as: 'generadoPor' });
+User.hasMany(ReporteHistorial, { foreignKey: 'usuario_id', as: 'reportes' });
+
 // ============================================
 // RELACIÓN USUARIOS-CARRERAS (Directores)
 // ============================================
 
 // User <-> Carrera
 // NOTA: Usamos carrera_director (string) para vincular con el nombre de la carrera
-User.belongsTo(Carrera, { foreignKey: 'carrera_director', targetKey: 'carrera', as: 'Carrera' });
+User.belongsTo(Carrera, { foreignKey: 'carrera_director', targetKey: 'carrera', as: 'carrera' });
 Carrera.hasMany(User, { foreignKey: 'carrera_director', sourceKey: 'carrera', as: 'directores' });
 
 // ============================================
@@ -89,5 +94,6 @@ module.exports = {
   Periodo,
   Docente,
   MateriaCatalogo,
-  Espacio
+  Espacio,
+  ReporteHistorial
 };
