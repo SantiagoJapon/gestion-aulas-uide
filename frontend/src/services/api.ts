@@ -231,32 +231,32 @@ export const aulaService = {
     estado?: string;
     es_laboratorio?: boolean;
   }): Promise<AulasResponse> => {
-    const response = await api.get<AulasResponse>('/api/aulas', { params: filters });
+    const response = await api.get<AulasResponse>('/aulas', { params: filters });
     return response.data;
   },
 
   getAulaById: async (id: number): Promise<AulaResponse> => {
-    const response = await api.get<AulaResponse>(`/api/aulas/${id}`);
+    const response = await api.get<AulaResponse>(`/aulas/${id}`);
     return response.data;
   },
 
   createAula: async (data: Partial<Aula>): Promise<AulaResponse> => {
-    const response = await api.post<AulaResponse>('/api/aulas', data);
+    const response = await api.post<AulaResponse>('/aulas', data);
     return response.data;
   },
 
   updateAula: async (id: number, data: Partial<Aula>): Promise<AulaResponse> => {
-    const response = await api.put<AulaResponse>(`/api/aulas/${id}`, data);
+    const response = await api.put<AulaResponse>(`/aulas/${id}`, data);
     return response.data;
   },
 
   deleteAula: async (id: number): Promise<{ success: boolean; message: string }> => {
-    const response = await api.delete<{ success: boolean; message: string }>(`/api/aulas/${id}`);
+    const response = await api.delete<{ success: boolean; message: string }>(`/aulas/${id}`);
     return response.data;
   },
 
   getAulasStats: async (): Promise<{ success: boolean; stats: AulaStats }> => {
-    const response = await api.get<{ success: boolean; stats: AulaStats }>('/api/aulas/stats/summary');
+    const response = await api.get<{ success: boolean; stats: AulaStats }>('/aulas/stats/summary');
     return response.data;
   },
 };
@@ -264,22 +264,22 @@ export const aulaService = {
 // Servicios de carreras
 export const carreraService = {
   getCarreras: async (includeInactive = false): Promise<{ success: boolean; total: number; activas: number; carreras: Carrera[] }> => {
-    const response = await api.get('/api/carreras', { params: { includeInactive } });
+    const response = await api.get('/carreras', { params: { includeInactive } });
     return response.data;
   },
 
   createCarrera: async (carrera: string): Promise<{ success: boolean; message: string; carrera: Carrera }> => {
-    const response = await api.post('/api/carreras', { carrera });
+    const response = await api.post('/carreras', { carrera });
     return response.data;
   },
 
   updateCarrera: async (id: number, data: Partial<Carrera>): Promise<{ success: boolean; message: string; carrera: Carrera }> => {
-    const response = await api.put(`/api/carreras/${id}`, data);
+    const response = await api.put(`/carreras/${id}`, data);
     return response.data;
   },
 
   deleteCarrera: async (id: number): Promise<{ success: boolean; message: string }> => {
-    const response = await api.delete(`/api/carreras/${id}`);
+    const response = await api.delete(`/carreras/${id}`);
     return response.data;
   },
 };
@@ -287,7 +287,7 @@ export const carreraService = {
 // Servicios de usuarios (admin y directores)
 export const usuarioService = {
   getUsuarios: async (params: { rol?: string; carrera_id?: number } = {}): Promise<{ success: boolean; total: number; usuarios: User[] }> => {
-    const response = await api.get('/api/usuarios', { params });
+    const response = await api.get('/usuarios', { params });
     return response.data;
   },
 
@@ -296,7 +296,7 @@ export const usuarioService = {
   },
 
   createUsuario: async (data: Partial<User>): Promise<{ success: boolean; usuario: User }> => {
-    const response = await api.post('/api/usuarios', data);
+    const response = await api.post('/usuarios', data);
     return response.data;
   },
 
@@ -304,7 +304,7 @@ export const usuarioService = {
   createDirector: async (data: Partial<User>) => usuarioService.createUsuario({ ...data, rol: 'director' }),
 
   updateUsuario: async (id: number, data: Partial<User>): Promise<{ success: boolean; mensaje: string; usuario: User }> => {
-    const response = await api.put(`/api/usuarios/${id}`, data);
+    const response = await api.put(`/usuarios/${id}`, data);
     return response.data;
   },
 
@@ -312,7 +312,7 @@ export const usuarioService = {
   updateDirector: async (id: number, data: Partial<User>) => usuarioService.updateUsuario(id, data),
 
   deleteUsuario: async (id: number): Promise<{ success: boolean; mensaje: string }> => {
-    const response = await api.delete(`/api/usuarios/${id}`);
+    const response = await api.delete(`/usuarios/${id}`);
     return response.data;
   },
 
@@ -320,7 +320,7 @@ export const usuarioService = {
   deleteDirector: async (id: number) => usuarioService.deleteUsuario(id),
 
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
-    const response = await api.put(`/api/usuarios/${id}/carrera`, { carrera });
+    const response = await api.put(`/usuarios/${id}/carrera`, { carrera });
     return response.data;
   },
 };
@@ -417,7 +417,7 @@ export const distribucionService = {
   getEstado: async (carreraId?: number): Promise<EstadoDistribucion> => {
     try {
       const params = carreraId ? { carrera_id: carreraId } : {};
-      const response = await api.get<EstadoDistribucion>('/api/distribucion/estado', { params });
+      const response = await api.get<EstadoDistribucion>('/distribucion/estado', { params });
       return response.data;
     } catch (error: any) {
       if (error.response?.status === 500 || error.response?.status === 404) {
@@ -440,14 +440,14 @@ export const distribucionService = {
   // Obtener mapa de calor
   getMapaCalor: async (carreraId?: number): Promise<MapaCalorResponse> => {
     const params = carreraId ? { carrera_id: carreraId } : {};
-    const response = await api.get<MapaCalorResponse>('/api/distribucion/heatmap', { params });
+    const response = await api.get<MapaCalorResponse>('/distribucion/heatmap', { params });
     return response.data;
   },
 
   // Obtener mi distribución según rol
   getMiDistribucion: async (carreraId?: number): Promise<MiDistribucionResponse> => {
     const params = carreraId ? { carrera_id: carreraId } : {};
-    const response = await api.get<MiDistribucionResponse>('/api/distribucion/mi-distribucion', { params });
+    const response = await api.get<MiDistribucionResponse>('/distribucion/mi-distribucion', { params });
     return response.data;
   },
 
@@ -455,51 +455,51 @@ export const distribucionService = {
   generarReporte: async (carreraId?: string, formato: 'json' | 'pdf' | 'excel' = 'json') => {
     const params: any = { formato };
     if (carreraId) params.carrera_id = carreraId;
-    const response = await api.get('/api/distribucion/reporte', { params });
+    const response = await api.get('/distribucion/reporte', { params });
     return response.data;
   },
 
   // Forzar redistribución (admin)
   forzarDistribucion: async (carreraId?: number) => {
-    const response = await api.post('/api/distribucion/forzar', { carrera_id: carreraId });
+    const response = await api.post('/distribucion/forzar', { carrera_id: carreraId });
     return response.data;
   },
 
   // Limpiar distribución (admin)
   limpiarDistribucion: async (carreraId?: number) => {
-    const response = await api.post('/api/distribucion/limpiar', { carrera_id: carreraId });
+    const response = await api.post('/distribucion/limpiar', { carrera_id: carreraId });
     return response.data;
   },
 
   // Ejecutar distribución automática
   ejecutarDistribucion: async (carreraId?: number) => {
     const params = carreraId ? { carrera_id: carreraId } : {};
-    const response = await api.post('/api/distribucion/ejecutar', {}, { params });
+    const response = await api.post('/distribucion/ejecutar', {}, { params });
     return response.data;
   },
 
   // Obtener horario
   obtenerHorario: async (carreraId?: number | string) => {
     const params = carreraId ? { carrera_id: carreraId } : {};
-    const response = await api.get('/api/distribucion/horario', { params });
+    const response = await api.get('/distribucion/horario', { params });
     return response.data;
   },
 
   // Obtener todas las clases con estado de distribución
   getClasesDistribucion: async () => {
-    const response = await api.get('/api/distribucion/clases');
+    const response = await api.get('/distribucion/clases');
     return response.data;
   },
 
   // Actualizar una clase individualmente
   updateClase: async (id: number, data: any) => {
-    const response = await api.put(`/api/distribucion/clase/${id}`, data);
+    const response = await api.put(`/distribucion/clase/${id}`, data);
     return response.data;
   },
 
   // Consultar disponibilidad de aulas
   getDisponibilidadAulas: async (params: { dia: string; hora_inicio: string; hora_fin: string; capacidad_minima?: number }) => {
-    const response = await api.get('/api/distribucion/disponibilidad', { params });
+    const response = await api.get('/distribucion/disponibilidad', { params });
     return response.data;
   }
 };
@@ -538,7 +538,7 @@ export interface ListarPlanificacionesResponse {
 export const planificacionService = {
   // Listar planificaciones
   listar: async (): Promise<ListarPlanificacionesResponse> => {
-    const response = await api.get<ListarPlanificacionesResponse>('/api/planificaciones/listar');
+    const response = await api.get<ListarPlanificacionesResponse>('/planificaciones/listar');
     return response.data;
   },
 
@@ -547,7 +547,7 @@ export const planificacionService = {
     const formData = new FormData();
     formData.append('archivo', archivo);
     if (carreraId) formData.append('carrera_id', carreraId.toString());
-    const response = await api.post<{ success: boolean; message: string }>('/api/planificaciones/subir', formData, {
+    const response = await api.post<{ success: boolean; message: string }>('/planificaciones/subir', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data;
@@ -555,7 +555,7 @@ export const planificacionService = {
 
   // Descargar planificación
   descargar: async (id: number): Promise<void> => {
-    const response = await api.get(`/api/planificaciones/descargar/${id}`, {
+    const response = await api.get(`/planificaciones/descargar/${id}`, {
       responseType: 'blob'
     });
 
@@ -610,34 +610,38 @@ export interface EspacioStats {
   porTipo: Array<{ tipo: string; total: number; capacidad_total: number }>;
 }
 
+// ============================================
+// ESPACIOS
+// ============================================
+
 export const espacioService = {
   getEspacios: async (filters?: { tipo?: string; estado?: string; search?: string }): Promise<EspaciosResponse> => {
-    const response = await api.get<EspaciosResponse>('/api/espacios', { params: filters });
+    const response = await api.get<EspaciosResponse>('/espacios', { params: filters });
     return response.data;
   },
 
   getEspacioById: async (id: number): Promise<{ success: boolean; espacio: Espacio }> => {
-    const response = await api.get(`/api/espacios/${id}`);
+    const response = await api.get(`/espacios/${id}`);
     return response.data;
   },
 
   createEspacio: async (data: Partial<Espacio>): Promise<{ success: boolean; message: string; espacio: Espacio }> => {
-    const response = await api.post('/api/espacios', data);
+    const response = await api.post('/espacios', data);
     return response.data;
   },
 
   updateEspacio: async (id: number, data: Partial<Espacio>): Promise<{ success: boolean; message: string; espacio: Espacio }> => {
-    const response = await api.put(`/api/espacios/${id}`, data);
+    const response = await api.put(`/espacios/${id}`, data);
     return response.data;
   },
 
   deleteEspacio: async (id: number): Promise<{ success: boolean; message: string }> => {
-    const response = await api.delete(`/api/espacios/${id}`);
+    const response = await api.delete(`/espacios/${id}`);
     return response.data;
   },
 
   getEspaciosStats: async (): Promise<{ success: boolean; stats: EspacioStats }> => {
-    const response = await api.get('/api/espacios/stats/summary');
+    const response = await api.get('/espacios/stats/summary');
     return response.data;
   },
 };
@@ -667,32 +671,32 @@ export const reporteService = {
   // Obtener métricas en tiempo real
   getMetricasActuales: async (carreraId?: string) => {
     const params = carreraId ? { carrera_id: carreraId } : {};
-    const response = await api.get('/api/reportes/metricas', { params });
+    const response = await api.get('/reportes/metricas', { params });
     return response.data;
   },
 
   // Generar un nuevo reporte
   generarReporte: async (data: { nombre?: string; carrera_id?: string; tipo?: string }) => {
-    const response = await api.post('/api/reportes/generar', data);
+    const response = await api.post('/reportes/generar', data);
     return response.data;
   },
 
   // Obtener historial de reportes
   getHistorial: async (tipo?: string): Promise<{ success: boolean; historial: ReporteHistorial[] }> => {
     const params = tipo ? { tipo } : {};
-    const response = await api.get('/api/reportes/historial', { params });
+    const response = await api.get('/reportes/historial', { params });
     return response.data;
   },
 
   // Eliminar un reporte del historial
   eliminarReporte: async (id: number) => {
-    const response = await api.delete(`/api/reportes/${id}`);
+    const response = await api.delete(`/reportes/${id}`);
     return response.data;
   },
 
   // Descargar un reporte
   descargarReporte: async (id: number, nombreArchivo: string): Promise<void> => {
-    const response = await api.get(`/api/reportes/descargar/${id}`, {
+    const response = await api.get(`/reportes/descargar/${id}`, {
       responseType: 'blob',
     });
 
