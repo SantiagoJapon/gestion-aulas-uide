@@ -124,14 +124,19 @@ function processExcel(buffer) {
       const allClases = [];
       const hojasUsadas = [];
       for (const sheet of compatibleSheets) {
+        // Etiquetar cada clase con su hoja de origen para priorizar en deduplicacion
+        for (const c of sheet.clases) { c._hoja = sheet.hojaUsada; }
         allClases.push(...sheet.clases);
         hojasUsadas.push(sheet.hojaUsada);
       }
 
       console.log(`[ExcelParser] Combinando ${compatibleSheets.length} hojas compatibles: ${hojasUsadas.join(', ')} (${allClases.length} clases total)`);
 
+      // Deduplicar clases que aparecen en multiples hojas
+      const dedupClases = deduplicateClasses(allClases);
+
       return {
-        clases: allClases,
+        clases: dedupClases,
         hojaUsada: hojasUsadas.join(' + '),
         totalHojas: sheetNames.length,
         allSheetResults: resultsBySheet.map(r => ({ hoja: r.hojaUsada, clases: r.clases.length })),
@@ -629,6 +634,63 @@ function getNumber(row, colIdx) {
   if (typeof val === 'number') return Math.floor(val);
   const match = String(val).match(/\d+/);
   return match ? parseInt(match[0]) : 0;
+}
+
+/**
+ * Deduplica clases basandose en materia + docente + paralelo + ciclo.
+ * Cuando hay duplicados, prioriza hojas con nombre "PLANIFICACION".
+ * Ademas, entre duplicados elige el que tenga mas datos completos.
+ */
+function deduplicateClasses(clases) {
+  if (clases.length === 0) return clases;
+
+  // Hojas prioritarias (normalizado)
+  const PRIORITY_SHEETS = ['planificacion'];
+
+  const uniqueMap = new Map();
+  let dupsRemoved = 0;
+
+  for (const clase of clases) {
+    // Clave: materia + docente + paralelo + ciclo (normalizado)
+    const key = [
+      normalize(clase.materia || ''),
+      normalize(clase.docente || ''),
+      normalize(clase.paralelo || ''),
+      normalize(clase.ciclo || '')
+    ].join('|');
+
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, clase);
+    } else {
+      dupsRemoved++;
+      const existing = uniqueMap.get(key);
+
+      // Calcular cual tiene mas datos completos
+      const scoreNew = (clase.dia ? 1 : 0) + (clase.hora_inicio ? 1 : 0) +
+        (clase.num_estudiantes > 0 ? 1 : 0) + (clase.docente ? 1 : 0) + (clase.aula ? 1 : 0);
+      const scoreExisting = (existing.dia ? 1 : 0) + (existing.hora_inicio ? 1 : 0) +
+        (existing.num_estudiantes > 0 ? 1 : 0) + (existing.docente ? 1 : 0) + (existing.aula ? 1 : 0);
+
+      // Priorizar: (1) hoja prioritaria, (2) mas datos completos
+      const newFromPriority = clase._hoja && PRIORITY_SHEETS.some(p => normalize(clase._hoja).includes(p));
+      const existFromPriority = existing._hoja && PRIORITY_SHEETS.some(p => normalize(existing._hoja).includes(p));
+
+      if ((newFromPriority && !existFromPriority) || (!existFromPriority && scoreNew > scoreExisting)) {
+        uniqueMap.set(key, clase);
+      }
+    }
+  }
+
+  const result = Array.from(uniqueMap.values());
+
+  // Limpiar campo interno _hoja
+  for (const c of result) { delete c._hoja; }
+
+  if (dupsRemoved > 0) {
+    console.log(`[ExcelParser] Deduplicacion: ${clases.length} -> ${result.length} (${dupsRemoved} duplicados eliminados)`);
+  }
+
+  return result;
 }
 
 module.exports = { processExcel };
