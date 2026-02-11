@@ -13,15 +13,8 @@ const PORT = process.env.PORT || 3000;
 // ========================================
 // CORS - Configuración para permitir peticiones del frontend
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowed = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',');
-    // Permitir requests sin origin (mismo servidor, curl, etc)
-    if (!origin || allowed.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // En produccion Nginx maneja el proxy, no hay CORS real
-    }
-  },
+  origin: '*', // Permitir cualquier origen temporalmente para facilitar pruebas
+
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
