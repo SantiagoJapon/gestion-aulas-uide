@@ -4,34 +4,43 @@ const { Op } = require('sequelize');
 // ============================================
 // REGLAS DE DISTRIBUCIÓN UIDE
 // ============================================
-// 1. Auditorio: queda LIBRE (no se asigna a ninguna clase)
+// 1. Auditorio: NO se asigna en distribución automática (se reserva con aprobación admin, uso para eventos)
 // 2. Sala de Audiencias: solo para Derecho
 // 3. Aula 20 (Lab Psicología): solo para Psicología
-// 4. Aulas 16, 17, 18: solo para Arquitectura (Taller de maquetería)
+// 4. Aulas C15-C18: solo para Arquitectura (Taller de maquetería)
 // 5. Laboratorios 1, 2, 3: prioridad para Informática, otras escuelas solo si sobra espacio
 // ============================================
 
 const REGLAS_AULAS = {
-  // Aulas que NUNCA se asignan
-  bloqueadas: ['AUDITORIO'],
+  // Aulas excluidas de distribución automática (reservables manualmente con aprobación admin)
+  excluidas_distribucion: ['AUDITORIO'],
 
   // Aulas exclusivas por carrera (solo esa carrera puede usarlas)
+  // Códigos y nombres reales de la BD:
+  //   AUDIENCIAS / Sala de Audiencias → Derecho
+  //   AULA20 / Aula 20 - Laboratorio de Psicología → Psicología
+  //   C15,C16,C17,C18 / Aula C15-C18 - Arquitectura → Arquitectura (Taller maquetería)
   exclusivas: {
     'SALA DE AUDIENCIAS': ['DERECHO'],
+    'AUDIENCIAS': ['DERECHO'],
     'AULA 20': ['PSICOLOGIA', 'PSICOLOGÍA'],
-    'AULA 16': ['ARQUITECTURA'],
-    'AULA 17': ['ARQUITECTURA'],
-    'AULA 18': ['ARQUITECTURA'],
+    'AULA20': ['PSICOLOGIA', 'PSICOLOGÍA'],
+    'LABORATORIO DE PSICOLOGIA': ['PSICOLOGIA', 'PSICOLOGÍA'],
+    'C15': ['ARQUITECTURA'],
+    'C16': ['ARQUITECTURA'],
+    'C17': ['ARQUITECTURA'],
+    'C18': ['ARQUITECTURA'],
   },
 
   // Aulas con prioridad para una carrera (otras pueden usarlas si sobran)
+  // Códigos reales: LAB1, LAB2, LAB3
   prioridad: {
-    'LABORATORIO 1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
-    'LABORATORIO 2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
-    'LABORATORIO 3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
-    'LAB 1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
-    'LAB 2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
-    'LAB 3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS'],
+    'LABORATORIO 1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
+    'LABORATORIO 2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
+    'LABORATORIO 3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
+    'LAB1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
+    'LAB2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
+    'LAB3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
   }
 };
 
@@ -42,14 +51,14 @@ function normalizarTexto(texto) {
     .trim();
 }
 
-function aulaEstaBloqueada(aula) {
+function aulaExcluidaDeDistribucion(aula) {
   const nombre = normalizarTexto(aula.nombre);
   const codigo = normalizarTexto(aula.codigo);
   const tipo = normalizarTexto(aula.tipo);
 
-  // Regla 1: Auditorio nunca se asigna
-  for (const bloqueada of REGLAS_AULAS.bloqueadas) {
-    if (nombre.includes(bloqueada) || codigo.includes(bloqueada) || tipo === bloqueada) {
+  // Auditorio: no se asigna automáticamente (se reserva con aprobación admin)
+  for (const excluida of REGLAS_AULAS.excluidas_distribucion) {
+    if (nombre.includes(excluida) || codigo.includes(excluida) || tipo === excluida) {
       return true;
     }
   }
@@ -160,7 +169,7 @@ class DistribucionService {
         order: [['capacidad', 'ASC']]
       });
 
-      const aulas = todasAulas.filter(a => !aulaEstaBloqueada(a));
+      const aulas = todasAulas.filter(a => !aulaExcluidaDeDistribucion(a));
 
       // PASO CRITICO: Cargar ocupación GLOBAL (de TODAS las carreras)
       // para no sobrescribir ni chocar con otras clases ya asignadas
@@ -229,14 +238,17 @@ class DistribucionService {
   async confirmarAsignacion(clase, aula, aulasOcupadas) {
     await clase.update({ aula_asignada: aula.codigo });
 
-    await Distribucion.create({
-      clase_id: clase.id,
-      aula_id: aula.id,
-      dia: clase.dia || null,
-      hora_inicio: clase.hora_inicio || null,
-      hora_fin: clase.hora_fin || null,
-      estado: 'confirmada'
-    });
+    if (clase.dia && clase.hora_inicio && clase.hora_fin) {
+      await Distribucion.create({
+        clase_id: clase.id,
+        aula_id: aula.id,
+        dia: clase.dia,
+        hora_inicio: clase.hora_inicio,
+        hora_fin: clase.hora_fin
+      });
+    } else {
+      console.log(`  ⚠️ Clase ${clase.materia} sin horario completo - solo se asignó aula, sin registro en distribución`);
+    }
 
     // Registrar horario ocupado
     if (clase.dia && clase.hora_inicio && clase.hora_fin) {

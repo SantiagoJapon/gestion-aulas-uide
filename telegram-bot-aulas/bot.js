@@ -406,6 +406,9 @@ bot.on('message', async (msg) => {
   const text = msg.text.trim();
   const fromId = msg.from.id;
 
+  console.log(`📩 Mensaje recibido de ${chatId}: "${text}"`);
+
+
   try {
     const stateObj = userState.get(chatId);
     const state = stateObj?.state || null;
@@ -483,6 +486,62 @@ bot.on('message', async (msg) => {
           reply_markup: { inline_keyboard: [[{ text: '🔍 Buscar otra', callback_data: 'menu_materia' }, { text: '« Menu', callback_data: 'go_menu' }]] }
         });
       }
+      return;
+    }
+
+    // --- DETECCION DE TEXTO DEL MENU (usuario escribe en vez de pulsar boton) ---
+    const n = normalizeText(text);
+    if (n.includes('aulas libres') || n.includes('buscar aulas') || n === 'aulas') {
+      await bot.sendMessage(chatId, 'Para que dia buscamos aulas?', { reply_markup: dayButtons() });
+      return;
+    }
+    if (n.includes('mis reservas') || n === 'reservas') {
+      // Disparar el callback de reservas directamente
+      const tid = String(fromId);
+      const res = await pool.query(
+        `SELECT id, aula_codigo, dia, hora_inicio, hora_fin FROM reservas WHERE telegram_id = $1 AND estado = 'activa' ORDER BY fecha, hora_inicio`,
+        [tid]
+      );
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, 'No tienes reservas activas.', {
+          reply_markup: { inline_keyboard: [[{ text: '🔍 Buscar aulas', callback_data: 'menu_aulas' }, { text: '« Menu', callback_data: 'go_menu' }]] }
+        });
+      } else {
+        let msg = '*Tus Reservas Activas:*\n\n';
+        const buttons = [];
+        res.rows.forEach(r => {
+          msg += `*${escMd(r.aula_codigo)}*: ${escMd(r.dia)} ${escMd(r.hora_inicio)}-${escMd(r.hora_fin)}\n`;
+          buttons.push([{ text: `❌ Cancelar ${r.aula_codigo} (${r.dia} ${r.hora_inicio})`, callback_data: `cancelar_${r.id}` }]);
+        });
+        buttons.push([{ text: '« Menu', callback_data: 'go_menu' }]);
+        await bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      }
+      return;
+    }
+    if (n.includes('buscar profe') || n.includes('buscar profesor')) {
+      userState.set(chatId, { state: 'SEARCHING_TEACHER' });
+      await bot.sendMessage(chatId, 'Escribe el apellido del profesor que buscas:');
+      return;
+    }
+    if (n.includes('horario materia') || n.includes('horario')) {
+      userState.set(chatId, { state: 'SEARCHING_SUBJECT' });
+      await bot.sendMessage(chatId, 'Escribe el nombre de la materia (o una parte):');
+      return;
+    }
+    if (n.includes('mi perfil') || n === 'perfil') {
+      const name = await getSessionName(session);
+      await bot.sendMessage(chatId,
+        `*Perfil Roomie*\n\nNombre: *${escMd(name)}*\nRol: *${session.rol.toUpperCase()}*\nTipo: ${session.user_type}\nSesion: Activa`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '🚪 Cerrar sesion', callback_data: 'logout_confirm' }, { text: '« Menu', callback_data: 'go_menu' }]] } }
+      );
+      return;
+    }
+    if (n.includes('estado general') && ['admin', 'director'].includes(session?.rol)) {
+      const stats = await pool.query(`SELECT (SELECT COUNT(*) FROM clases) as total_clases, (SELECT COUNT(*) FROM aulas WHERE estado ILIKE 'disponible') as aulas_disponibles, (SELECT COUNT(*) FROM distribucion) as distribuciones, (SELECT COUNT(*) FROM reservas WHERE estado = 'activa') as reservas_activas, (SELECT COUNT(*) FROM estudiantes) as total_estudiantes`);
+      const s = stats.rows[0];
+      await bot.sendMessage(chatId, `*Estado del Sistema UIDE*\n\nClases: *${s.total_clases}*\nAulas disponibles: *${s.aulas_disponibles}*\nDistribuciones: *${s.distribuciones}*\nReservas activas: *${s.reservas_activas}*\nEstudiantes: *${s.total_estudiantes}*`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] } }
+      );
       return;
     }
 
@@ -567,10 +626,12 @@ async function searchAndShowRooms(chatId, dia, hora) {
 
     if (rooms.length === 0) {
       await bot.sendMessage(chatId, `No hay aulas disponibles el ${dia} a las ${hora}.`, {
-        reply_markup: { inline_keyboard: [
-          [{ text: '🔄 Otra hora', callback_data: `day_${dia}` }],
-          [{ text: '« Menu', callback_data: 'go_menu' }]
-        ]}
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔄 Otra hora', callback_data: `day_${dia}` }],
+            [{ text: '« Menu', callback_data: 'go_menu' }]
+          ]
+        }
       });
       return;
     }
@@ -606,6 +667,9 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
   const fromId = query.from.id;
+
+  console.log(`🔘 Callback recibido de ${chatId}: "${data}"`);
+
 
   try {
     await bot.answerCallbackQuery(query.id);
@@ -684,23 +748,62 @@ bot.on('callback_query', async (query) => {
         return;
       }
 
-      await pool.query(
-        `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telegram_id, estado) VALUES ($1, $2, $3, $4, $5, 'activa')`,
-        [aula, dia, horaInicio, horaFin, tid]
-      );
+      // Auditorio requiere aprobación del admin
+      const esAuditorio = aula.toUpperCase().includes('AUDITORIO');
+      const estadoReserva = esAuditorio ? 'pendiente_aprobacion' : 'activa';
 
-      try {
-        await bot.editMessageText(
-          `*Reserva Confirmada*\n\nAula: *${escMd(aula)}*\nDia: ${escMd(dia)}\nHora: ${escMd(horaInicio)} - ${escMd(horaFin)}\n\nTe avisare 15 min antes.`,
-          { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '📅 Mis reservas', callback_data: 'menu_reservas' }, { text: '« Menu', callback_data: 'go_menu' }]] }
-          }
-        );
-      } catch (_) {
-        await bot.sendMessage(chatId, `Reserva confirmada: *${escMd(aula)}* (${dia} ${horaInicio}-${horaFin})`, {
-          parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] }
-        });
+      const insertResult = await pool.query(
+        `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telegram_id, estado) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [aula, dia, horaInicio, horaFin, tid, estadoReserva]
+      );
+      const reservaId = insertResult.rows[0].id;
+
+      if (esAuditorio) {
+        // Notificar a admins sobre solicitud de Auditorio
+        try {
+          await bot.editMessageText(
+            `*Solicitud Enviada*\n\nAula: *${escMd(aula)}*\nDia: ${escMd(dia)}\nHora: ${escMd(horaInicio)} - ${escMd(horaFin)}\n\nEl Auditorio requiere aprobacion del administrador. Te notificaremos cuando sea aprobada.`,
+            {
+              chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] }
+            }
+          );
+        } catch (_) {
+          await bot.sendMessage(chatId, `Solicitud enviada para *${escMd(aula)}* (${dia} ${horaInicio}-${horaFin}). Pendiente de aprobacion admin.`, {
+            parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] }
+          });
+        }
+        // Notificar a todos los admins registrados en el bot
+        const admins = await pool.query(`SELECT chat_id FROM bot_sessions WHERE rol = 'admin'`);
+        const sessionName = await getSessionName(session);
+        for (const admin of admins.rows) {
+          bot.sendMessage(admin.chat_id,
+            `*Solicitud de Auditorio*\n\nUsuario: ${escMd(sessionName)}\nDia: ${escMd(dia)}\nHora: ${escMd(horaInicio)} - ${escMd(horaFin)}`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: 'Aprobar', callback_data: `aprobar_reserva_${reservaId}` }, { text: 'Rechazar', callback_data: `rechazar_reserva_${reservaId}` }]
+                ]
+              }
+            }
+          ).catch(() => { });
+        }
+      } else {
+        try {
+          await bot.editMessageText(
+            `*Reserva Confirmada*\n\nAula: *${escMd(aula)}*\nDia: ${escMd(dia)}\nHora: ${escMd(horaInicio)} - ${escMd(horaFin)}\n\nTe avisare 15 min antes.`,
+            {
+              chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: [[{ text: '📅 Mis reservas', callback_data: 'menu_reservas' }, { text: '« Menu', callback_data: 'go_menu' }]] }
+            }
+          );
+        } catch (_) {
+          await bot.sendMessage(chatId, `Reserva confirmada: *${escMd(aula)}* (${dia} ${horaInicio}-${horaFin})`, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] }
+          });
+        }
       }
       return;
     }
@@ -784,7 +887,8 @@ bot.on('callback_query', async (query) => {
         `Distribuciones activas: *${s.distribuciones}*\n` +
         `Reservas activas: *${s.reservas_activas}*\n` +
         `Estudiantes registrados: *${s.total_estudiantes}*`,
-        { parse_mode: 'Markdown',
+        {
+          parse_mode: 'Markdown',
           reply_markup: { inline_keyboard: [[{ text: '« Menu', callback_data: 'go_menu' }]] }
         }
       );
@@ -803,11 +907,14 @@ bot.on('callback_query', async (query) => {
         `Rol: *${session.rol.toUpperCase()}*\n` +
         `Tipo: ${session.user_type}\n` +
         `Sesion: Activa`,
-        { parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: [
-            [{ text: '🚪 Cerrar sesion', callback_data: 'logout_confirm' }],
-            [{ text: '« Menu', callback_data: 'go_menu' }]
-          ]}
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🚪 Cerrar sesion', callback_data: 'logout_confirm' }],
+              [{ text: '« Menu', callback_data: 'go_menu' }]
+            ]
+          }
         }
       );
       return;
@@ -825,9 +932,126 @@ bot.on('callback_query', async (query) => {
       return;
     }
 
+    // --- APROBAR RESERVA (Admin) ---
+    if (data.startsWith('aprobar_reserva_')) {
+      const reservaId = data.split('_')[2];
+      const tid = String(fromId);
+
+      // Verificar permiso admin
+      const session = await getSession(fromId);
+      if (!session || session.rol !== 'admin') {
+        await bot.sendMessage(chatId, 'No tienes permiso para aprobar reservas.');
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Obtener reserva
+        const res = await client.query('SELECT * FROM reservas WHERE id = $1', [reservaId]);
+        if (res.rows.length === 0) {
+          await bot.sendMessage(chatId, 'La reserva ya no existe.');
+          await client.query('ROLLBACK');
+          return;
+        }
+        const reserva = res.rows[0];
+
+        if (reserva.estado === 'activa') {
+          await bot.sendMessage(chatId, 'Esta reserva ya estaba aprobada.');
+          await client.query('ROLLBACK');
+          return;
+        }
+
+        // Aprobar
+        await client.query("UPDATE reservas SET estado = 'activa' WHERE id = $1", [reservaId]);
+
+        // Notificar al usuario
+        await bot.sendMessage(reserva.telegram_id,
+          `✅ *Reserva Aprobada*\n\nTu solicitud para el *${escMd(reserva.aula_codigo)}* ha sido aprobada.\nDia: ${escMd(reserva.dia)}\nHora: ${escMd(reserva.hora_inicio)} - ${escMd(reserva.hora_fin)}`,
+          { parse_mode: 'Markdown' }
+        ).catch(() => { });
+
+        // Actualizar mensaje del admin (eliminar botones)
+        await bot.editMessageText(
+          `*Solicitud de Auditorio - APROBADA*\n\nUsuario: ${escMd(reserva.usuario_nombre || 'Usuario')}\nDia: ${escMd(reserva.dia)}\nHora: ${escMd(reserva.hora_inicio)} - ${escMd(reserva.hora_fin)}\n\nAprobado por: ${escMd(await getSessionName(session))}`,
+          {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [] }
+          }
+        );
+
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error aprobando reserva:', e);
+        await bot.sendMessage(chatId, 'Error al aprobar la reserva.');
+      } finally {
+        client.release();
+      }
+      return;
+    }
+
+    // --- RECHAZAR RESERVA (Admin) ---
+    if (data.startsWith('rechazar_reserva_')) {
+      const reservaId = data.split('_')[2];
+
+      // Verificar permiso admin
+      const session = await getSession(fromId);
+      if (!session || session.rol !== 'admin') {
+        await bot.sendMessage(chatId, 'No tienes permiso para rechazar reservas.');
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Obtener reserva
+        const res = await client.query('SELECT * FROM reservas WHERE id = $1', [reservaId]);
+        if (res.rows.length === 0) {
+          await bot.sendMessage(chatId, 'La reserva ya no existe.');
+          await client.query('ROLLBACK');
+          return;
+        }
+        const reserva = res.rows[0];
+
+        // Rechazar (cambiar estado o eliminar? Mejor cambiar estado para historial)
+        await client.query("UPDATE reservas SET estado = 'rechazada' WHERE id = $1", [reservaId]);
+
+        // Notificar al usuario
+        await bot.sendMessage(reserva.telegram_id,
+          `❌ *Solicitud Rechazada*\n\nTu solicitud para el *${escMd(reserva.aula_codigo)}* ha sido rechazada por el administrador.`,
+          { parse_mode: 'Markdown' }
+        ).catch(() => { });
+
+        // Actualizar mensaje del admin
+        await bot.editMessageText(
+          `*Solicitud de Auditorio - RECHAZADA*\n\nUsuario: ${escMd(reserva.usuario_nombre || 'Usuario')}\nDia: ${escMd(reserva.dia)}\nHora: ${escMd(reserva.hora_inicio)} - ${escMd(reserva.hora_fin)}\n\nRechazado por: ${escMd(await getSessionName(session))}`,
+          {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: [] }
+          }
+        );
+
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error rechazando reserva:', e);
+        await bot.sendMessage(chatId, 'Error al rechazar la reserva.');
+      } finally {
+        client.release();
+      }
+      return;
+    }
+
   } catch (error) {
     console.error('Error en callback:', error);
-    await bot.sendMessage(chatId, 'Ocurrio un error. Intenta de nuevo.').catch(() => {});
+    await bot.sendMessage(chatId, 'Ocurrio un error. Intenta de nuevo.').catch(() => { });
   }
 });
 
@@ -882,7 +1106,7 @@ setInterval(async () => {
       [day, timeStr]
     );
     for (const r of res.rows) {
-      bot.sendMessage(r.telegram_id, `Tu reserva en *${escMd(r.aula_codigo)}* empieza en 15 min.`, { parse_mode: 'Markdown' }).catch(() => {});
+      bot.sendMessage(r.telegram_id, `Tu reserva en *${escMd(r.aula_codigo)}* empieza en 15 min.`, { parse_mode: 'Markdown' }).catch(() => { });
     }
 
     // Notificar clases
@@ -899,7 +1123,7 @@ setInterval(async () => {
         bot.sendMessage(s.telegram_id,
           `Clase en 15 min: *${escMd(c.materia)}* en *${escMd(c.aula_asignada || 'sin aula')}*`,
           { parse_mode: 'Markdown' }
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
   } catch (e) {

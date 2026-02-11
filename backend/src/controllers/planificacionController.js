@@ -196,8 +196,13 @@ exports.subirPlanificacion = async (req, res) => {
     // Guardar archivo
     fs.writeFileSync(rutaArchivo, req.file.buffer);
 
-    // Registrar en base de datos
+    // Registrar en base de datos (reemplazar subidas anteriores de esta carrera)
     const { PlanificacionSubida } = require('../models');
+    await PlanificacionSubida.update(
+      { estado: 'reemplazado' },
+      { where: { carrera_id: carrera_id, estado: { [require('sequelize').Op.ne]: 'reemplazado' } }, transaction }
+    );
+
     await PlanificacionSubida.create({
       carrera_id: carrera_id,
       usuario_id: usuario_id,
@@ -205,7 +210,7 @@ exports.subirPlanificacion = async (req, res) => {
       nombre_archivo_guardado: nombreArchivoGuardado,
       ruta_archivo: rutaArchivo,
       total_clases: clasesGuardadas,
-      estado: 'pendiente' // El estado inicial ahora es pendiente de revisión
+      estado: 'procesado'
     }, { transaction });
 
     await transaction.commit();
@@ -415,8 +420,9 @@ exports.listarPlanificaciones = async (req, res) => {
     const { PlanificacionSubida, Carrera, User } = require('../models');
     const usuario = req.usuario;
 
-    // Construir filtro según rol
-    const whereClause = {};
+    // Construir filtro según rol (excluir planificaciones reemplazadas/historicas)
+    const { Op } = require('sequelize');
+    const whereClause = { estado: { [Op.notIn]: ['reemplazado', 'historico'] } };
     if (usuario.rol === 'director' && usuario.carrera_director) {
       const { Carrera } = require('../models');
       const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });

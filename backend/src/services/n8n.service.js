@@ -236,27 +236,28 @@ class N8nService {
   }
 
   /**
-   * Forzar distribución manualmente en n8n
-   * @param {string|null} authHeader - Authorization header opcional
+   * Ejecutar distribución de aulas via n8n (webhook maestro)
    * @returns {Promise<Object>}
    */
-  static async forzarDistribucion(authHeader = null) {
+  static async ejecutarDistribucion() {
     try {
+      console.log('📤 Enviando acción distribuir_aulas a n8n...');
       const response = await axios.post(
-        `${N8N_WEBHOOK_URL}/admin/forzar-distribucion`,
-        {},
+        `${N8N_WEBHOOK_URL}/maestro`,
+        { accion: 'distribuir_aulas' },
         {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(authHeader ? { Authorization: authHeader } : {})
-          },
-          timeout: 20000
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 120000 // 2 minutos para distribución compleja
         }
       );
+      console.log('✅ n8n completó la distribución');
       return response.data;
     } catch (error) {
-      console.error('Error al forzar distribución:', error.message);
-      throw new Error('No se pudo forzar la distribución');
+      console.error('❌ Error al ejecutar distribución en n8n:', error.message);
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('n8n no está disponible. Verifica que esté corriendo.');
+      }
+      throw new Error(`Error en distribución n8n: ${error.message}`);
     }
   }
 }

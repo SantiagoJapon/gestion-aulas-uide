@@ -1,6 +1,7 @@
-const N8nService = require('../services/n8n.service');
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
+const distribucionService = require('../services/distribucion.service');
+const N8nService = require('../services/n8n.service');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -100,42 +101,41 @@ const getEstadoDistribucion = async (req, res) => {
   }
 };
 
-const forzarDistribucion = async (req, res) => {
+/**
+ * Ejecutar distribución via n8n (con fallback al algoritmo local)
+ * Usado por ambos endpoints: /ejecutar y /forzar
+ */
+const ejecutarDistribucionViaN8n = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || null;
-    const data = await N8nService.forzarDistribucion(authHeader);
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Error al forzar distribución',
-      message: error.message
-    });
-  }
-};
+    console.log('🎯 Solicitada distribución de aulas...');
 
-// ============================================
-// EJECUTAR DISTRIBUCIÓN AUTOMÁTICA
-// ============================================
-const distribucionService = require('../services/distribucion.service');
+    // Intentar via n8n primero
+    try {
+      console.log('📤 Enviando a n8n...');
+      const resultado = await N8nService.ejecutarDistribucion();
+      console.log('✅ Distribución completada via n8n');
+      return res.json(resultado);
+    } catch (n8nError) {
+      console.warn('⚠️ n8n no disponible, usando algoritmo local:', n8nError.message);
+    }
 
-const ejecutarDistribucionAutomatica = async (req, res) => {
-  try {
-    console.log('🎯 Admin solicitó distribución automática');
-
+    // Fallback: algoritmo local del backend
     const carreraId = req.query.carrera_id || req.body.carrera_id;
     const resultado = await distribucionService.ejecutarDistribucion(carreraId);
-
     res.json(resultado);
   } catch (error) {
     console.error('Error al ejecutar distribución:', error);
     res.status(500).json({
       success: false,
-      mensaje: 'Error al ejecutar la distribución automática',
+      mensaje: 'Error al ejecutar la distribución',
       error: error.message
     });
   }
 };
+
+// Alias: ambos endpoints usan el mismo handler
+const forzarDistribucion = ejecutarDistribucionViaN8n;
+const ejecutarDistribucionAutomatica = ejecutarDistribucionViaN8n;
 
 // ============================================
 // OBTENER HORARIO
