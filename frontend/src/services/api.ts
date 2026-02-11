@@ -156,7 +156,7 @@ export interface Carrera {
 // Servicios de autenticación
 export const authService = {
   login: async (email: string, password: string, rememberMe: boolean = false): Promise<LoginResponse> => {
-    const response = await api.post<LoginResponse>('/api/auth/login', {
+    const response = await api.post<LoginResponse>('/auth/login', {
       email,
       password,
       rememberMe,
@@ -165,22 +165,22 @@ export const authService = {
   },
 
   register: async (data: RegisterData): Promise<LoginResponse> => {
-    const response = await api.post<LoginResponse>('/api/auth/register', data);
+    const response = await api.post<LoginResponse>('/auth/register', data);
     return response.data;
   },
 
   getProfile: async (): Promise<{ usuario: User }> => {
-    const response = await api.get<{ usuario: User }>('/api/auth/perfil');
+    const response = await api.get<{ usuario: User }>('/auth/perfil');
     return response.data;
   },
 
   updateProfile: async (data: Partial<User>): Promise<{ mensaje: string; usuario: User }> => {
-    const response = await api.put<{ mensaje: string; usuario: User }>('/api/auth/perfil', data);
+    const response = await api.put<{ mensaje: string; usuario: User }>('/auth/perfil', data);
     return response.data;
   },
 
   changePassword: async (passwordActual: string, passwordNuevo: string): Promise<{ mensaje: string }> => {
-    const response = await api.put<{ mensaje: string }>('/api/auth/cambiar-password', {
+    const response = await api.put<{ mensaje: string }>('/auth/cambiar-password', {
       passwordActual,
       passwordNuevo,
       passwordConfirmacion: passwordNuevo,
@@ -189,10 +189,11 @@ export const authService = {
   },
 };
 
+
 // Servicios de estudiantes (lookup por email)
 export const estudianteService = {
   lookupByEmail: async (email: string): Promise<{ success: boolean; found: boolean; estudiante?: EstudianteLookup }> => {
-    const response = await api.get('/api/estudiantes/lookup', { params: { email } });
+    const response = await api.get('/estudiantes/lookup', { params: { email } });
     return response.data;
   },
 
@@ -203,12 +204,12 @@ export const estudianteService = {
     escuela?: string;
     nivel?: string;
   } = {}): Promise<ListarEstudiantesResponse> => {
-    const response = await api.get<ListarEstudiantesResponse>('/api/estudiantes', { params });
+    const response = await api.get<ListarEstudiantesResponse>('/estudiantes', { params });
     return response.data;
   },
 
   subirEstudiantes: async (formData: FormData): Promise<any> => {
-    const response = await api.post('/api/estudiantes/subir', formData, {
+    const response = await api.post('/estudiantes/subir', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000
     });
@@ -216,7 +217,7 @@ export const estudianteService = {
   },
 
   getHistorialCargas: async (tipo: string = 'estudiantes'): Promise<any> => {
-    const response = await api.get('/api/estudiantes/historial-cargas', { params: { tipo } });
+    const response = await api.get('/estudiantes/historial-cargas', { params: { tipo } });
     return response.data;
   }
 };
