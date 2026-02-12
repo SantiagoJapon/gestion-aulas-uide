@@ -49,21 +49,27 @@ const getEstadoDistribucion = async (req, res) => {
     const clases_pendientes = (parseInt(statsRow.total_clases) || 0) - (parseInt(statsRow.clases_asignadas) || 0);
 
     // Obtener carreras con su estado
+    // Usamos subquery lateral para obtener solo un director por carrera y evitar duplicados
     const carreras = await sequelize.query(`
-      SELECT 
+      SELECT
         ca.id,
         ca.carrera as nombre_carrera,
         'activa' as estado,
         COUNT(DISTINCT c.id) as total_clases,
         COUNT(DISTINCT d.clase_id) as clases_asignadas,
-        u.nombre as director_nombre,
-        u.email as director_email
+        dir.nombre as director_nombre,
+        dir.email as director_email
       FROM uploads_carreras ca
       LEFT JOIN clases c ON c.carrera_id = ca.id
       LEFT JOIN distribucion d ON d.clase_id = c.id
-      LEFT JOIN usuarios u ON u.carrera_director = ca.carrera AND u.rol = 'director'
+      LEFT JOIN LATERAL (
+        SELECT u.nombre, u.email
+        FROM usuarios u
+        WHERE u.carrera_director = ca.carrera AND u.rol = 'director'
+        LIMIT 1
+      ) dir ON true
       ${whereClauseCarreras}
-      GROUP BY ca.id, ca.carrera, u.nombre, u.email
+      GROUP BY ca.id, ca.carrera, dir.nombre, dir.email
       ORDER BY ca.carrera
     `, {
       replacements,
