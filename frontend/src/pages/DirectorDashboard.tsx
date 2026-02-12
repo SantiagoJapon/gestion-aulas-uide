@@ -262,7 +262,7 @@ const DirectorDashboard = () => {
                             <tr key={i} className="hover:bg-muted/20 transition-all group">
                               <td className="px-8 py-5">
                                 <p className="font-black text-foreground text-xs leading-none">{clase.materia}</p>
-                                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter mt-1.5 opacity-60">{clase.nivel} • {clase.paralelo}</p>
+                                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter mt-1.5 opacity-60">Ciclo {clase.ciclo} • {clase.paralelo}</p>
                               </td>
                               <td className="px-6 py-5">
                                 <span className="inline-flex items-center px-2 py-1 rounded-xl bg-primary/5 text-primary text-[10px] font-black uppercase tracking-tighter ring-1 ring-primary/10">

@@ -87,6 +87,13 @@ exports.subirPlanificacion = async (req, res) => {
     const parseResult = processExcel(req.file.buffer);
 
     console.log(`📚 Excel procesado: ${parseResult.clases.length} clases de hoja "${parseResult.hojaUsada}"`);
+    if (parseResult.debug?.columnMap) {
+      console.log(`📊 Column map usado: ${JSON.stringify(parseResult.debug.columnMap)}`);
+    }
+    if (parseResult.clases.length > 0) {
+      const sample = parseResult.clases[0];
+      console.log(`📋 Primera clase: materia="${sample.materia}" docente="${sample.docente}" ciclo="${sample.ciclo}" dia="${sample.dia}" hora="${sample.hora_inicio}" est=${sample.num_estudiantes}`);
+    }
 
     if (parseResult.clases.length === 0) {
       await transaction.rollback();

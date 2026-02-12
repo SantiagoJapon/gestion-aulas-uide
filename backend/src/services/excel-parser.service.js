@@ -185,20 +185,39 @@ function processSheet(sheet, sheetName) {
     return { clases: [], hojaUsada: sheetName, debug: { reason: 'no header row found' } };
   }
 
-  const { headerRowIndex, columnMap } = headerInfo;
+  const { headerRowIndex, columnMap, subHeaderUsed } = headerInfo;
 
-  console.log(`[ExcelParser]   Header en fila ${headerRowIndex}: ${JSON.stringify(columnMap)}`);
+  console.log(`[ExcelParser]   Header en fila ${headerRowIndex} (subHeader=${subHeaderUsed}): ${JSON.stringify(columnMap)}`);
 
   // Paso 3: Extraer clases desde la fila despues del header
-  // A veces hay una sub-header (PREGRADO/POSGRADO), detectar y saltar
+  // Si se detecto sub-header (DIA/HORA debajo de HORARIO), saltar esa fila tambien
   let dataStartRow = headerRowIndex + 1;
+  if (subHeaderUsed) {
+    console.log(`[ExcelParser]   Saltando sub-header en fila ${dataStartRow}`);
+    dataStartRow++;
+  }
+
+  // A veces hay una sub-header adicional (PREGRADO/POSGRADO), detectar y saltar
   if (dataStartRow < rawData.length) {
     const nextRow = rawData[dataStartRow];
     const nextRowText = nextRow.map(c => normalize(String(c))).join(' ');
     if (nextRowText.includes('pregrado') || nextRowText.includes('posgrado') ||
       nextRowText.includes('componente') || nextRowText.includes('teorica')) {
+      console.log(`[ExcelParser]   Saltando sub-header adicional en fila ${dataStartRow}`);
       dataStartRow++;
     }
+  }
+
+  // DEBUG: Mostrar las primeras 3 filas de datos para verificar mapeo
+  console.log(`[ExcelParser]   Data comienza en fila ${dataStartRow}. Primeras filas de datos:`);
+  for (let dbg = dataStartRow; dbg < Math.min(dataStartRow + 3, rawData.length); dbg++) {
+    const row = rawData[dbg];
+    if (!row) continue;
+    const sample = {};
+    for (const [key, colIdx] of Object.entries(columnMap)) {
+      sample[key] = row[colIdx] !== undefined ? String(row[colIdx]).substring(0, 40) : '(vacío)';
+    }
+    console.log(`[ExcelParser]     Fila ${dbg}: ${JSON.stringify(sample)}`);
   }
 
   const clases = extractClasses(rawData, dataStartRow, columnMap);
@@ -248,6 +267,7 @@ function findHeaderRow(data) {
   let bestScore = 0;
   let bestRow = -1;
   let bestMap = null;
+  let bestHasSubHeader = false;
 
   for (let rowIdx = 0; rowIdx < searchRange; rowIdx++) {
     const row = data[rowIdx];
@@ -255,6 +275,7 @@ function findHeaderRow(data) {
 
     const map = {};
     let score = 0;
+    let subHeaderDetected = false;
 
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
       const cellNorm = normalize(String(row[colIdx]));
@@ -265,7 +286,16 @@ function findHeaderRow(data) {
         if (map[key] !== undefined) continue; // ya encontrada
 
         for (const kw of keywords) {
-          if (cellNorm.includes(kw) || cellNorm === kw) {
+          // Match exacto o por inclusion, pero evitar falsos positivos:
+          // "horario" contiene "hora" -> no queremos que "horario" matchee "hora"
+          // Solo matchear si el keyword es substring Y no es un grupo-header como "horario"
+          const isMatch = cellNorm === kw || cellNorm.includes(kw);
+          if (isMatch) {
+            // Evitar que "horario" matchee como "hora" - es un grupo-header, no la columna hora real
+            if (key === 'hora' && (cellNorm === 'horario' || cellNorm === 'horarios')) {
+              // No mapear - sera resuelta por sub-header
+              break;
+            }
             map[key] = colIdx;
             score++;
             break;
@@ -280,19 +310,21 @@ function findHeaderRow(data) {
     if (rowIdx + 1 < searchRange) {
       const nextRow = data[rowIdx + 1];
       if (nextRow && nextRow.length > 0) {
-        // Primero verificar si parece un sub-header (tiene DIA y/o HORA)
+        // Primero verificar si parece un sub-header (tiene DIA y/o HORA, o PREGRADO/POSGRADO)
         let hasSubHeader = false;
         const isDiaKw = (s) => COLUMN_KEYWORDS.dia.some(kw => s.includes(kw) || s === kw);
         const isHoraKw = (s) => COLUMN_KEYWORDS.hora.some(kw => s.includes(kw) || s === kw);
+        const isPregradoKw = (s) => s.includes('pregrado') || s.includes('posgrado') || s.includes('postgrado');
         for (let colIdx = 0; colIdx < nextRow.length; colIdx++) {
           const cellNorm = normalize(String(nextRow[colIdx]));
-          if (isDiaKw(cellNorm) || isHoraKw(cellNorm)) {
+          if (isDiaKw(cellNorm) || isHoraKw(cellNorm) || isPregradoKw(cellNorm)) {
             hasSubHeader = true;
             break;
           }
         }
 
         if (hasSubHeader) {
+          subHeaderDetected = true;
           // Si hay sub-header, eliminar detecciones del parent que seran reemplazadas
           // porque probablemente son headers de grupo (HORARIO -> DIA + HORA)
           if (map.hora !== undefined) {
@@ -315,6 +347,14 @@ function findHeaderRow(data) {
               map.hora = colIdx;
               score++;
             }
+            // Tambien mapear pregrado/posgrado del sub-header
+            if (cellNorm.includes('pregrado') && !cellNorm.includes('posgrado') && map.titulo_pregrado === undefined) {
+              map.titulo_pregrado = colIdx;
+              score++;
+            } else if ((cellNorm.includes('posgrado') || cellNorm.includes('postgrado')) && map.titulo_posgrado === undefined) {
+              map.titulo_posgrado = colIdx;
+              score++;
+            }
           }
         }
       }
@@ -325,17 +365,15 @@ function findHeaderRow(data) {
       bestScore = score;
       bestRow = rowIdx;
       bestMap = { ...map };
+      bestHasSubHeader = subHeaderDetected;
     }
-
-    // Caso especial: si no hay "materia" pero hay "hora" como header en una grilla de horarios
-    // (hojas como "1er", "2do" etc. del TICs) - ignorar esas hojas
   }
 
   if (bestRow === -1 || !bestMap) {
     return null;
   }
 
-  return { headerRowIndex: bestRow, columnMap: bestMap };
+  return { headerRowIndex: bestRow, columnMap: bestMap, subHeaderUsed: bestHasSubHeader };
 }
 
 /**
@@ -486,6 +524,22 @@ function extractClasses(data, startRow, columnMap) {
         });
       }
     }
+  }
+
+  // POST-VALIDACION: detectar si materia tiene valores sospechosos (puro numeros)
+  const numericMaterias = clases.filter(c => c.materia && /^\d{1,3}$/.test(c.materia.trim()));
+  if (numericMaterias.length > 0 && clases.length > 0) {
+    const pct = ((numericMaterias.length / clases.length) * 100).toFixed(0);
+    console.warn(`[ExcelParser] ⚠️ ALERTA: ${numericMaterias.length}/${clases.length} clases (${pct}%) tienen materia numérica. Posible mapeo incorrecto de columnas.`);
+    console.warn(`[ExcelParser]   Ejemplos: ${numericMaterias.slice(0, 5).map(c => `materia="${c.materia}" docente="${c.docente}" ciclo="${c.ciclo}"`).join(' | ')}`);
+  }
+
+  // Log resumen de extraccion
+  if (clases.length > 0) {
+    console.log(`[ExcelParser]   Primeras 3 clases extraidas:`);
+    clases.slice(0, 3).forEach((c, i) => {
+      console.log(`[ExcelParser]     [${i}] materia="${c.materia}" docente="${c.docente}" ciclo="${c.ciclo}" paralelo="${c.paralelo}" dia="${c.dia}" hora="${c.hora_inicio}-${c.hora_fin}" est=${c.num_estudiantes}`);
+    });
   }
 
   return clases;
