@@ -111,4 +111,4 @@ pm2 restart backend
 pm2 restart telegram-bot
 ```
 
-Desarrollado con ❤️ para la **UIDE** by Antigravity AI.
+Desarrollado por Santiago Japón para la **UIDE** by Antigravity AI.
