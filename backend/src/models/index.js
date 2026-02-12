@@ -14,6 +14,7 @@ const ReporteHistorial = require('./ReporteHistorial');
 const Reserva = require('./Reserva');
 const Notificacion = require('./Notificacion');
 const Incidencia = require('./Incidencia');
+const HistorialCarga = require('./HistorialCarga');
 
 // ============================================
 // RELACIONES ENTRE MODELOS
@@ -113,5 +114,6 @@ module.exports = {
   ReporteHistorial,
   Reserva,
   Notificacion,
-  Incidencia
+  Incidencia,
+  HistorialCarga
 };

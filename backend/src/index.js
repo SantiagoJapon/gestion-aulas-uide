@@ -270,7 +270,7 @@ const iniciarServidor = async () => {
     // Sincronizar modelos con la base de datos sin perder datos
     console.log('🔄 Sincronizando modelos con PostgreSQL...');
     await syncDatabase({
-      alter: false,
+      alter: true,
       force: false
     });
     console.log('✅ Modelos sincronizados');
