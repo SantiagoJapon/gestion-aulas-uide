@@ -31,16 +31,25 @@ const CarreraTable: React.FC = () => {
     loadCarreras();
   }, [includeInactive]);
 
+  const [adding, setAdding] = useState(false);
+
   const handleAdd = async () => {
     const value = newCarrera.trim();
-    if (!value) return;
+    if (!value || adding) return;
     try {
-      await carreraService.createCarrera(value);
+      setAdding(true);
+      setError(null);
+      console.log('Creando carrera:', value);
+      const result = await carreraService.createCarrera(value);
+      console.log('Carrera creada:', result);
       setNewCarrera('');
-      loadCarreras();
+      await loadCarreras();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al crear carrera');
-      console.error('Error al crear carrera:', err);
+      const errorMsg = err.response?.data?.error || err.message || 'Error al crear carrera';
+      setError(errorMsg);
+      console.error('Error al crear carrera:', err.response?.status, err.response?.data || err.message);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -117,10 +126,15 @@ const CarreraTable: React.FC = () => {
         />
         <button
           onClick={handleAdd}
-          className="bg-uide-blue text-white font-black py-3 px-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-uide-blue/10 flex items-center justify-center gap-2 text-sm uppercase tracking-widest"
+          disabled={adding || !newCarrera.trim()}
+          className="bg-uide-blue text-white font-black py-3 px-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-uide-blue/10 flex items-center justify-center gap-2 text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <FaPlus />
-          <span className="hidden sm:inline">Agregar</span>
+          {adding ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+          ) : (
+            <FaPlus />
+          )}
+          <span className="hidden sm:inline">{adding ? 'Creando...' : 'Agregar'}</span>
         </button>
       </div>
 
