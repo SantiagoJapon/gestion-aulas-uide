@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, ReactNode } from 'react';
-import { authService, User } from '../services/api';
+import { authService, estudianteService, User } from '../services/api';
 
 interface RegisterData {
   nombre: string;
@@ -16,6 +16,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  loginEstudiante: (cedula: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (user: User) => void;
@@ -94,6 +95,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const loginEstudiante = async (cedula: string) => {
+    try {
+      const response = await estudianteService.loginByCedula(cedula);
+      setToken(response.token);
+      setUser(response.usuario);
+      sessionStorage.setItem('token', response.token);
+      sessionStorage.setItem('user', JSON.stringify(response.usuario));
+    } catch (error: any) {
+      if (error.response) {
+        const errorWithResponse = new Error(error.response?.data?.mensaje || 'Estudiante no encontrado');
+        (errorWithResponse as any).response = error.response;
+        throw errorWithResponse;
+      } else {
+        throw new Error('No se pudo conectar con el servidor. Verifica tu conexión.');
+      }
+    }
+  };
+
   const register = async (data: RegisterData) => {
     try {
       const response = await authService.register(data);
@@ -140,6 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         token,
         loading,
         login,
+        loginEstudiante,
         register,
         logout,
         updateUser,

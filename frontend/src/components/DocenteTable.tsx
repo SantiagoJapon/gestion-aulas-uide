@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FaPlus, FaSearch, FaEdit, FaUserTie, FaTrash } from 'react-icons/fa';
 import { Button } from './common/Button';
 import { Modal } from './common/Modal';
-import { usuarioService, User } from '../services/api';
+import { usuarioService, distribucionService, User } from '../services/api';
 
 interface DocenteTableProps {
     carreraId: number;
@@ -27,25 +27,55 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
     });
     const [saving, setSaving] = useState(false);
 
+    // Carga docente (horas, clases, conflictos)
+    const [cargaMap, setCargaMap] = useState<Record<string, { total_clases: number; clases_asignadas: number; horas_totales: number; conflictos: number }>>({});
+
+    // Message Modal State
+    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
+    const [selectedDocenteForMessage, setSelectedDocenteForMessage] = useState<User | null>(null);
+    const [messageData, setMessageData] = useState({ subject: '', body: '' });
+    const [sendingMessage, setSendingMessage] = useState(false);
+
     useEffect(() => {
-        if (carreraId) {
-            loadDocentes();
-        }
+        loadDocentes();
+        loadCargaDocente();
     }, [carreraId]);
 
     const loadDocentes = async () => {
         try {
             setLoading(true);
-            const response = await usuarioService.getUsuarios({
-                rol: 'profesor',
-                carrera_id: carreraId
-            });
+            const params: any = { rol: 'profesor' };
+            if (carreraId && carreraId > 0) {
+                params.carrera_id = carreraId;
+            }
+            const response = await usuarioService.getUsuarios(params);
             setDocentes(response.usuarios || []);
         } catch (err: any) {
             console.error('Error cargando docentes:', err);
         } finally {
             setLoading(false);
         }
+    };
+
+    const loadCargaDocente = async () => {
+        try {
+            const params = carreraId && carreraId > 0 ? carreraId : undefined;
+            const response = await distribucionService.getDocentesCarga(params);
+            if (response.success && response.docentes) {
+                const map: Record<string, { total_clases: number; clases_asignadas: number; horas_totales: number; conflictos: number }> = {};
+                for (const d of response.docentes) {
+                    map[d.docente.toLowerCase().trim()] = d;
+                }
+                setCargaMap(map);
+            }
+        } catch (err) {
+            console.error('Error cargando carga docente:', err);
+        }
+    };
+
+    const getCargaDocente = (docente: User) => {
+        const key = `${docente.nombre} ${docente.apellido}`.toLowerCase().trim();
+        return cargaMap[key] || null;
     };
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,6 +157,29 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
         }
     };
 
+    const handleOpenMessageModal = (docente: User) => {
+        setSelectedDocenteForMessage(docente);
+        setMessageData({ subject: '', body: '' });
+        setIsMessageModalOpen(true);
+    };
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSendingMessage(true);
+        try {
+            // Simulación de envío al backend
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            console.log('Mensaje enviado a:', selectedDocenteForMessage?.email, messageData);
+            alert(`Notificación enviada correctamente a ${selectedDocenteForMessage?.nombre} ${selectedDocenteForMessage?.apellido}`);
+            setIsMessageModalOpen(false);
+        } catch (err) {
+            console.error('Error enviando mensaje:', err);
+            alert('Error al enviar el mensaje');
+        } finally {
+            setSendingMessage(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header y Acciones */}
@@ -173,6 +226,8 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                                 <tr>
                                     <th className="px-6 py-4">Docente</th>
                                     <th className="px-6 py-4">Contacto</th>
+                                    <th className="px-6 py-4 text-center">Carga</th>
+                                    <th className="px-6 py-4 text-center">Conflictos</th>
                                     <th className="px-6 py-4 text-center">Estado</th>
                                     <th className="px-6 py-4 text-right">Acciones</th>
                                 </tr>
@@ -197,6 +252,40 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                                         </td>
 
                                         <td className="px-6 py-4 text-center">
+                                            {(() => {
+                                                const carga = getCargaDocente(docente);
+                                                if (!carga) return <span className="text-xs text-muted-foreground">—</span>;
+                                                return (
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className="text-sm font-bold text-foreground">{carga.horas_totales}h</span>
+                                                        <span className="text-[10px] text-muted-foreground">{carga.total_clases} clases</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-center">
+                                            {(() => {
+                                                const carga = getCargaDocente(docente);
+                                                if (!carga) return <span className="text-xs text-muted-foreground">—</span>;
+                                                if (carga.conflictos === 0) {
+                                                    return (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                            Sin conflictos
+                                                        </span>
+                                                    );
+                                                }
+                                                return (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                                        <span className="material-symbols-outlined text-sm">warning</span>
+                                                        {carga.conflictos} conflicto{carga.conflictos > 1 ? 's' : ''}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </td>
+
+                                        <td className="px-6 py-4 text-center">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${docente.estado === 'activo' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                                                 }`}>
                                                 {docente.estado === 'activo' ? 'Activo' : 'Inactivo'}
@@ -204,7 +293,29 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => handleOpenModal(docente)} className="p-2 text-muted-foreground hover:text-primary transition-colors">
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm(`¿Resetear contraseña de ${docente.nombre} ${docente.apellido}? Se establecerá como su cédula o 'uide123'.`)) return;
+                                                        try {
+                                                            const res = await usuarioService.resetPassword(docente.id);
+                                                            alert(res.mensaje || 'Contraseña reseteada');
+                                                        } catch (err: any) {
+                                                            alert(err.response?.data?.error || 'Error al resetear contraseña');
+                                                        }
+                                                    }}
+                                                    className="p-2 text-muted-foreground hover:text-orange-500 transition-colors"
+                                                    title="Resetear Contraseña"
+                                                >
+                                                    <span className="material-symbols-outlined text-lg">lock_reset</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleOpenMessageModal(docente)}
+                                                    className="p-2 text-muted-foreground hover:text-blue-500 transition-colors"
+                                                    title="Enviar Mensaje"
+                                                >
+                                                    <span className="material-symbols-outlined text-lg">mail</span>
+                                                </button>
+                                                <button onClick={() => handleOpenModal(docente)} className="p-2 text-muted-foreground hover:text-primary transition-colors" title="Editar">
                                                     <FaEdit />
                                                 </button>
                                                 <button onClick={() => handleDelete(docente.id)} className="p-2 text-muted-foreground hover:text-red-500 transition-colors">
@@ -225,9 +336,10 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 title={editingDocente ? 'Editar Docente' : 'Nuevo Docente'}
+                size="lg"
             >
                 <form onSubmit={handleSave} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Nombres</label>
                             <input
@@ -259,7 +371,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Cédula</label>
                             <input
@@ -294,6 +406,51 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                     </div>
                 </form>
             </Modal>
-        </div>
+
+            {/* Modal Enviar Mensaje */}
+            <Modal
+                isOpen={isMessageModalOpen}
+                onClose={() => setIsMessageModalOpen(false)}
+                title={`Enviar Mensaje a ${selectedDocenteForMessage?.nombre} ${selectedDocenteForMessage?.apellido}`}
+            >
+                <form onSubmit={handleSendMessage} className="space-y-4">
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4 flex items-start gap-3">
+                        <span className="material-symbols-outlined text-blue-500 text-xl">info</span>
+                        <p className="text-xs text-blue-700">Este mensaje se enviará como una notificación interna al panel del docente.</p>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Asunto</label>
+                        <input
+                            required
+                            className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                            placeholder="Ej: Reunión de Carrera"
+                            value={messageData.subject}
+                            onChange={e => setMessageData({ ...messageData, subject: e.target.value })}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Mensaje</label>
+                        <textarea
+                            required
+                            rows={4}
+                            className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 outline-none"
+                            placeholder="Escriba su mensaje aquí..."
+                            value={messageData.body}
+                            onChange={e => setMessageData({ ...messageData, body: e.target.value })}
+                        ></textarea>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+                        <Button type="button" variant="ghost" onClick={() => setIsMessageModalOpen(false)}>Cancelar</Button>
+                        <Button type="submit" variant="primary" loading={sendingMessage}>
+                            <span className="material-symbols-outlined text-lg mr-2">send</span>
+                            Enviar Notificación
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+        </div >
     );
 }

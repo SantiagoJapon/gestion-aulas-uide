@@ -1,172 +1,488 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
-import MapaCalor from '../components/MapaCalor';
-import { Button } from '../components/common/Button';
-import { Modal } from '../components/common/Modal';
-import AppearanceSettings from '../components/AppearanceSettings';
+import { distribucionService, reservaService, notificacionService, Notificacion } from '../services/api';
+import UserSettings from '../components/UserSettings';
 
-// --- Sub-componentes internos para el Dashboard Estudiante ---
+// --- Utility Functions ---
 
-const BuscadorAulas = () => {
-  const [selectedDay, setSelectedDay] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
+const getNomalizedDay = () => {
+  const days = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+  const today = new Date().getDay();
+  return days[today];
+};
 
-  const handleSearch = async () => {
-    setIsSearching(true);
-    // Simulación de búsqueda
-    await new Promise(r => setTimeout(r, 800));
-    setResults([
-      { id: 1, aula: 'Sala Estudio 1', edificio: 'Edi A', capacidad: 10, disponible: true },
-      { id: 2, aula: 'Sala Estudio 2', edificio: 'Edi B', capacidad: 8, disponible: true },
-    ]);
-    setIsSearching(false);
+const getStatusClass = (start: string, end: string) => {
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  if (currentMins >= startMins && currentMins < endMins) return 'actual';
+  if (currentMins < startMins) return 'futura';
+  return 'pasada';
+};
+
+// --- Widgets ---
+
+const TimelineClases = ({ clases }: { clases: any[] }) => {
+  if (clases.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
+        <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">event_available</span>
+        <p className="text-sm font-bold text-slate-500">No tienes clases programadas para hoy.</p>
+        <p className="text-xs text-slate-400 mt-1">¡Aprovecha para estudiar o descansar!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800">
+      {clases.map((c, i) => {
+        const estado = getStatusClass(c.hora_inicio, c.hora_fin);
+        return (
+          <div key={i} className="relative pl-10 group">
+            <div className={`absolute left-0 size-8 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-950 z-10 transition-colors ${estado === 'actual' ? 'bg-uide-blue text-white shadow-lg shadow-uide-blue/30 scale-110' :
+              estado === 'futura' ? 'bg-slate-100 text-slate-400 dark:bg-slate-800' :
+                'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30'
+              }`}>
+              <span className="material-symbols-outlined text-sm font-bold">
+                {estado === 'actual' ? 'play_arrow' : estado === 'pasada' ? 'check' : 'schedule'}
+              </span>
+            </div>
+
+            <div className={`p-4 rounded-2xl border transition-all duration-300 ${estado === 'actual'
+              ? 'bg-uide-blue text-white shadow-xl shadow-uide-blue/20 border-uide-blue transform scale-[1.02]'
+              : 'bg-card hover:bg-slate-50 dark:hover:bg-slate-800/50 border-border opacity-90 hover:opacity-100'
+              }`}>
+              <div className="flex justify-between items-start mb-1">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${estado === 'actual' ? 'text-white/80' : 'text-muted-foreground'}`}>
+                  {c.hora_inicio} - {c.hora_fin}
+                </span>
+                {estado === 'actual' && (
+                  <span className="bg-white/20 px-2 py-0.5 rounded text-[9px] font-bold uppercase animate-pulse">En Curso</span>
+                )}
+              </div>
+              <h4 className={`text-base font-black uppercase tracking-tight mb-2 ${estado === 'actual' ? 'text-white' : 'text-foreground'}`}>
+                {c.materia}
+              </h4>
+              <div className="flex items-center gap-4 text-xs">
+                <div className={`flex items-center gap-1.5 ${estado === 'actual' ? 'text-white/90' : 'text-muted-foreground'}`}>
+                  <span className="material-symbols-outlined text-base">room</span>
+                  <span className="font-bold">{c.aula || 'Sin Aula'}</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${estado === 'actual' ? 'text-white/90' : 'text-muted-foreground'}`}>
+                  <span className="material-symbols-outlined text-base">person</span>
+                  <span className="font-medium truncate max-w-[120px]">{c.docente || 'Docente'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const ReservaEspaciosWidget = () => {
+  const [loading, setLoading] = useState(false);
+  const [tipoEspacio, setTipoEspacio] = useState('CUBICULO'); // Ajustado a valores reales de BD si es posible, o mapear
+  const [horaInicio, setHoraInicio] = useState('10:00');
+  const [duracion, setDuracion] = useState('1'); // Horas
+
+  const handleReserva = async () => {
+    setLoading(true);
+    try {
+      const today = new Date();
+      const diaSemana = getNomalizedDay(); // LUNES, MARTES...
+      const fecha = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      const [h, m] = horaInicio.split(':').map(Number);
+      const dur = parseInt(duracion);
+      const hFin = h + dur;
+      const horaFin = `${String(hFin).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+      // 1. Buscar disponibilidad
+      // Nota: getDisponibilidadAulas retorna aulas libres. Filtramos por tipo si la API lo soporta o en cliente.
+      // La API actual getDisponibilidadAulas recibe { dia, hora_inicio, hora_fin }
+      const resDisp = await distribucionService.getDisponibilidadAulas({
+        dia: diaSemana,
+        hora_inicio: horaInicio,
+        hora_fin: horaFin
+      });
+
+      if (!resDisp || !resDisp.rooms || resDisp.rooms.length === 0) {
+        alert("No hay espacios disponibles en ese horario.");
+        return;
+      }
+
+      // Filtrar por tipo (si la API devolviera el tipo, pero getAvailableRooms en bot retorna nombre/capacidad/codigo)
+      // Asumiremos que cualquier aula libre sirve si es 'LABORATORIO', o si es 'CUBICULO' (que quizás son 'SALA_ESTUDIO').
+      // Por ahora tomamos la primera disponible para probar el flujo.
+      const aula = resDisp.rooms[0];
+
+      // 2. Crear reserva
+      const resReserva = await reservaService.crear({
+        aula_codigo: aula.codigo,
+        dia: diaSemana,
+        fecha: fecha,
+        hora_inicio: horaInicio,
+        hora_fin: horaFin,
+        motivo: `Reserva rápida de ${tipoEspacio}`
+      });
+
+      if (resReserva.success || resReserva.reserva) {
+        alert(`¡Reserva exitosa! Espacio: ${aula.nombre} (${aula.codigo})`);
+      } else {
+        alert("No se pudo completar la reserva.");
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("Ocurrió un error al intentar reservar.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <select
-          value={selectedDay}
-          onChange={e => setSelectedDay(e.target.value)}
-          className="bg-muted border border-border rounded-xl px-3 py-2 text-xs font-bold"
-        >
-          <option value="">Día</option>
-          <option value="Lunes">Lunes</option>
-          <option value="Martes">Martes</option>
-        </select>
-        <select
-          value={selectedTime}
-          onChange={e => setSelectedTime(e.target.value)}
-          className="bg-muted border border-border rounded-xl px-3 py-2 text-xs font-bold"
-        >
-          <option value="">Hora</option>
-          <option value="08:00">08:00</option>
-          <option value="10:00">10:00</option>
-        </select>
-      </div>
-      <Button variant="primary" fullWidth size="sm" onClick={handleSearch} loading={isSearching}>
-        Buscar Aulas Libres
-      </Button>
-      {results.length > 0 && (
-        <div className="space-y-2 mt-4">
-          {results.map(r => (
-            <div key={r.id} className="p-3 bg-muted/50 rounded-xl border border-border flex items-center justify-between">
-              <div>
-                <p className="text-xs font-black text-foreground uppercase">{r.aula}</p>
-                <p className="text-[10px] text-muted-foreground font-bold">{r.edificio} • {r.capacidad} pers.</p>
-              </div>
-              <button className="text-primary text-[10px] font-black uppercase hover:underline">Reservar</button>
-            </div>
-          ))}
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-4 rounded-xl flex items-start gap-3">
+        <span className="material-symbols-outlined text-amber-600 dark:text-amber-500">bookmark</span>
+        <div className="space-y-1">
+          <p className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Reserva Rápida</p>
+          <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-snug">
+            Asegura un espacio para HOY.
+          </p>
         </div>
-      )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Tipo de Espacio</label>
+          <select
+            value={tipoEspacio}
+            onChange={(e) => setTipoEspacio(e.target.value)}
+            className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+          >
+            <option value="AULA">Aula de Estudio</option>
+            <option value="LABORATORIO">Laboratorio</option>
+            <option value="AUDITORIO">Auditorio</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Horario Inicio</label>
+            <select
+              value={horaInicio}
+              onChange={(e) => setHoraInicio(e.target.value)}
+              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+            >
+              <option value="07:00">07:00</option>
+              <option value="08:00">08:00</option>
+              <option value="09:00">09:00</option>
+              <option value="10:00">10:00</option>
+              <option value="11:00">11:00</option>
+              <option value="12:00">12:00</option>
+              <option value="13:00">13:00</option>
+              <option value="14:00">14:00</option>
+              <option value="15:00">15:00</option>
+              <option value="16:00">16:00</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Duración</label>
+            <select
+              value={duracion}
+              onChange={(e) => setDuracion(e.target.value)}
+              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+            >
+              <option value="1">1 Hora</option>
+              <option value="2">2 Horas</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={handleReserva}
+        disabled={loading}
+        className="w-full py-3 bg-uide-blue text-white hover:bg-uide-blue/90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-uide-blue/20 active:scale-95 flex items-center justify-center gap-2"
+      >
+        {loading ? (
+          <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        ) : (
+          <>
+            <span className="material-symbols-outlined text-sm">event_seat</span>
+            Reservar Ahora
+          </>
+        )}
+      </button>
     </div>
   );
 };
 
-const TimelineHoy = () => {
-  const clases = [
-    { hora: '08:00', materia: 'Derecho Constitucional', aula: 'A-301', estado: 'pasada' },
-    { hora: '10:00', materia: 'Derecho Civil I', aula: 'B-205', estado: 'actual' },
-    { hora: '14:00', materia: 'Introducción al Derecho', aula: 'A-102', estado: 'futura' },
-  ];
+const AvisosWidget = () => {
+  const [avisos, setAvisos] = useState<Notificacion[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNotificaciones = async () => {
+      try {
+        const res = await notificacionService.misNotificaciones();
+        if (res.success && res.notificaciones) {
+          setAvisos(res.notificaciones);
+        }
+      } catch (error) {
+        console.error("Error cargando notificaciones", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNotificaciones();
+  }, []);
+
+  if (loading) return <div className="text-center py-6 text-xs text-muted-foreground">Cargando avisos...</div>;
+
+  if (avisos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center opacity-60">
+        <span className="material-symbols-outlined text-3xl mb-1 text-slate-300">notifications_off</span>
+        <p className="text-xs text-slate-500">No tienes notificaciones nuevas.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-muted">
-      {clases.map((c, i) => (
-        <div key={i} className="relative pl-10">
-          <div className={`absolute left-0 size-8 rounded-full flex items-center justify-center border-4 border-background z-10 ${c.estado === 'actual' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-            }`}>
-            <span className="material-symbols-outlined text-sm font-bold">
-              {c.estado === 'actual' ? 'play_arrow' : 'schedule'}
-            </span>
-          </div>
-          <div className={`${c.estado === 'actual' ? 'bg-primary/5 border-primary/20' : 'bg-transparent border-transparent'} border p-3 rounded-2xl transition-all`}>
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{c.hora}</p>
-            <h4 className="text-sm font-black text-foreground uppercase tracking-tight">{c.materia}</h4>
-            <div className="flex items-center gap-1 mt-1">
-              <span className="material-symbols-outlined text-xs text-primary">room</span>
-              <span className="text-[10px] font-bold text-muted-foreground">{c.aula}</span>
+    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      {avisos.map(aviso => {
+        const esUrgente = aviso.prioridad === 'ALTA';
+        // Icono y color según tipo
+        let icon = 'info';
+        let colorClass = 'bg-slate-100 text-slate-600';
+
+        switch (aviso.tipo) {
+          case 'CLASE':
+            icon = 'school';
+            colorClass = 'bg-indigo-100 text-indigo-600';
+            break;
+          case 'CARRERA':
+          case 'DIRECTOR' as any: // Mapeo si hubiese tipo DIRECTOR legacy
+            icon = 'campaign';
+            colorClass = 'bg-amber-100 text-amber-600';
+            break;
+          case 'GLOBAL':
+            icon = 'public';
+            colorClass = 'bg-blue-100 text-blue-600';
+            break;
+          case 'SISTEMA':
+            icon = 'settings';
+            colorClass = 'bg-gray-100 text-gray-600';
+            break;
+          case 'DIRECTA':
+            icon = 'mail';
+            colorClass = 'bg-emerald-100 text-emerald-600';
+            break;
+        }
+
+        // Formatear hora relativa (simple)
+        const fecha = new Date(aviso.created_at);
+        const ahora = new Date();
+        const diffHrs = Math.floor((ahora.getTime() - fecha.getTime()) / (1000 * 60 * 60));
+        let tiempo = '';
+        if (diffHrs < 1) tiempo = 'Hace un momento';
+        else if (diffHrs < 24) tiempo = `Hace ${diffHrs} horas`;
+        else tiempo = fecha.toLocaleDateString();
+
+        const remitente = aviso.remitenteInfo
+          ? `${aviso.remitenteInfo.nombre} ${aviso.remitenteInfo.apellido} (${aviso.remitenteInfo.rol})`
+          : 'Sistema';
+
+        return (
+          <div key={aviso.id} className={`p-4 rounded-xl border flex gap-3 items-start ${esUrgente ? 'bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/50' : 'bg-card border-border'}`}>
+            <div className={`size-8 rounded-full flex items-center justify-center shrink-0 ${colorClass}`}>
+              <span className="material-symbols-outlined text-sm">{icon}</span>
+            </div>
+            <div className="w-full">
+              <div className="flex justify-between items-start w-full">
+                <h5 className="text-xs font-black text-foreground uppercase truncate max-w-[150px]">{remitente}</h5>
+                <span className="text-[9px] text-muted-foreground font-medium shrink-0 ml-2">{tiempo}</span>
+              </div>
+              <h6 className="text-xs font-bold mt-1 text-foreground/90">{aviso.titulo}</h6>
+              <p className={`text-xs mt-0.5 leading-relaxed ${esUrgente ? 'text-red-800 dark:text-red-300 font-medium' : 'text-muted-foreground'}`}>
+                {aviso.mensaje}
+              </p>
             </div>
           </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const HorarioView = ({ schedule }: { schedule: any[] }) => {
+  const hours = Array.from({ length: 14 }, (_, i) => i + 7); // 7am to 8pm
+  const days = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES'];
+
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="min-w-[800px] bg-card border border-border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-6 border-b border-border bg-muted/50">
+          <div className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground border-r border-border">Hora</div>
+          {days.map(d => (
+            <div key={d} className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground border-r border-border last:border-0">{d}</div>
+          ))}
         </div>
-      ))}
+        {hours.map(h => (
+          <div key={h} className="grid grid-cols-6 border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
+            <div className="p-3 text-center text-xs font-bold text-muted-foreground border-r border-border flex items-center justify-center">
+              {h}:00
+            </div>
+            {days.map(d => {
+              // Find class for this day and hour
+              const clase = schedule.find(c => {
+                // Normalizar día de API
+                const apiDia = c.dia.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const diaActual = d.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                // Chequear hora inicia
+                const [startH] = c.hora_inicio.split(':').map(Number);
+                return apiDia === diaActual && startH === h;
+              });
+
+              return (
+                <div key={`${d}-${h}`} className="p-1 border-r border-border last:border-0 min-h-[80px] relative">
+                  {clase && (
+                    <div className="absolute inset-1 bg-primary/10 border border-primary/20 rounded-lg p-2 flex flex-col justify-between hover:bg-primary/20 transition-colors cursor-pointer group">
+                      <span className="text-[9px] font-black uppercase text-primary leading-tight line-clamp-2">{clase.materia}</span>
+                      <div className="flex items-end justify-between">
+                        <span className="text-[9px] font-bold text-muted-foreground bg-white/50 dark:bg-black/20 px-1 rounded">{clase.aula || '?'}</span>
+                        <span className="material-symbols-outlined text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity">info</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
-};
+}
 
 export default function EstudianteDashboard() {
   const { user } = useContext(AuthContext);
-  const [activeTab, setActiveTab] = useState<'general' | 'horario' | 'reportes' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState('general');
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      try {
+        const res = await distribucionService.getMiDistribucion();
+        if (res.success && res.clases) {
+          setSchedule(res.clases);
+        }
+      } catch (error) {
+        console.error("Error al cargar horario:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSchedule();
+  }, []);
+
+  const todayName = getNomalizedDay();
+  const clasesHoy = schedule
+    .filter(c => c.dia.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === todayName)
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+
+  const nextClass = clasesHoy.find(c => getStatusClass(c.hora_inicio, c.hora_fin) !== 'pasada');
 
   const renderContent = () => {
     switch (activeTab) {
       case 'general':
         return (
-          <div className="space-y-6">
-            {/* Header Greeting */}
-            <div className="bg-primary rounded-3xl p-8 text-primary-foreground relative overflow-hidden shadow-2xl shadow-primary/20">
-              <div className="relative z-10">
-                <h2 className="text-3xl font-black tracking-tight mb-2">¡Hola, {user?.nombre}!</h2>
-                <p className="text-uide-blue-light/80 font-bold uppercase tracking-widest text-xs">Derecho • Segundo Nivel</p>
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                    <p className="text-[10px] font-black uppercase opacity-60">Tu próxima clase</p>
-                    <p className="text-sm font-black">10:00 - Derecho Civil I</p>
+          <div className="space-y-6 animate-fade-in">
+            {/* Header Card */}
+            <div className="bg-gradient-to-br from-uide-blue/90 to-uide-blue rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/20">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2 opacity-80">
+                    <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest">{user?.rol || 'ESTUDIANTE'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest">• Bienestar Universitario</span>
                   </div>
-                  <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                    <p className="text-[10px] font-black uppercase opacity-60">Lugar</p>
-                    <p className="text-sm font-black">Aula B-205</p>
-                  </div>
+                  <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-2">¡Hola, {user?.nombre?.split(' ')[0]}!</h2>
+                  <p className="text-sm font-medium text-white/80 max-w-lg leading-relaxed">
+                    Recuerda revisar tus notificaciones para cambios de aula recientes.
+                  </p>
                 </div>
+
+                {nextClass ? (
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl min-w-[200px] flex flex-col gap-1 shadow-lg">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Tu Siguiente Clase</span>
+                    <span className="text-xl font-black">{nextClass.hora_inicio}</span>
+                    <span className="text-sm font-bold truncate max-w-[180px]">{nextClass.materia}</span>
+                    <div className="flex items-center gap-1 mt-1 text-xs text-white/80">
+                      <span className="material-symbols-outlined text-sm">room</span>
+                      {nextClass.aula || 'Por asignar'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl min-w-[180px] flex flex-col justify-center items-center text-center gap-1 shadow-lg">
+                    <span className="material-symbols-outlined text-3xl mb-1">check_circle</span>
+                    <span className="text-xs font-bold">Sin más clases hoy</span>
+                  </div>
+                )}
               </div>
-              <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-9xl opacity-10 rotate-12 scale-150">school</span>
             </div>
 
             {/* Main Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column (Timeline) */}
               <div className="lg:col-span-2 space-y-6">
-                <DashboardWidget title="Clases de Hoy" subtitle="Línea de tiempo académica" icon="view_timeline">
-                  <TimelineHoy />
-                </DashboardWidget>
-                <DashboardWidget title="Buscador de Aulas" subtitle="Encuentra donde estudiar" icon="search_check">
-                  <BuscadorAulas />
-                </DashboardWidget>
-              </div>
-              <div className="space-y-6">
-                <DashboardWidget title="Mi Progreso" icon="donut_large">
-                  <div className="space-y-6 py-2">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground">
-                        <span>Créditos</span>
-                        <span>86 / 126</span>
-                      </div>
-                      <div className="h-3 bg-muted rounded-full overflow-hidden border border-border">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: '68%' }}></div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground">
-                        <span>Horas Académicas</span>
-                        <span>450 / 625</span>
-                      </div>
-                      <div className="h-3 bg-muted rounded-full overflow-hidden border border-border">
-                        <div className="h-full bg-primary rounded-full" style={{ width: '72%' }}></div>
-                      </div>
-                    </div>
-                    <div className="p-4 bg-muted/50 rounded-2xl border border-dashed border-border text-center">
-                      <p className="text-[10px] font-black text-muted-foreground uppercase">Promedio General</p>
-                      <p className="text-2xl font-black text-foreground">8.9</p>
-                    </div>
-                  </div>
+                {/* Avisos Importantes */}
+                <DashboardWidget
+                  title="Notificaciones y Avisos"
+                  subtitle="Mensajes de Docentes y Cambios"
+                  icon="notifications_active"
+                  iconColor="text-red-500"
+                >
+                  <AvisosWidget />
                 </DashboardWidget>
 
-                <DashboardWidget title="Mapa de Calor" icon="hub">
-                  <MapaCalor />
+                {/* Widget Timeline */}
+                <DashboardWidget
+                  title="Tu Jornada"
+                  subtitle="Clases de Hoy"
+                  icon="timeline"
+                  iconColor="text-uide-blue"
+                >
+                  {loading ? (
+                    <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
+                  ) : (
+                    <TimelineClases clases={clasesHoy} />
+                  )}
+                </DashboardWidget>
+              </div>
+
+              {/* Right Column (Widgets) */}
+              <div className="space-y-6">
+                <DashboardWidget
+                  title="Reserva de Espacios"
+                  subtitle="Biblioteca y Aulas"
+                  icon="bookmark_add"
+                  iconColor="text-uide-gold"
+                >
+                  <ReservaEspaciosWidget />
                 </DashboardWidget>
               </div>
             </div>
@@ -176,36 +492,35 @@ export default function EstudianteDashboard() {
       case 'horario':
         return (
           <div className="space-y-6 animate-fade-in">
-            <DashboardWidget title="Mi Horario Oficial" icon="calendar_month">
-              <div className="p-12 text-center">
-                <span className="material-symbols-outlined text-6xl text-slate-200">event_note</span>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mt-4">Cargando horario completo...</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-foreground">Mi Horario</h2>
+                <p className="text-sm text-muted-foreground">Vista semanal de tus materias asignadas.</p>
               </div>
+              <button
+                onClick={() => alert("Generando PDF...")}
+                className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold hover:bg-muted transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                Descargar
+              </button>
+            </div>
+
+            <DashboardWidget noPadding>
+              {loading ? (
+                <div className="p-12 text-center text-muted-foreground">Cargando horario completo...</div>
+              ) : (
+                <HorarioView schedule={schedule} />
+              )}
             </DashboardWidget>
           </div>
         );
 
       case 'settings':
-        return (
-          <div className="max-w-2xl mx-auto py-8 space-y-8 animate-fade-in">
-            <DashboardWidget title="Perfil Estudiantil" icon="account_circle">
-              <div className="flex items-center gap-4 bg-muted/50 p-6 rounded-3xl border border-border">
-                <div className="size-20 bg-background rounded-2xl border border-border flex items-center justify-center font-black text-2xl text-foreground shadow-sm">
-                  {user?.nombre?.[0]}{user?.apellido?.[0]}
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{user?.nombre} {user?.apellido}</h3>
-                  <p className="text-sm font-bold text-muted-foreground">{user?.email}</p>
-                  <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">Estudiante Regular</p>
-                </div>
-              </div>
-            </DashboardWidget>
-
-            <AppearanceSettings />
-          </div>
-        );
+        return <UserSettings />;
 
       default:
+        setActiveTab('general');
         return null;
     }
   };
@@ -214,8 +529,7 @@ export default function EstudianteDashboard() {
     <DashboardLayout
       activeTab={activeTab}
       setActiveTab={setActiveTab}
-      title="Estudiante"
-      subtitle="Portal Alumno"
+      title="Portal Alumno"
     >
       {renderContent()}
     </DashboardLayout>

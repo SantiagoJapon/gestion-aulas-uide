@@ -11,256 +11,120 @@ class N8nService {
    */
   static async processPlanificacion(planificacionData) {
     try {
-      console.log('📤 Enviando planificación a n8n...');
+      console.log('📤 Enviando planificación a n8n Maestro (subir_planificacion)...');
 
       const response = await axios.post(
-        `${N8N_WEBHOOK_URL}/procesar-planificacion`,
+        `${N8N_WEBHOOK_URL}/maestro`,
         {
-          planificacion_id: planificacionData.id,
+          accion: 'subir_planificacion',
           carrera_id: planificacionData.carrera_id,
           periodo: planificacionData.periodo,
           archivo_url: planificacionData.archivo_url,
-          datos: planificacionData.datos_procesados,
+          archivo_base64: planificacionData.archivo_base64, // Soporte para base64
+          nombre_archivo: planificacionData.nombre_archivo,
           timestamp: new Date().toISOString(),
         },
         {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 60000, // 60 segundos para procesamiento
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 90000,
         }
       );
 
-      console.log('✅ n8n respondió exitosamente');
-      return {
-        success: true,
-        data: response.data,
-      };
+      console.log('✅ n8n (Planificación) respondió exitosamente');
+      return response.data;
     } catch (error) {
-      console.error('❌ Error al enviar a n8n:', error.message);
-
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error(
-          'n8n no está DISPONIBLE. Verifica que esté corriendo.'
-        );
-      }
-
-      if (error.response) {
-        throw new Error(
-          `n8n error: ${error.response.status} - ${JSON.stringify(
-            error.response.data
-          )}`
-        );
-      }
-
-      throw new Error('Error al comunicarse con n8n');
+      console.error('❌ Error al enviar planificación a n8n:', error.message);
+      throw error;
     }
   }
 
   /**
-   * Solicitar asignación automática de aulas
-   * @param {Object} data - Materias y restricciones
+   * Enviar alumnos a n8n para procesamiento con IA
+   * @param {string} archivoBase64 - Excel en base64
    * @returns {Promise<Object>}
    */
-  static async asignarAulas(data) {
+  static async subirEstudiantes(archivoBase64) {
     try {
-      console.log('🤖 Solicitando asignación automática de aulas...');
-
+      console.log('📤 Enviando estudiantes a n8n Maestro (subir_estudiantes)...');
       const response = await axios.post(
-        `${N8N_WEBHOOK_URL}/asignar-aulas`,
+        `${N8N_WEBHOOK_URL}/maestro`,
         {
-          materias: data.materias,
-          aulas_disponibles: data.aulas_disponibles,
-          restricciones: data.restricciones,
-          periodo: data.periodo,
-          carrera_id: data.carrera_id,
+          accion: 'subir_estudiantes',
+          archivo_base64: archivoBase64,
           timestamp: new Date().toISOString(),
         },
         {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000, // 2 minutos para asignación compleja
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 120000,
         }
       );
-
-      console.log('✅ Asignación completada');
-      return {
-        success: true,
-        asignaciones: response.data.asignaciones,
-        conflictos: response.data.conflictos || [],
-        metricas: response.data.metricas,
-      };
+      return response.data;
     } catch (error) {
-      console.error('❌ Error en asignación automática:', error.message);
-      throw new Error('Error al asignar aulas con IA');
+      console.error('❌ Error enviando estudiantes a n8n:', error.message);
+      throw error;
     }
   }
 
   /**
-   * Extraer datos de archivo Excel con IA
-   * @param {String} fileContent - Contenido del archivo
-   * @returns {Promise<Object>}
-   */
-  static async extractDataFromFile(fileContent) {
-    try {
-      console.log('🔍 Extrayendo datos con IA...');
-
-      const response = await axios.post(
-        `${N8N_WEBHOOK_URL}/extraer-datos-excel`,
-        {
-          content: fileContent,
-          timestamp: new Date().toISOString(),
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 90000, // 90 segundos para extracción
-        }
-      );
-
-      console.log('✅ Datos extraídos exitosamente');
-      return {
-        success: true,
-        materias: response.data.materias,
-        metadata: response.data.metadata,
-      };
-    } catch (error) {
-      console.error('❌ Error al extraer datos:', error.message);
-      throw new Error('Error al extraer datos del archivo');
-    }
-  }
-
-  /**
-   * Verificar salud de n8n
-   * @returns {Promise<Boolean>}
-   */
-  static async healthCheck() {
-    try {
-      // Intentar hacer ping a n8n (/healthz)
-      const baseUrl = N8N_WEBHOOK_URL.replace('/webhook', '');
-      const response = await axios.get(`${baseUrl}/healthz`, {
-        timeout: 5000,
-      });
-
-      return response.status === 200;
-    } catch (error) {
-      // Si el endpoint /healthz no existe, intentar con webhook base
-      try {
-        await axios.get(N8N_WEBHOOK_URL, { timeout: 5000 });
-        return true;
-      } catch (err) {
-        console.error('n8n health check failed:', err.message);
-        return false;
-      }
-    }
-  }
-
-  /**
-   * Obtener estado de un workflow
-   * @param {String} executionId - ID de ejecución
-   * @returns {Promise<Object>}
-   */
-  static async getWorkflowStatus(executionId) {
-    try {
-      const response = await axios.get(
-        `${N8N_WEBHOOK_URL}/status/${executionId}`,
-        { timeout: 5000 }
-      );
-
-      return {
-        success: true,
-        status: response.data.status,
-        progress: response.data.progress,
-        result: response.data.result,
-      };
-    } catch (error) {
-      console.error(
-        'Error al obtener estado del workflow:',
-        error.message
-      );
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Notificar a n8n sobre un evento
-   * @param {String} event - Tipo de evento
-   * @param {Object} data - Datos del evento
-   */
-  static async notifyEvent(event, data) {
-    try {
-      await axios.post(
-        `${N8N_WEBHOOK_URL}/eventos`,
-        {
-          event,
-          data,
-          timestamp: new Date().toISOString(),
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 5000,
-        }
-      );
-
-      console.log(`📢 Evento '${event}' enviado a n8n`);
-    } catch (error) {
-      // No lanzar error, solo loguear
-      console.warn(
-        `⚠️ No se pudo notificar evento a n8n: ${error.message}`
-      );
-    }
-  }
-
-  /**
-   * Obtener estado de distribución desde n8n
+   * Obtener estado de distribución desde el Maestro de n8n
    * @returns {Promise<Object>}
    */
   static async getDistribucionEstado() {
     try {
-      const response = await axios.get(
-        `${N8N_WEBHOOK_URL}/admin/estado-distribucion`,
+      const response = await axios.post(
+        `${N8N_WEBHOOK_URL}/maestro`,
+        { accion: 'obtener_estado' },
         { timeout: 10000 }
       );
       return response.data;
     } catch (error) {
-      console.error('Error al obtener estado de distribución:', error.message);
+      console.error('Error al obtener estado desde n8n Maestro:', error.message);
       throw new Error('No se pudo obtener el estado de distribución');
     }
   }
 
   /**
-   * Ejecutar distribución de aulas via n8n (webhook maestro)
+   * Ejecutar distribución de aulas via n8n (Maestro)
    * @returns {Promise<Object>}
    */
-  static async ejecutarDistribucion() {
+  static async ejecutarDistribucion(carreraId = null) {
     try {
-      console.log('📤 Enviando acción distribuir_aulas a n8n...');
+      console.log(`📤 Enviando acción distribuir_aulas a n8n... ${carreraId ? `(Carrera: ${carreraId})` : ''}`);
       const response = await axios.post(
         `${N8N_WEBHOOK_URL}/maestro`,
-        { accion: 'distribuir_aulas' },
+        {
+          accion: 'distribuir_aulas',
+          carrera_id: carreraId
+        },
         {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 120000 // 2 minutos para distribución compleja
+          timeout: 180000 // 3 minutos para distribución compleja
         }
       );
       console.log('✅ n8n completó la distribución');
       return response.data;
     } catch (error) {
       console.error('❌ Error al ejecutar distribución en n8n:', error.message);
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error('n8n no está disponible. Verifica que esté corriendo.');
-      }
-      throw new Error(`Error en distribución n8n: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Verificar salud de n8n
+   */
+  static async healthCheck() {
+    try {
+      const baseUrl = N8N_WEBHOOK_URL.split('/webhook')[0];
+      const response = await axios.get(`${baseUrl}/healthz`, { timeout: 5000 });
+      return response.status === 200;
+    } catch (error) {
+      return false;
     }
   }
 }
+
+module.exports = N8nService;
+
 
 module.exports = N8nService;
 

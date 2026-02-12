@@ -1,6 +1,7 @@
 const { Estudiante, sequelize } = require('../models');
 const { QueryTypes, Op } = require('sequelize');
 const XLSX = require('xlsx');
+const { generarToken } = require('../utils/jwt');
 
 /**
  * @desc    Buscar estudiante por email institucional
@@ -87,17 +88,39 @@ const loginEstudianteByCedula = async (req, res) => {
     // TODO: Cuando exista la tabla estudiantes_materias, agregar consulta de materias
     const materias = [];
 
+    // Generar JWT para el estudiante
+    const token = generarToken({
+      id: estudiante.id,
+      email: estudiante.email || `est-${estudiante.cedula}@uide.edu.ec`,
+      rol: 'estudiante'
+    }, '8h');
+
+    const estudianteData = {
+      id: estudiante.id,
+      cedula: estudiante.cedula,
+      nombre: estudiante.nombre,
+      escuela: estudiante.escuela,
+      nivel: estudiante.nivel,
+      email: estudiante.email,
+      edad: estudiante.edad,
+      materias
+    };
+
     res.json({
       success: true,
-      estudiante: {
+      token,
+      estudiante: estudianteData,
+      // Compatible con el formato de login de usuarios
+      usuario: {
         id: estudiante.id,
-        cedula: estudiante.cedula,
         nombre: estudiante.nombre,
+        apellido: '',
+        email: estudiante.email || '',
+        rol: 'estudiante',
+        cedula: estudiante.cedula,
+        estado: 'activo',
         escuela: estudiante.escuela,
-        nivel: estudiante.nivel,
-        email: estudiante.email,
-        edad: estudiante.edad,
-        materias
+        nivel: estudiante.nivel
       }
     });
   } catch (error) {

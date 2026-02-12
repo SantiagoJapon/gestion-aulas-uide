@@ -10,7 +10,8 @@ const {
   obtenerMapaCalor,
   getClasesDistribucion,
   getMiDistribucion,
-  getReporteDistribucion
+  getReporteDistribucion,
+  getDocentesCarga
 } = require('../controllers/distribucionController');
 const { getDistribucionSimulada } = require('../controllers/distribucionController');
 const { getCuadroClases } = require('../controllers/distribucionController');
@@ -34,6 +35,9 @@ router.get('/mi-distribucion', verificarAuth, verificarRol('profesor', 'docente'
 
 // Reporte de distribución
 router.get('/reporte', verificarAuth, verificarRol('director', 'admin'), getReporteDistribucion);
+
+// Carga docente (horas, clases, conflictos por profesor)
+router.get('/docentes-carga', verificarAuth, verificarRol('director', 'admin'), getDocentesCarga);
 
 // Mantenimiento y Edición Manual
 const { updateClase, checkDisponibilidad } = require('../controllers/distribucionController');

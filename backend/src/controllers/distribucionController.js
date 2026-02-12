@@ -16,32 +16,22 @@ const handle500 = (res, error, context) => {
   });
 };
 
-// Función para corregir encoding UTF-8 mal codificado
-const fixEncoding = (value) => {
-  if (!value) return value;
-  return value
-    .replace(/Ã¡/g, 'á')
-    .replace(/Ã©/g, 'é')
-    .replace(/Ã­/g, 'í')
-    .replace(/Ã³/g, 'ó')
-    .replace(/Ãº/g, 'ú')
-    .replace(/Ã±/g, 'ñ')
-    .replace(/Ã/g, 'Á')
-    .replace(/Ã‰/g, 'É')
-    .replace(/Ã/g, 'Í')
-    .replace(/Ã"/g, 'Ó')
-    .replace(/Ãš/g, 'Ú')
-    .replace(/Ã'/g, 'Ñ')
-    .replace(/Â/g, '')
-    .replace(/Ã¼/g, 'ü')
-    .replace(/Ã/g, 'Ü')
-    .replace(/Â¿/g, '¿')
-    .replace(/Â¡/g, '¡');
-};
+const { fixEncoding } = require('../utils/encoding');
 
 const getEstadoDistribucion = async (req, res) => {
   try {
-    // Obtener estadísticas de distribución desde la base de datos
+    const { carrera_id } = req.query;
+    let whereClauseTotal = '';
+    let whereClauseCarreras = '';
+    const replacements = {};
+
+    if (carrera_id && !isNaN(carrera_id)) {
+      whereClauseTotal = 'WHERE c.carrera_id = :carrera_id';
+      whereClauseCarreras = 'WHERE ca.id = :carrera_id';
+      replacements.carrera_id = parseInt(carrera_id);
+    }
+
+    // Obtener estadísticas de distribución
     const stats = await sequelize.query(`
       SELECT 
         COUNT(DISTINCT c.id) as total_clases,
@@ -49,7 +39,11 @@ const getEstadoDistribucion = async (req, res) => {
         COUNT(DISTINCT c.carrera) as total_carreras
       FROM clases c
       LEFT JOIN distribucion d ON d.clase_id = c.id
-    `, { type: QueryTypes.SELECT });
+      ${whereClauseTotal}
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
 
     const statsRow = stats[0] || { total_clases: 0, clases_asignadas: 0, total_carreras: 0 };
     const clases_pendientes = (parseInt(statsRow.total_clases) || 0) - (parseInt(statsRow.clases_asignadas) || 0);
@@ -68,9 +62,13 @@ const getEstadoDistribucion = async (req, res) => {
       LEFT JOIN clases c ON c.carrera_id = ca.id
       LEFT JOIN distribucion d ON d.clase_id = c.id
       LEFT JOIN usuarios u ON u.carrera_director = ca.carrera AND u.rol = 'director'
+      ${whereClauseCarreras}
       GROUP BY ca.id, ca.carrera, u.nombre, u.email
       ORDER BY ca.carrera
-    `, { type: QueryTypes.SELECT });
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
 
     res.json({
       success: true,
@@ -558,6 +556,29 @@ const getMiDistribucion = async (req, res) => {
       type: QueryTypes.SELECT
     });
 
+    // Detectar conflictos en las clases obtenidas
+    const conflictos = new Set();
+    const clasesConAula = clases.filter(c => c.aula_asignada && c.dia && c.hora_inicio);
+
+    for (let i = 0; i < clasesConAula.length; i++) {
+      for (let j = i + 1; j < clasesConAula.length; j++) {
+        const a = clasesConAula[i];
+        const b = clasesConAula[j];
+
+        if (a.aula_asignada === b.aula_asignada && a.dia === b.dia) {
+          const inicioA = convertirHora(a.hora_inicio);
+          const finA = convertirHora(a.hora_fin);
+          const inicioB = convertirHora(b.hora_inicio);
+          const finB = convertirHora(b.hora_fin);
+
+          if (inicioA < finB && finA > inicioB) {
+            conflictos.add(a.id);
+            conflictos.add(b.id);
+          }
+        }
+      }
+    }
+
     const total = clases.length;
     const asignadas = clases.filter(c => c.aula_asignada).length;
 
@@ -568,13 +589,15 @@ const getMiDistribucion = async (req, res) => {
         total_clases: total,
         clases_asignadas: asignadas,
         clases_pendientes: total - asignadas,
+        conflictos: conflictos.size,
         porcentaje_completado: total > 0 ? Math.round((asignadas / total) * 100) : 0
       },
       clases: clases.map(c => ({
         ...c,
         materia: fixEncoding(c.materia),
         carrera: fixEncoding(c.carrera),
-        docente: fixEncoding(c.docente)
+        docente: fixEncoding(c.docente),
+        estado: !c.aula_asignada ? 'pendiente' : conflictos.has(c.id) ? 'conflicto' : 'asignada'
       }))
     });
   } catch (error) {
@@ -639,6 +662,86 @@ const getReporteDistribucion = async (req, res) => {
   }
 };
 
+// ============================================
+// CARGA DOCENTE: Estadísticas por profesor
+// ============================================
+const getDocentesCarga = async (req, res) => {
+  try {
+    const carreraId = req.query.carrera_id;
+    let whereClause = "WHERE c.docente IS NOT NULL AND TRIM(c.docente) <> ''";
+    const replacements = {};
+
+    if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
+      whereClause += ' AND LOWER(c.carrera) = LOWER(:carrera)';
+      replacements.carrera = req.usuario.carrera_director;
+    } else if (carreraId) {
+      if (!isNaN(carreraId)) {
+        whereClause += ' AND c.carrera_id = :carrera_id';
+        replacements.carrera_id = parseInt(carreraId);
+      } else {
+        whereClause += ' AND LOWER(c.carrera) = LOWER(:carrera)';
+        replacements.carrera = carreraId;
+      }
+    }
+
+    // Obtener clases agrupadas por docente
+    const carga = await sequelize.query(`
+      SELECT
+        c.docente,
+        COUNT(c.id) as total_clases,
+        COUNT(CASE WHEN c.aula_asignada IS NOT NULL AND TRIM(c.aula_asignada) <> '' THEN 1 END) as clases_asignadas,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN c.hora_inicio IS NOT NULL AND c.hora_fin IS NOT NULL THEN
+                (EXTRACT(HOUR FROM CAST(c.hora_fin AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(c.hora_fin AS TIME))) -
+                (EXTRACT(HOUR FROM CAST(c.hora_inicio AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(c.hora_inicio AS TIME)))
+              ELSE 0
+            END
+          ) / 60.0,
+          0
+        ) as horas_totales
+      FROM clases c
+      ${whereClause}
+      GROUP BY c.docente
+      ORDER BY c.docente
+    `, { replacements, type: QueryTypes.SELECT });
+
+    // Detectar conflictos de horario por docente (mismo profesor, mismo día, horas solapadas)
+    const conflictos = await sequelize.query(`
+      SELECT
+        c1.docente,
+        COUNT(*) as num_conflictos
+      FROM clases c1
+      INNER JOIN clases c2
+        ON LOWER(TRIM(c1.docente)) = LOWER(TRIM(c2.docente))
+        AND c1.id < c2.id
+        AND c1.dia = c2.dia
+        AND c1.hora_inicio < c2.hora_fin
+        AND c1.hora_fin > c2.hora_inicio
+      ${whereClause.replace(/c\./g, 'c1.')}
+      GROUP BY c1.docente
+    `, { replacements, type: QueryTypes.SELECT });
+
+    const conflictoMap = {};
+    for (const c of conflictos) {
+      conflictoMap[c.docente?.toLowerCase()?.trim()] = parseInt(c.num_conflictos) || 0;
+    }
+
+    const resultado = carga.map(d => ({
+      docente: fixEncoding(d.docente),
+      total_clases: parseInt(d.total_clases) || 0,
+      clases_asignadas: parseInt(d.clases_asignadas) || 0,
+      horas_totales: parseFloat(parseFloat(d.horas_totales).toFixed(1)) || 0,
+      conflictos: conflictoMap[d.docente?.toLowerCase()?.trim()] || 0
+    }));
+
+    res.json({ success: true, docentes: resultado });
+  } catch (error) {
+    handle500(res, error, 'getDocentesCarga');
+  }
+};
+
 module.exports = {
   getEstadoDistribucion,
   forzarDistribucion,
@@ -650,7 +753,8 @@ module.exports = {
   updateClase,
   checkDisponibilidad,
   getMiDistribucion,
-  getReporteDistribucion
+  getReporteDistribucion,
+  getDocentesCarga
 };
 
 // ============================================

@@ -6,7 +6,8 @@ const {
   updateDirectorCarrera,
   createUsuario,
   updateUsuario,
-  deleteUsuario
+  deleteUsuario,
+  resetPasswordUsuario
 } = require('../controllers/usuarioController');
 
 const { verificarAuth, verificarAdmin, verificarRol } = require('../middleware/auth');
@@ -22,6 +23,9 @@ router.put('/:id', verificarAuth, verificarRol('admin', 'director'), updateUsuar
 
 // Eliminar usuario
 router.delete('/:id', verificarAuth, verificarRol('admin', 'director'), deleteUsuario);
+
+// Resetear contraseña de un usuario (admin/director)
+router.post('/:id/reset-password', verificarAuth, verificarRol('admin', 'director'), resetPasswordUsuario);
 
 // Específico para Admin: asignar carreras a directores
 router.put('/:id/carrera', verificarAuth, verificarAdmin, updateDirectorCarrera);

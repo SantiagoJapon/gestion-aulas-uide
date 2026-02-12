@@ -140,6 +140,14 @@ exports.loginUsuario = async (req, res) => {
 // ==========================================
 exports.obtenerPerfil = async (req, res) => {
     try {
+        // Si es estudiante, retornar datos del middleware directamente
+        if (req.usuarioRol === 'estudiante') {
+            return res.json({
+                success: true,
+                usuario: req.usuario
+            });
+        }
+
         const usuario = await Usuario.findByPk(req.usuario.id, {
             attributes: { exclude: ['password'] },
             include: [{ model: Carrera, as: 'carrera', required: false }]

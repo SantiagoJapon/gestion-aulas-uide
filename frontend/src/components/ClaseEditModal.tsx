@@ -32,8 +32,8 @@ const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose,
                 hora_inicio: clase.hora_inicio || '',
                 hora_fin: clase.hora_fin || '',
                 docente: clase.docente || '',
-                aula_asignada: clase.aula || '',
-                num_estudiantes: clase.estudiantes || 0
+                aula_asignada: clase.aula_asignada || '',
+                num_estudiantes: clase.num_estudiantes || 0
             });
         }
     }, [clase]);

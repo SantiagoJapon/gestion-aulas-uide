@@ -10,7 +10,34 @@ const Periodo = require('./Periodo');
 const Docente = require('./Docente');
 const MateriaCatalogo = require('./MateriaCatalogo');
 const Espacio = require('./Espacio');
-const ReporteHistorial = require('./ReporteHistorial');
+const Notificacion = require('./Notificacion');
+const Incidencia = require('./Incidencia');
+
+// ... (Resto de relaciones) ...
+
+// Incidencias
+User.hasMany(Incidencia, { foreignKey: 'usuario_id', as: 'incidencias' });
+Incidencia.belongsTo(User, { foreignKey: 'usuario_id', as: 'reportadoPor' });
+Incidencia.belongsTo(Aula, { foreignKey: 'aula_codigo', targetKey: 'codigo', as: 'aula' });
+
+module.exports = {
+  sequelize,
+  User,
+  Aula,
+  Estudiante,
+  Carrera,
+  Clase,
+  Distribucion,
+  PlanificacionSubida,
+  Periodo,
+  Docente,
+  MateriaCatalogo,
+  Espacio,
+  ReporteHistorial,
+  Reserva,
+  Notificacion,
+  Incidencia
+};
 
 // ============================================
 // RELACIONES ENTRE MODELOS
@@ -82,6 +109,10 @@ MateriaCatalogo.belongsTo(Carrera, { foreignKey: 'carrera_id', as: 'carrera' });
 MateriaCatalogo.hasMany(Clase, { foreignKey: 'materia_catalogo_id', as: 'clases' });
 Clase.belongsTo(MateriaCatalogo, { foreignKey: 'materia_catalogo_id', as: 'materiaCatalogo' });
 
+// Notificacion <-> Usuario (Remitente)
+User.hasMany(Notificacion, { foreignKey: 'remitente_id', as: 'notificacionesEnviadas' });
+Notificacion.belongsTo(User, { foreignKey: 'remitente_id', as: 'remitenteInfo' });
+
 module.exports = {
   sequelize,
   User,
@@ -95,5 +126,7 @@ module.exports = {
   Docente,
   MateriaCatalogo,
   Espacio,
-  ReporteHistorial
+  ReporteHistorial,
+  Reserva,
+  Notificacion
 };

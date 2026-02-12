@@ -4,9 +4,9 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { AuthContext } from '../context/AuthContext';
 import MapaCalor from '../components/MapaCalor';
 import HorarioVisual from '../components/HorarioVisual';
-import { planificacionService, distribucionService } from '../services/api';
+import { planificacionService, distribucionService, notificacionService } from '../services/api';
 import { Button } from '../components/common/Button';
-import AppearanceSettings from '../components/AppearanceSettings';
+import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import SubirEstudiantes from '../components/SubirEstudiantes';
 import DocenteTable from '../components/DocenteTable';
@@ -23,6 +23,104 @@ const DirectorDashboard = () => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [editingClase, setEditingClase] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isComunicadoOpen, setIsComunicadoOpen] = useState(false); // Modal para comunicados
+
+  // ... (Subcomponente interno o externo, aquí interno por brevedad)
+  const ComunicadoModal = () => {
+    const [titulo, setTitulo] = useState('');
+    const [mensaje, setMensaje] = useState('');
+    const [prioridad, setPrioridad] = useState('MEDIA');
+    const [sending, setSending] = useState(false);
+
+    if (!isComunicadoOpen) return null;
+
+    const handleEnviar = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setSending(true);
+      try {
+        // El director envía a su carrera por defecto (backend valida req.user.carrera_id o carrera_director)
+        // No necesitamos enviar carrera_id explícito si el backend lo deduce, 
+        // pero para seguridad enviamos el que tenemos en user context si existe.
+        const carreraId = user?.carrera?.id;
+
+        await notificacionService.crear({
+          titulo,
+          mensaje,
+          tipo: 'CARRERA',
+          prioridad,
+          carrera_id: carreraId // Opcional si el backend es inteligente
+        });
+        alert("Comunicado enviado exitosamente a todos los estudiantes de la carrera.");
+        setIsComunicadoOpen(false);
+        setTitulo('');
+        setMensaje('');
+      } catch (error) {
+        console.error(error);
+        alert("Error al enviar comunicado.");
+      } finally {
+        setSending(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+        <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl border border-border p-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-black text-foreground tracking-tight">Nuevo Comunicado Oficial</h3>
+            <button onClick={() => setIsComunicadoOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <form onSubmit={handleEnviar} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Título</label>
+              <input
+                required
+                value={titulo}
+                onChange={e => setTitulo(e.target.value)}
+                className="w-full bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                placeholder="Ej: Inicio de Exámenes Parciales"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Mensaje</label>
+              <textarea
+                required
+                value={mensaje}
+                onChange={e => setMensaje(e.target.value)}
+                className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none h-32 resize-none"
+                placeholder="Escriba el contenido del comunicado..."
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Prioridad</label>
+              <div className="flex gap-2">
+                {['BAJA', 'MEDIA', 'ALTA'].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPrioridad(p)}
+                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${prioridad === p
+                      ? (p === 'ALTA' ? 'bg-red-500 text-white border-red-600' : p === 'MEDIA' ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-500 text-white border-slate-600')
+                      : 'bg-muted/20 text-muted-foreground hover:bg-muted/40 border-transparent'
+                      }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="pt-2">
+              <Button variant="primary" fullWidth loading={sending} type="submit">
+                <span className="material-symbols-outlined text-lg mr-2">send</span>
+                Enviar Comunicado
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (user) {
@@ -33,13 +131,14 @@ const DirectorDashboard = () => {
   const loadStats = async () => {
     try {
       setLoadingStats(true);
+      const carreraId = user?.carrera?.id;
       const [resStats, resHorario] = await Promise.all([
-        distribucionService.getEstado(),
-        distribucionService.obtenerHorario()
+        distribucionService.getEstado(carreraId),
+        distribucionService.getMiDistribucion(carreraId)
       ]);
 
       if (resStats.success) setStats(resStats.estadisticas);
-      if (resHorario.success) setMisClases(resHorario.horario || []);
+      if (resHorario.success) setMisClases(resHorario.clases || []);
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
@@ -93,11 +192,12 @@ const DirectorDashboard = () => {
           <div className="space-y-10 pb-20 animate-fade-in px-1">
 
             {/* 1. KPIs SUPERIORES - Vista Panorámica */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               {[
                 { label: 'Clases Totales', value: stats.total_clases, icon: 'analytics', color: 'blue', desc: 'Carga académica' },
                 { label: 'Asignadas', value: stats.clases_asignadas, icon: 'verified', color: 'emerald', desc: 'Con aula física' },
                 { label: 'Pendientes', value: stats.clases_pendientes, icon: 'clock_loader_40', color: 'orange', desc: 'Por distribuir' },
+                { label: 'Conflictos', value: (stats as any).conflictos || 0, icon: 'warning', color: 'red', desc: 'Solapamientos' },
                 { label: 'Eficiencia', value: `${stats.porcentaje_completado}%`, icon: 'query_stats', color: 'purple', desc: 'Meta institucional' }
               ].map((kpi, i) => (
                 <div key={i} className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
@@ -170,12 +270,17 @@ const DirectorDashboard = () => {
                                 </span>
                               </td>
                               <td className="px-6 py-5 text-center">
-                                {clase.aula ? (
+                                {clase.estado === 'conflicto' ? (
+                                  <span className="px-3 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase shadow-sm animate-pulse flex items-center justify-center gap-1 mx-auto w-fit">
+                                    <span className="material-symbols-outlined text-xs">warning</span>
+                                    Conflicto
+                                  </span>
+                                ) : clase.aula_asignada ? (
                                   <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20 uppercase shadow-sm">
-                                    {typeof clase.aula === 'object' ? clase.aula.nombre : clase.aula}
+                                    {typeof clase.aula === 'object' ? (clase.aula as any).nombre : clase.aula_asignada}
                                   </span>
                                 ) : (
-                                  <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-600 text-[10px] font-black border border-red-500/20 uppercase">
+                                  <span className="px-3 py-1 rounded-full bg-slate-500/10 text-slate-400 text-[10px] font-black border border-slate-500/20 uppercase">
                                     Sin Aula
                                   </span>
                                 )}
@@ -335,6 +440,12 @@ const DirectorDashboard = () => {
               title="Base de Datos de Alumnado"
               subtitle={`Estudiantes registrados en la carrera de ${nombreCarrera}`}
               icon="people"
+              action={
+                <Button size="sm" variant="secondary" onClick={() => setIsComunicadoOpen(true)}>
+                  <span className="material-symbols-outlined text-sm mr-2">campaign</span>
+                  Enviar Comunicado
+                </Button>
+              }
             >
               <div className="mt-4">
                 <EstudianteTable carreraNombre={nombreCarrera} />
@@ -358,8 +469,8 @@ const DirectorDashboard = () => {
             <DocenteTable carreraId={user?.carrera?.id || 0} />
           </DashboardWidget>
         );
-      case 'configuracion':
-        return <AppearanceSettings />;
+      case 'settings':
+        return <UserSettings />;
       case 'reportes':
         return <ReporteEjecutivo carreraPreseleccionada={{ id: user?.carrera?.id || 0, nombre: user?.carrera?.carrera || '' }} />;
       default:
@@ -398,6 +509,8 @@ const DirectorDashboard = () => {
         onClose={() => setIsEditModalOpen(false)}
         onUpdate={handleClaseUpdate}
       />
+
+      <ComunicadoModal />
     </DashboardLayout>
   );
 };

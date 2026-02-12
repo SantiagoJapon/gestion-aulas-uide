@@ -1,5 +1,5 @@
 const { verificarToken } = require('../utils/jwt');
-const { User } = require('../models');
+const { User, Estudiante } = require('../models');
 
 /**
  * Middleware para verificar el token JWT en las peticiones
@@ -26,6 +26,28 @@ const verificarAuth = async (req, res, next) => {
 
     // Verificar el token
     const decoded = verificarToken(token);
+
+    // Si es estudiante, buscar en tabla estudiantes
+    if (decoded.rol === 'estudiante') {
+      const estudiante = await Estudiante.findByPk(decoded.id);
+      if (!estudiante) {
+        return res.status(401).json({ error: 'Estudiante no encontrado' });
+      }
+      req.usuario = {
+        id: estudiante.id,
+        nombre: estudiante.nombre,
+        apellido: '',
+        email: estudiante.email,
+        rol: 'estudiante',
+        cedula: estudiante.cedula,
+        estado: 'activo',
+        escuela: estudiante.escuela,
+        nivel: estudiante.nivel
+      };
+      req.usuarioId = estudiante.id;
+      req.usuarioRol = 'estudiante';
+      return next();
+    }
 
     // Buscar el usuario en la base de datos
     const usuario = await User.findByPk(decoded.id);

@@ -180,7 +180,7 @@ const updateDirectorCarrera = async (req, res) => {
 
 const createUsuario = async (req, res) => {
   try {
-    const { nombre, apellido, email, password, rol, carrera_director } = req.body;
+    const { nombre, apellido, email, password, rol, carrera_director, cedula, telefono } = req.body;
 
     // Verificar si el usuario ya existe
     const existingUser = await User.findOne({ where: { email } });
@@ -196,10 +196,7 @@ const createUsuario = async (req, res) => {
     let finalCarrera = carrera_director;
 
     if (req.usuario.rol === 'director') {
-      // Un director solo puede crear docentes (o estudiantes si se permitiera aquí)
-      // pero nunca otros admins
       if (finalRol === 'admin') finalRol = 'docente';
-      // Forzar que la carrera sea la misma que la del director
       finalCarrera = req.usuario.carrera_director;
     }
 
@@ -211,6 +208,8 @@ const createUsuario = async (req, res) => {
       password,
       rol: finalRol,
       carrera_director: finalCarrera,
+      cedula: cedula || null,
+      telefono: telefono || null,
       estado: 'activo'
     });
 
@@ -221,6 +220,37 @@ const createUsuario = async (req, res) => {
     });
   } catch (error) {
     handle500(res, error, 'createUsuario');
+  }
+};
+
+const resetPasswordUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bcrypt = require('bcryptjs');
+
+    const usuario = await User.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+    }
+
+    // Directores solo pueden resetear docentes de su carrera
+    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para este usuario' });
+    }
+
+    // Nueva contraseña: cédula del usuario o 'uide123'
+    const newPassword = usuario.cedula || 'uide123';
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await usuario.update({ password: hashedPassword }, { hooks: false });
+
+    res.json({
+      success: true,
+      mensaje: `Contraseña reseteada a ${usuario.cedula ? 'número de cédula' : 'uide123'}`
+    });
+  } catch (error) {
+    handle500(res, error, 'resetPasswordUsuario');
   }
 };
 
@@ -237,8 +267,6 @@ const updateUsuario = async (req, res) => {
       });
     }
 
-    // Si el que edita es un director, validar que no cambie el rol de otro usuario a admin
-    // o que no edite a alguien fuera de su carrera (opcional pero recomendado)
     if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
       return res.status(403).json({
         success: false,
@@ -246,13 +274,10 @@ const updateUsuario = async (req, res) => {
       });
     }
 
-    // Restricciones para Directores en la edición
     let updatedFields = { nombre, apellido, email, rol, estado, cedula, telefono, carrera_director };
 
     if (req.usuario.rol === 'director') {
-      // No permitir que un director asigne el rol de admin
       if (rol === 'admin') delete updatedFields.rol;
-      // No permitir que un director mueva a un usuario a otra carrera
       updatedFields.carrera_director = req.usuario.carrera_director;
     }
 
@@ -304,5 +329,6 @@ module.exports = {
   updateDirectorCarrera,
   createUsuario,
   updateUsuario,
-  deleteUsuario
+  deleteUsuario,
+  resetPasswordUsuario
 };

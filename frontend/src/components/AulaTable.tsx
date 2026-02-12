@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { aulaService, Aula, AulaStats } from '../services/api';
+import { Modal } from './common/Modal';
 import { FaBan, FaPlus, FaEdit, FaTrash, FaDoorOpen, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 interface AulaFilters {
@@ -542,173 +543,161 @@ const AulaTable: React.FC = () => {
       )}
 
       {/* Modal Formulario Responsive */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4 animate-fade-in">
-          <div className="bg-card w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border flex flex-col max-h-[92vh] sm:max-h-[85vh]">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                  {currentAula ? 'Actualizar Información' : 'Registrar Nueva Aula'}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">Completa los campos para continuar.</p>
-              </div>
-              <button
-                onClick={() => { setModalOpen(false); resetForm(); }}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
-              >
-                <FaBan className="text-slate-400" />
-              </button>
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => { setModalOpen(false); resetForm(); }}
+        title={currentAula ? 'Actualizar Información' : 'Registrar Nueva Aula'}
+        size="lg"
+      >
+        <div className="text-xs text-slate-500 font-medium mb-4">Completa los campos para continuar.</div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Código Identificador</label>
+              <input
+                type="text"
+                value={formData.codigo}
+                onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                required
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                placeholder="Ej: A-101"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Código Identificador</label>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Descriptivo</label>
+              <input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                required
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                placeholder="Ej: Aula de Informática"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Capacidad Máxima</label>
+              <input
+                type="number"
+                value={formData.capacidad}
+                onChange={(e) => setFormData({ ...formData, capacidad: e.target.value })}
+                required
+                min="1"
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Categoría de Espacio</label>
+              <select
+                value={formData.tipo}
+                onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value="AULA">Aula Común</option>
+                <option value="LABORATORIO">Laboratorio</option>
+                <option value="AUDITORIO">Auditorio</option>
+                <option value="SALA_ESPECIAL">Sala Especial</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Ubicación (Edificio)</label>
+              <select
+                value={formData.edificio}
+                onChange={(e) => setFormData({ ...formData, edificio: e.target.value })}
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value="">No Asignado</option>
+                <option value="Edificio A">Edificio A</option>
+                <option value="Edificio B">Edificio B</option>
+                <option value="Edificio C">Edificio C</option>
+                <option value="Laboratorios">Laboratorios</option>
+                <option value="Auditorio">Auditorio</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Piso / Nivel</label>
+              <select
+                value={formData.piso}
+                onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value="1">Piso 1</option>
+                <option value="2">Piso 2</option>
+                <option value="3">Piso 3</option>
+                <option value="4">Piso 4</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Prioridad y Restricción</label>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <label className="flex-1 flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-amber-50/50 transition-colors group">
+                  <input
+                    type="checkbox"
+                    checked={formData.es_prioritaria}
+                    onChange={(e) => setFormData({ ...formData, es_prioritaria: e.target.checked })}
+                    className="w-5 h-5 accent-uide-blue"
+                  />
+                  <div>
+                    <p className="text-xs font-black text-slate-700 dark:text-slate-300 group-hover:text-amber-700">Espacio Prioritario</p>
+                    <p className="text-[10px] text-slate-400">Preferente en asignación auto.</p>
+                  </div>
+                </label>
+                <div className="flex-[2]">
                   <input
                     type="text"
-                    value={formData.codigo}
-                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                    required
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                    placeholder="Ej: A-101"
+                    value={formData.restriccion_carrera}
+                    onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
+                    className="w-full border border-slate-100 dark:border-slate-700 rounded-xl px-4 py-4 bg-slate-50 dark:bg-slate-900/50 text-sm font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none"
+                    placeholder="Restringir a carrera (opcional)"
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Descriptivo</label>
-                  <input
-                    type="text"
-                    value={formData.nombre}
-                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    required
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                    placeholder="Ej: Aula de Informática"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Capacidad Máxima</label>
-                  <input
-                    type="number"
-                    value={formData.capacidad}
-                    onChange={(e) => setFormData({ ...formData, capacidad: e.target.value })}
-                    required
-                    min="1"
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Categoría de Espacio</label>
-                  <select
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                  >
-                    <option value="AULA">Aula Común</option>
-                    <option value="LABORATORIO">Laboratorio</option>
-                    <option value="AUDITORIO">Auditorio</option>
-                    <option value="SALA_ESPECIAL">Sala Especial</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Ubicación (Edificio)</label>
-                  <select
-                    value={formData.edificio}
-                    onChange={(e) => setFormData({ ...formData, edificio: e.target.value })}
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                  >
-                    <option value="">No Asignado</option>
-                    <option value="Edificio A">Edificio A</option>
-                    <option value="Edificio B">Edificio B</option>
-                    <option value="Edificio C">Edificio C</option>
-                    <option value="Laboratorios">Laboratorios</option>
-                    <option value="Auditorio">Auditorio</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Piso / Nivel</label>
-                  <select
-                    value={formData.piso}
-                    onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
-                    className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                  >
-                    <option value="1">Piso 1</option>
-                    <option value="2">Piso 2</option>
-                    <option value="3">Piso 3</option>
-                    <option value="4">Piso 4</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Prioridad y Restricción</label>
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <label className="flex-1 flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-amber-50/50 transition-colors group">
-                      <input
-                        type="checkbox"
-                        checked={formData.es_prioritaria}
-                        onChange={(e) => setFormData({ ...formData, es_prioritaria: e.target.checked })}
-                        className="w-5 h-5 accent-uide-blue"
-                      />
-                      <div>
-                        <p className="text-xs font-black text-slate-700 dark:text-slate-300 group-hover:text-amber-700">Espacio Prioritario</p>
-                        <p className="text-[10px] text-slate-400">Preferente en asignación auto.</p>
-                      </div>
-                    </label>
-                    <div className="flex-[2]">
-                      <input
-                        type="text"
-                        value={formData.restriccion_carrera}
-                        onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
-                        className="w-full border border-slate-100 dark:border-slate-700 rounded-xl px-4 py-4 bg-slate-50 dark:bg-slate-900/50 text-sm font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none"
-                        placeholder="Restringir a carrera (opcional)"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Estado de Operatividad</label>
-                  <div className="flex gap-2">
-                    {['DISPONIBLE', 'MANTENIMIENTO', 'NO_DISPONIBLE'].map((estado) => (
-                      <button
-                        key={estado}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, estado: estado as any })}
-                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${formData.estado === estado
-                          ? 'bg-uide-blue text-white border-uide-blue shadow-lg shadow-uide-blue/20 scale-105'
-                          : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'
-                          }`}
-                      >
-                        {estado.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
-            </form>
+            </div>
 
-            <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={() => { setModalOpen(false); resetForm(); }}
-                className="flex-1 px-6 py-4 border border-slate-100 dark:border-slate-800 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm uppercase tracking-widest"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                className="flex-[2] px-6 py-4 bg-uide-blue text-white rounded-2xl font-black hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-uide-blue/20 text-sm uppercase tracking-widest"
-              >
-                {currentAula ? 'Guardar Cambios' : 'Confirmar Registro'}
-              </button>
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Estado de Operatividad</label>
+              <div className="flex gap-2">
+                {['DISPONIBLE', 'MANTENIMIENTO', 'NO_DISPONIBLE'].map((estado) => (
+                  <button
+                    key={estado}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, estado: estado as any })}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${formData.estado === estado
+                      ? 'bg-uide-blue text-white border-uide-blue shadow-lg shadow-uide-blue/20 scale-105'
+                      : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'
+                      }`}
+                  >
+                    {estado.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => { setModalOpen(false); resetForm(); }}
+              className="flex-1 px-6 py-4 border border-slate-100 dark:border-slate-800 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm uppercase tracking-widest"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubmit}
+              className="flex-[2] px-6 py-4 bg-uide-blue text-white rounded-2xl font-black hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-uide-blue/20 text-sm uppercase tracking-widest"
+            >
+              {currentAula ? 'Guardar Cambios' : 'Confirmar Registro'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

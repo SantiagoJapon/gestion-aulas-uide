@@ -10,6 +10,7 @@ const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
 const { processExcel } = require('../services/excel-parser.service');
+const distribucionService = require('../services/distribucion.service');
 
 const eventEmitter = new EventEmitter();
 
@@ -118,7 +119,7 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
     // ==========================================
-    const { Clase, Aula } = require('../models');
+    const { Clase, Aula, Docente } = require('../models');
 
     console.log(`🗑️ Eliminando clases antiguas de ${nombreCarrera}...`);
     const clasesEliminadas = await Clase.destroy({
@@ -129,10 +130,11 @@ exports.subirPlanificacion = async (req, res) => {
     console.log(`   ✅ ${clasesEliminadas} clases antiguas eliminadas`);
 
     let clasesGuardadas = 0;
+    let docentesMap = new Map(); // Para mapear nombre -> id docente
     let errores = [];
 
     // ==========================================
-    // 💾 GUARDAR CLASES EXTRAÍDAS
+    // 💾 GUARDAR CLASES Y SINCRONIZAR DOCENTES
     // ==========================================
     for (let i = 0; i < parseResult.clases.length; i++) {
       const clase = parseResult.clases[i];
@@ -143,6 +145,46 @@ exports.subirPlanificacion = async (req, res) => {
           continue;
         }
 
+        // 👨‍🏫 Sincronizar Docente si hay metadata
+        let docenteId = null;
+        if (clase.docente) {
+          if (!docentesMap.has(clase.docente)) {
+            const meta = clase.docente_metadata || {};
+
+            // Intentar encontrar por email o nombre
+            let where = { nombre: clase.docente };
+            if (meta.email) where = { [require('sequelize').Op.or]: [{ nombre: clase.docente }, { email: meta.email }] };
+
+            const [docenteRecord] = await Docente.findOrCreate({
+              where,
+              defaults: {
+                nombre: clase.docente,
+                email: meta.email || null,
+                titulo_pregrado: meta.titulo_pregrado || null,
+                titulo_posgrado: meta.titulo_posgrado || null,
+                tipo: meta.tipo || 'Tiempo Completo',
+                carrera_id: carrera_id
+              },
+              transaction
+            });
+
+            // Si el registro ya existe, actualizar títulos/email si vienen en el Excel
+            if (docenteRecord && (meta.email || meta.titulo_pregrado || meta.titulo_posgrado)) {
+              await docenteRecord.update({
+                email: meta.email || docenteRecord.email,
+                titulo_pregrado: meta.titulo_pregrado || docenteRecord.titulo_pregrado,
+                titulo_posgrado: meta.titulo_posgrado || docenteRecord.titulo_posgrado,
+                tipo: meta.tipo || docenteRecord.tipo
+              }, { transaction });
+            }
+
+            docentesMap.set(clase.docente, docenteRecord.id);
+            docenteId = docenteRecord.id;
+          } else {
+            docenteId = docentesMap.get(clase.docente);
+          }
+        }
+
         // Si el excel trae un aula, buscar su código en la BD
         let aulaCodigo = null;
         if (clase.aula && clase.aula.trim().length > 0) {
@@ -151,7 +193,8 @@ exports.subirPlanificacion = async (req, res) => {
               sequelize.fn('LOWER', sequelize.col('nombre')),
               'LIKE',
               `%${clase.aula.toLowerCase().trim()}%`
-            )
+            ),
+            transaction
           });
           if (aulaEncontrada) {
             aulaCodigo = aulaEncontrada.codigo;
@@ -170,6 +213,7 @@ exports.subirPlanificacion = async (req, res) => {
           hora_fin: clase.hora_fin || '',
           num_estudiantes: clase.num_estudiantes || 0,
           docente: clase.docente || '',
+          docente_id: docenteId, // LINK RELACIONAL
           aula_asignada: aulaCodigo
         }, { transaction });
 
@@ -265,26 +309,24 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
     let query = `
       SELECT 
         c.id,
-        c.codigo_materia,
-        c.nombre_materia,
-        c.nivel,
+        c.materia,
+        c.ciclo,
         c.paralelo,
-        c.numero_estudiantes,
-        c.horario_dia,
-        c.horario_inicio,
-        c.horario_fin,
+        c.num_estudiantes,
+        c.dia,
+        c.hora_inicio,
+        c.hora_fin,
         c.docente,
-        c.estado,
         c.aula_asignada,
         a.nombre as aula_nombre,
         a.codigo as aula_codigo,
         a.capacidad as aula_capacidad,
         a.edificio,
         a.piso,
-        car.nombre as carrera_nombre
+        car.carrera as carrera_nombre
       FROM clases c
-      LEFT JOIN aulas a ON a.id = c.aula_asignada
-      LEFT JOIN carreras car ON car.id = c.carrera_id
+      LEFT JOIN aulas a ON a.codigo = c.aula_asignada
+      LEFT JOIN uploads_carreras car ON car.id = c.carrera_id
       WHERE 1=1
     `;
 
@@ -298,7 +340,7 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
       query += ` AND c.carrera_id = :carrera_id`;
     }
 
-    query += ' ORDER BY c.carrera_id, c.nivel, c.codigo_materia';
+    query += ' ORDER BY c.carrera_id, c.ciclo, c.materia';
 
     const result = await sequelize.query(query, {
       replacements,
@@ -374,24 +416,22 @@ exports.detectarConflictos = async (req, res) => {
     const conflictos = await sequelize.query(`
       SELECT 
         c1.id as clase1_id,
-        c1.codigo_materia as clase1_codigo,
-        c1.nombre_materia as clase1_nombre,
+        c1.materia as clase1_nombre,
         c2.id as clase2_id,
-        c2.codigo_materia as clase2_codigo,
-        c2.nombre_materia as clase2_nombre,
+        c2.materia as clase2_nombre,
         a.nombre as aula_nombre,
-        c1.horario_dia,
-        c1.horario_inicio,
-        c1.horario_fin
+        c1.dia,
+        c1.hora_inicio,
+        c1.hora_fin
       FROM clases c1
       JOIN clases c2 ON c1.aula_asignada = c2.aula_asignada
         AND c1.id < c2.id
-        AND c1.horario_dia = c2.horario_dia
+        AND c1.dia = c2.dia
         AND c1.horario_inicio < c2.horario_fin
         AND c1.horario_fin > c2.horario_inicio
-      JOIN aulas a ON a.id = c1.aula_asignada
+      JOIN aulas a ON a.codigo = c1.aula_asignada
       WHERE c1.carrera_id = :carrera_id OR c2.carrera_id = :carrera_id
-      ORDER BY c1.horario_dia, c1.horario_inicio
+      ORDER BY c1.dia, c1.hora_inicio
     `, {
       replacements: { carrera_id },
       type: QueryTypes.SELECT
@@ -532,7 +572,16 @@ exports.descargarPlanificacion = async (req, res) => {
 // LISTENERS DE EVENTOS
 // ============================================
 eventEmitter.on('nueva_planificacion', async (data) => {
-  console.log('📢 Evento: Nueva planificación', data);
+  console.log('📢 Evento: Nueva planificación detectada, iniciando distribución automática...', data);
+  try {
+    const resultado = await distribucionService.ejecutarDistribucion(data.carrera_id);
+    console.log('✅ Distribución automática completada:', resultado.mensaje);
+    if (resultado.estadisticas) {
+      console.log(`   📊 Exitosas: ${resultado.estadisticas.exitosas}, Fallidas: ${resultado.estadisticas.fallidas}`);
+    }
+  } catch (error) {
+    console.error('❌ Error en distribución automática post-upload:', error.message);
+  }
 });
 
 eventEmitter.on('distribucion_completada', async (data) => {

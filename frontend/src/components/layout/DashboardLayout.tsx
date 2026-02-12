@@ -25,6 +25,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 }) => {
     const { user, logout } = useContext(AuthContext);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    // Simulación de notificaciones
+    const [notifications, setNotifications] = useState([
+        { id: 1, from: 'Sistema', text: 'Bienvenido al nuevo dashboard', time: 'Hace 5 min', read: false },
+        { id: 2, from: 'Director', text: 'Recuerda subir tus notas', time: 'Hace 2 horas', read: true }
+    ]);
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -36,9 +42,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         { label: 'Inicio', icon: 'dashboard', tab: 'general' },
         { label: 'Distribución', icon: 'calendar_apps_script', tab: 'distribucion', roles: ['admin'] },
         { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'] },
+        { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'] },
         { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'] },
         { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'estudiante'] },
-        { label: 'Reportes', icon: 'bar_chart', tab: 'reportes' },
+        { label: 'Reportes', icon: 'bar_chart', tab: 'reportes', roles: ['admin', 'director'] },
+        { label: 'Incidencias', icon: 'warning', tab: 'incidencias', roles: ['admin'] },
         { label: 'Ajustes', icon: 'settings', tab: 'settings' },
     ];
 
@@ -117,6 +125,43 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider truncate">{user?.rol}</p>
                         </div>
                         <div className="flex items-center gap-1 ml-auto">
+                            {/* Notification Bell */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                                    className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all relative"
+                                >
+                                    <span className="material-symbols-outlined text-[20px] font-variation-fill">notifications</span>
+                                    {notifications.some(n => !n.read) && (
+                                        <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full border border-background"></span>
+                                    )}
+                                </button>
+
+                                {isNotificationsOpen && (
+                                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-card border border-border rounded-2xl shadow-xl overflow-hidden animate-scale-in origin-bottom-left z-50">
+                                        <div className="p-3 border-b border-border bg-muted/30 flex justify-between items-center">
+                                            <h4 className="text-xs font-black uppercase text-foreground">Notificaciones</h4>
+                                            <button className="text-[10px] text-primary font-bold hover:underline">Marcar leídas</button>
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto">
+                                            {notifications.length > 0 ? (
+                                                notifications.map(n => (
+                                                    <div key={n.id} className={`p-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}>
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className="text-[10px] font-bold text-primary uppercase">{n.from}</span>
+                                                            <span className="text-[9px] text-muted-foreground">{n.time}</span>
+                                                        </div>
+                                                        <p className="text-xs text-foreground font-medium leading-snug">{n.text}</p>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="p-6 text-center text-muted-foreground text-xs">No tienes notificaciones nuevas</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <button
                                 onClick={handleLogout}
                                 className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"

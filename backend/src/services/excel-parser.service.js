@@ -11,6 +11,10 @@ const XLSX = require('xlsx');
 const COLUMN_KEYWORDS = {
   materia: ['materia', 'asignatura', 'nombre materia', 'nombre de la materia', 'curso'],
   docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor', 'teacher', 'instructor'],
+  titulo_pregrado: ['titulo pregrado', 'pregrado', 'título pregrado'],
+  titulo_posgrado: ['titulo posgrado', 'posgrado', 'postgrado', 'título posgrado'],
+  email: ['email', 'correo electro', 'correo', 'mail'],
+  tipo_docente: ['tiempo completo', 'tiempo parcial', 'tipo docente', 'dedicacion'],
   dia: ['dia de clase', 'dia clase', 'horario dia', 'dia horario', 'dia'],
   hora: ['hora clase', 'horario hora', 'hora'],
   hora_inicio: ['hora_inicio', 'hora inicio', 'inicio'],
@@ -102,7 +106,7 @@ function processExcel(buffer) {
     const qualityMultiplier = (diaPercent * 0.3) + (horaPercent * 0.3) + (docentePercent * 0.2) + (estudiantesPercent * 0.2);
     result.qualityScore = clasesCompletas + (total * qualityMultiplier * 0.5);
 
-    console.log(`[ExcelParser]   Score "${result.hojaUsada}": ${result.qualityScore.toFixed(1)} (clases=${total}, completas=${clasesCompletas}, dia=${(diaPercent*100).toFixed(0)}%, hora=${(horaPercent*100).toFixed(0)}%)`);
+    console.log(`[ExcelParser]   Score "${result.hojaUsada}": ${result.qualityScore.toFixed(1)} (clases=${total}, completas=${clasesCompletas}, dia=${(diaPercent * 100).toFixed(0)}%, hora=${(horaPercent * 100).toFixed(0)}%)`);
   }
 
   // Determinar si las hojas tienen estructura similar (mismas columnas detectadas)
@@ -192,7 +196,7 @@ function processSheet(sheet, sheetName) {
     const nextRow = rawData[dataStartRow];
     const nextRowText = nextRow.map(c => normalize(String(c))).join(' ');
     if (nextRowText.includes('pregrado') || nextRowText.includes('posgrado') ||
-        nextRowText.includes('componente') || nextRowText.includes('teorica')) {
+      nextRowText.includes('componente') || nextRowText.includes('teorica')) {
       dataStartRow++;
     }
   }
@@ -360,6 +364,12 @@ function extractClasses(data, startRow, columnMap) {
     let codigo = getString(row, columnMap.codigo);
     const aula = getString(row, columnMap.aula);
 
+    // Metadatos de docente
+    const titulo_pregrado = getString(row, columnMap.titulo_pregrado);
+    const titulo_posgrado = getString(row, columnMap.titulo_posgrado);
+    const email = getString(row, columnMap.email);
+    const tipo_docente = getString(row, columnMap.tipo_docente);
+
     // Estudiantes - puede ser numero o texto
     let numEstudiantes = getNumber(row, columnMap.estudiantes);
 
@@ -381,13 +391,13 @@ function extractClasses(data, startRow, columnMap) {
       // Es continuacion: usaremos la ultima materia procesada
     }
 
-    // Obtener dia y hora
-    let diaRaw = getString(row, columnMap.dia);
-    let horaRaw = getString(row, columnMap.hora);
-    let horaInicioRaw = getString(row, columnMap.hora_inicio);
-    let horaFinRaw = getString(row, columnMap.hora_fin);
+    // LISTA NEGRA: Evitar extraer filas que no son clases
+    const MATERIA_BLACK_LIST = [
+      'subtotal', 'total', 'receso', 'almuerzo', 'tutor_a', 'atenci_n a estudiantes',
+      'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'tutor_a',
+      'pregrado', 'posgrado', 'horario', 'malla', 'docente', 'materia'
+    ];
 
-    // Si no tenemos materia pero si dia/hora, es continuacion de la anterior
     let materiaFinal = materia;
     if (!materiaFinal) {
       materiaFinal = lastMateria;
@@ -396,6 +406,13 @@ function extractClasses(data, startRow, columnMap) {
     }
 
     if (!materiaFinal) continue;
+
+    // Filtrar por lista negra
+    const materiaNorm = normalize(materiaFinal);
+    if (MATERIA_BLACK_LIST.some(item => materiaNorm.includes(normalize(item)))) {
+      continue;
+    }
+
     lastMateria = materiaFinal;
 
     // Detectar si paralelo esta dentro del nombre de materia (ej: "Logica de Programacion - A")
@@ -424,7 +441,13 @@ function extractClasses(data, startRow, columnMap) {
         hora_fin: '',
         num_estudiantes: numEstudiantes,
         docente: docente || '',
-        aula: aula || ''
+        aula: aula || '',
+        docente_metadata: {
+          titulo_pregrado,
+          titulo_posgrado,
+          email,
+          tipo: tipo_docente
+        }
       });
     } else {
       // Crear una entrada por cada sesion
@@ -447,7 +470,13 @@ function extractClasses(data, startRow, columnMap) {
           hora_fin: session.hora_fin,
           num_estudiantes: numEstudiantes,
           docente: docente || '',
-          aula: aulaSession || ''
+          aula: aulaSession || '',
+          docente_metadata: {
+            titulo_pregrado,
+            titulo_posgrado,
+            email,
+            tipo: tipo_docente
+          }
         });
       }
     }
@@ -651,7 +680,7 @@ function deduplicateClasses(clases) {
   let dupsRemoved = 0;
 
   for (const clase of clases) {
-    // Clave: materia + docente + paralelo + ciclo (normalizado)
+    // Clave Compuesta (ADN de la clase): materia + docente + paralelo + ciclo
     const key = [
       normalize(clase.materia || ''),
       normalize(clase.docente || ''),
@@ -665,18 +694,21 @@ function deduplicateClasses(clases) {
       dupsRemoved++;
       const existing = uniqueMap.get(key);
 
-      // Calcular cual tiene mas datos completos
-      const scoreNew = (clase.dia ? 1 : 0) + (clase.hora_inicio ? 1 : 0) +
-        (clase.num_estudiantes > 0 ? 1 : 0) + (clase.docente ? 1 : 0) + (clase.aula ? 1 : 0);
-      const scoreExisting = (existing.dia ? 1 : 0) + (existing.hora_inicio ? 1 : 0) +
-        (existing.num_estudiantes > 0 ? 1 : 0) + (existing.docente ? 1 : 0) + (existing.aula ? 1 : 0);
+      // LÓGICA DE PRIORIDAD (Inspirada en tu solución n8n)
+      const isNewPriority = clase._hoja && normalize(clase._hoja).includes('planificacion');
+      const isExistingPriority = existing._hoja && normalize(existing._hoja).includes('planificacion');
 
-      // Priorizar: (1) hoja prioritaria, (2) mas datos completos
-      const newFromPriority = clase._hoja && PRIORITY_SHEETS.some(p => normalize(clase._hoja).includes(p));
-      const existFromPriority = existing._hoja && PRIORITY_SHEETS.some(p => normalize(existing._hoja).includes(p));
-
-      if ((newFromPriority && !existFromPriority) || (!existFromPriority && scoreNew > scoreExisting)) {
+      // Si la nueva es de PLANIFICACIÓN y la vieja no, reemplazamos
+      if (isNewPriority && !isExistingPriority) {
         uniqueMap.set(key, clase);
+      }
+      // Si ambas son igual de prioritarias, nos quedamos con la que tenga más info (ej. horario)
+      else if (isNewPriority === isExistingPriority) {
+        const scoreNew = (clase.dia ? 1 : 0) + (clase.hora_inicio ? 1 : 0) + (clase.aula ? 1 : 0);
+        const scoreExisting = (existing.dia ? 1 : 0) + (existing.hora_inicio ? 1 : 0) + (existing.aula ? 1 : 0);
+        if (scoreNew > scoreExisting) {
+          uniqueMap.set(key, clase);
+        }
       }
     }
   }

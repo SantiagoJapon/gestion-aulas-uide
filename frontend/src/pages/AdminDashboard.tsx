@@ -10,9 +10,11 @@ import PlanificacionesTable from '../components/PlanificacionesTable';
 import CentroControlDistribucion from '../components/CentroControlDistribucion';
 import HorarioVisual from '../components/HorarioVisual';
 import EspacioTable from '../components/EspacioTable';
-import AppearanceSettings from '../components/AppearanceSettings';
+import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import EstudianteTable from '../components/EstudianteTable';
+import DocenteTable from '../components/DocenteTable';
+import IncidenciasView from '../components/IncidenciasView';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
@@ -26,7 +28,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'espacios' | 'estudiantes' | 'reportes' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
 
   useEffect(() => {
     loadStats();
@@ -204,6 +206,15 @@ export default function AdminDashboard() {
           </div>
         );
 
+      case 'docentes':
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <DashboardWidget title="Plantilla Docente Institucional" icon="badge">
+              <DocenteTable carreraId={0} />
+            </DashboardWidget>
+          </div>
+        );
+
       case 'reportes':
         return (
           <div className="space-y-6 animate-fade-in pb-20">
@@ -213,32 +224,28 @@ export default function AdminDashboard() {
           </div>
         );
 
-      case 'settings':
+      case 'incidencias':
         return (
-          <div className="max-w-4xl space-y-8 animate-fade-in pb-20">
-            <DashboardWidget title="Personalización del Sistema" icon="palette">
-              <AppearanceSettings />
-            </DashboardWidget>
-
-            <div className="bg-white dark:bg-slate-900 border border-border p-8 rounded-[2.5rem] flex items-center gap-6">
-              <div className="size-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center font-black text-3xl">
-                {user?.nombre?.[0]}{user?.apellido?.[0]}
-              </div>
-              <div>
-                <h4 className="font-black text-xl leading-none uppercase tracking-tighter mb-1 text-foreground">
-                  {user?.nombre} {user?.apellido}
-                </h4>
-                <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest">
-                  Administrador del Sistema • UIDE Online
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-[9px] font-black rounded-full uppercase border border-emerald-500/20">Acceso Total</span>
-                  <span className="px-3 py-1 bg-blue-500/10 text-blue-600 text-[9px] font-black rounded-full uppercase border border-blue-500/20">Soporte IT</span>
+          <div className="space-y-6 animate-fade-in pb-20">
+            <div className="flex gap-4 mb-4">
+              <div className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] flex-1">
+                <div className="flex items-center gap-4">
+                  <div className="size-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                    <span className="material-symbols-outlined">warning</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-foreground">Centro de Incidencias</h4>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Reportes de Hardware y Mantenimiento</p>
+                  </div>
                 </div>
               </div>
             </div>
+            <IncidenciasView />
           </div>
         );
+
+      case 'settings':
+        return <UserSettings />;
 
       default:
         return null;

@@ -5,10 +5,12 @@ import { AuthContext } from '../context/AuthContext';
 const REMEMBER_EMAIL_KEY = 'login_remember_email';
 
 export default function Login() {
-  const { login } = useContext(AuthContext);
+  const { login, loginEstudiante } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [mode, setMode] = useState<'docente' | 'estudiante'>('docente');
   const [email, setEmail] = useState(() => localStorage.getItem(REMEMBER_EMAIL_KEY) || '');
   const [password, setPassword] = useState('');
+  const [cedula, setCedula] = useState('');
   const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(REMEMBER_EMAIL_KEY));
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -28,19 +30,24 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, password, rememberMe);
-      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-      const user = JSON.parse(storedUser || '{}');
-      const rolePath: Record<string, string> = {
-        admin: '/admin',
-        director: '/director',
-        profesor: '/profesor',
-        docente: '/profesor',
-        estudiante: '/estudiante',
-      };
-      navigate(rolePath[user.rol] || '/');
+      if (mode === 'estudiante') {
+        await loginEstudiante(cedula);
+        navigate('/estudiante');
+      } else {
+        await login(email, password, rememberMe);
+        const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+        const user = JSON.parse(storedUser || '{}');
+        const rolePath: Record<string, string> = {
+          admin: '/admin',
+          director: '/director',
+          profesor: '/profesor',
+          docente: '/profesor',
+          estudiante: '/estudiante',
+        };
+        navigate(rolePath[user.rol] || '/');
+      }
     } catch (err: any) {
-      let errorMessage = 'Error al iniciar sesión';
+      let errorMessage = mode === 'estudiante' ? 'Cédula no encontrada' : 'Error al iniciar sesión';
       if (err.response?.data?.error) {
         errorMessage = err.response.data.error;
       } else if (err.response?.data?.mensaje) {
@@ -69,11 +76,41 @@ export default function Login() {
               </svg>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
-              Bienvenido al Panel de Administración
+              {mode === 'estudiante' ? 'Portal Estudiante' : 'Panel de Administración'}
             </h1>
             <p className="text-sm text-muted-foreground">
               Acceso Institucional Seguro
             </p>
+          </div>
+
+          {/* Toggle Docente / Estudiante */}
+          <div className="flex items-center justify-center mb-6">
+            <div className="relative flex bg-muted/50 dark:bg-muted/30 border border-input rounded-xl p-1 w-full max-w-xs">
+              <button
+                type="button"
+                onClick={() => { setMode('docente'); setError(''); }}
+                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                  mode === 'docente'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base align-middle mr-1">badge</span>
+                Docente
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('estudiante'); setError(''); }}
+                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                  mode === 'estudiante'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base align-middle mr-1">school</span>
+                Estudiante
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -84,76 +121,108 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Correo Institucional */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
-                Correo Institucional
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-                  <span className="material-symbols-outlined text-xl">mail</span>
-                </span>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@uide.edu.ec"
-                  required
-                  className="w-full pl-11 pr-4 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
-                />
-              </div>
-            </div>
+            {mode === 'estudiante' ? (
+              <>
+                {/* Cédula para estudiantes */}
+                <div>
+                  <label htmlFor="cedula" className="block text-sm font-medium text-foreground mb-1.5">
+                    Número de Cédula
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                      <span className="material-symbols-outlined text-xl">id_card</span>
+                    </span>
+                    <input
+                      type="text"
+                      id="cedula"
+                      value={cedula}
+                      onChange={(e) => setCedula(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="Ingresa tu cédula (10 dígitos)"
+                      required
+                      maxLength={10}
+                      pattern="\d{10}"
+                      className="w-full pl-11 pr-4 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5 ml-1">
+                    Ingresa los 10 dígitos de tu cédula para acceder a tu portal
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Correo Institucional */}
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
+                    Correo Institucional
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                      <span className="material-symbols-outlined text-xl">mail</span>
+                    </span>
+                    <input
+                      type="email"
+                      id="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="usuario@uide.edu.ec"
+                      required
+                      className="w-full pl-11 pr-4 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
+                    />
+                  </div>
+                </div>
 
-            {/* Contraseña */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
-                Contraseña
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-                  <span className="material-symbols-outlined text-xl">lock</span>
-                </span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full pl-11 pr-12 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition p-1"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  <span className="material-symbols-outlined text-xl">
-                    {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
-              </div>
-            </div>
+                {/* Contraseña */}
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
+                    Contraseña
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                      <span className="material-symbols-outlined text-xl">lock</span>
+                    </span>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                      className="w-full pl-11 pr-12 py-3 bg-muted/50 dark:bg-muted/30 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-background transition outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition p-1"
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      <span className="material-symbols-outlined text-xl">
+                        {showPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
-            {/* Recordarme + Olvidaste contraseña */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-input bg-muted text-primary focus:ring-primary"
-                />
-                <span className="text-sm text-muted-foreground">Recordarme</span>
-              </label>
-              <a
-                href="/login"
-                className="text-sm font-medium text-primary hover:opacity-90 hover:underline transition"
-              >
-                ¿Olvidaste tu contraseña?
-              </a>
-            </div>
+                {/* Recordarme + Olvidaste contraseña */}
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded border-input bg-muted text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm text-muted-foreground">Recordarme</span>
+                  </label>
+                  <a
+                    href="/login"
+                    className="text-sm font-medium text-primary hover:opacity-90 hover:underline transition"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </a>
+                </div>
+              </>
+            )}
 
             {/* Botón */}
             <button
@@ -161,18 +230,23 @@ export default function Login() {
               disabled={loading}
               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25 mt-2"
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+              {loading
+                ? (mode === 'estudiante' ? 'Verificando cédula...' : 'Iniciando sesión...')
+                : (mode === 'estudiante' ? 'Acceder como Estudiante' : 'Iniciar Sesión')
+              }
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              ¿No tienes cuenta?{' '}
-              <a href="/register" className="text-primary font-medium hover:underline">
-                Regístrate aquí
-              </a>
-            </p>
-          </div>
+          {mode === 'docente' && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                ¿No tienes cuenta?{' '}
+                <a href="/register" className="text-primary font-medium hover:underline">
+                  Regístrate aquí
+                </a>
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

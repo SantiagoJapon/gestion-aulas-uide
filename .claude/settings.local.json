@@ -29,7 +29,9 @@
       "Bash(taskkill:*)",
       "Bash(docker compose:*)",
       "Bash(docker network inspect:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(powershell -Command \"\\(Invoke-WebRequest -Uri http://localhost:5173 -UseBasicParsing -ErrorAction SilentlyContinue\\).StatusCode\")",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": [],

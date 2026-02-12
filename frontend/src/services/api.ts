@@ -190,8 +190,20 @@ export const authService = {
 };
 
 
+export interface EstudianteLoginResponse {
+  success: boolean;
+  token: string;
+  estudiante: Estudiante;
+  usuario: User;
+}
+
 // Servicios de estudiantes (lookup por email)
 export const estudianteService = {
+  loginByCedula: async (cedula: string): Promise<EstudianteLoginResponse> => {
+    const response = await api.get<EstudianteLoginResponse>(`/estudiantes/login/${cedula}`);
+    return response.data;
+  },
+
   lookupByEmail: async (email: string): Promise<{ success: boolean; found: boolean; estudiante?: EstudianteLookup }> => {
     const response = await api.get('/estudiantes/lookup', { params: { email } });
     return response.data;
@@ -321,6 +333,11 @@ export const usuarioService = {
 
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
     const response = await api.put(`/usuarios/${id}/carrera`, { carrera });
+    return response.data;
+  },
+
+  resetPassword: async (id: number): Promise<{ success: boolean; mensaje: string }> => {
+    const response = await api.post(`/usuarios/${id}/reset-password`);
     return response.data;
   },
 };
@@ -500,6 +517,22 @@ export const distribucionService = {
   // Consultar disponibilidad de aulas
   getDisponibilidadAulas: async (params: { dia: string; hora_inicio: string; hora_fin: string; capacidad_minima?: number }) => {
     const response = await api.get('/distribucion/disponibilidad', { params });
+    return response.data;
+  },
+
+  // Obtener carga docente (horas, clases, conflictos por profesor)
+  getDocentesCarga: async (carreraId?: number): Promise<{
+    success: boolean;
+    docentes: Array<{
+      docente: string;
+      total_clases: number;
+      clases_asignadas: number;
+      horas_totales: number;
+      conflictos: number;
+    }>;
+  }> => {
+    const params = carreraId ? { carrera_id: carreraId } : {};
+    const response = await api.get('/distribucion/docentes-carga', { params });
     return response.data;
   }
 };
@@ -709,6 +742,134 @@ export const reporteService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+};
+
+// ============================================
+// RESERVAS
+// ============================================
+
+export interface Reserva {
+  id: number;
+  aula_codigo: string;
+  dia: string;
+  fecha: string;
+  hora_inicio: string;
+  hora_fin: string;
+  motivo?: string;
+  estado: 'activa' | 'cancelada' | 'pendiente_aprobacion' | 'rechazada' | 'finalizada';
+  created_at: string;
+}
+
+export const reservaService = {
+  crear: async (data: { aula_codigo: string; dia: string; fecha?: string; hora_inicio: string; hora_fin: string; motivo?: string }): Promise<{ success: boolean; reserva: Reserva }> => {
+    // Si no se envía fecha, calcularla basada en el día (opcional, el backend lo requiere)
+    // Por simplicidad, el frontend debe enviar la fecha
+    const response = await api.post('/reservas', data);
+    return response.data;
+  },
+
+  misReservas: async (): Promise<{ success: boolean; reservas: Reserva[] }> => {
+    const response = await api.get('/reservas/mis-reservas');
+    return response.data;
+  },
+
+  cancelar: async (id: number): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/reservas/${id}`);
+    return response.data;
+  }
+};
+
+// ============================================
+// NOTIFICACIONES
+// ============================================
+
+export interface Notificacion {
+  id: number;
+  titulo: string;
+  mensaje: string;
+  tipo: 'CLASE' | 'CARRERA' | 'GLOBAL' | 'SISTEMA' | 'DIRECTA';
+  prioridad: 'ALTA' | 'MEDIA' | 'BAJA';
+  leida: boolean;
+  fecha_expiracion?: string;
+  created_at: string;
+  remitenteInfo?: {
+    nombre: string;
+    apellido: string;
+    rol: string;
+  };
+}
+
+export const notificacionService = {
+  crear: async (data: {
+    titulo: string;
+    mensaje: string;
+    tipo: string;
+    prioridad?: string;
+    destinatario_id?: number;
+    carrera_id?: number;
+    clase_id?: number;
+  }): Promise<{ success: boolean; notificacion: Notificacion }> => {
+    const response = await api.post('/notificaciones', data);
+    return response.data;
+  },
+
+  misNotificaciones: async (): Promise<{ success: boolean; notificaciones: Notificacion[] }> => {
+    const response = await api.get('/notificaciones/mis-notificaciones');
+    return response.data;
+  },
+
+  marcarLeida: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.put(`/notificaciones/${id}/leida`);
+    return response.data;
+  }
+};
+
+// ============================================
+// INCIDENCIAS
+// ============================================
+
+export interface Incidencia {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  tipo: 'HARDWARE' | 'SOFTWARE' | 'LIMPIEZA' | 'CLIMATIZACION' | 'MOBILIARIO' | 'OTRO';
+  prioridad: 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+  estado: 'PENDIENTE' | 'REVISANDO' | 'RESUELTO' | 'CERRADO';
+  aula_codigo: string;
+  fecha_resolucion?: string;
+  respuesta_tecnica?: string;
+  created_at: string;
+  reportadoPor?: {
+    nombre: string;
+    apellido: string;
+    email: string;
+  };
+  aula?: {
+    nombre: string;
+    edificio: string;
+    piso: number;
+  };
+}
+
+export const incidenciaService = {
+  crear: async (data: { titulo: string; descripcion: string; tipo: string; prioridad?: string; aula_codigo: string }): Promise<{ success: boolean; incidencia: Incidencia }> => {
+    const response = await api.post('/incidencias', data);
+    return response.data;
+  },
+
+  listar: async (filters?: { estado?: string; aula?: string }): Promise<{ success: boolean; incidencias: Incidencia[] }> => {
+    const params = new URLSearchParams();
+    if (filters?.estado) params.append('estado', filters.estado);
+    if (filters?.aula) params.append('aula', filters.aula);
+
+    const response = await api.get(`/incidencias?${params.toString()}`);
+    return response.data;
+  },
+
+  actualizarEstado: async (id: number, data: { estado: string; respuesta_tecnica?: string }): Promise<{ success: boolean; incidencia: Incidencia }> => {
+    const response = await api.put(`/incidencias/${id}/estado`, data);
+    return response.data;
+  }
 };
 
 export default api;
