@@ -20,10 +20,10 @@ const COLUMN_KEYWORDS = {
   hora_inicio: ['hora_inicio', 'hora inicio', 'inicio'],
   hora_fin: ['hora_fin', 'hora fin', 'fin'],
   estudiantes: [
-    '# estudiantes', 'nro. estudiantes', 'nro estudiantes', 'num estudiantes',
+    '# estudiantes', 'nro estudiantes', 'num estudiantes',
     'numero estudiantes', 'numero de estudiantes', 'cantidad estudiantes',
-    'nro. alumnos', 'nro alumnos', 'num alumnos', '# alumnos',
-    'numero alumnos', 'numero de alumnos', 'cantidad alumnos',
+    'nro alumnos', 'num alumnos',
+    '# alumnos', 'numero alumnos', 'numero de alumnos', 'cantidad alumnos',
     'estudiantes', 'alumnos'
   ],
   paralelo: ['paralelo', 'grupo', 'seccion'],
@@ -31,8 +31,18 @@ const COLUMN_KEYWORDS = {
   codigo: ['codigo de la materia', 'codigo materia', 'cod materia', 'codigo', 'cod'],
   aula: ['aula/lab', 'aula / lab', 'aula nro', 'aula', 'salon', 'lab'],
   malla: ['malla'],
-  horas_materia: ['horas materia', 'nro. horas', 'nro horas', '# de horas', 'total horas'],
+  horas_materia: ['horas materia', 'nro horas', '# de horas', 'total horas'],
 };
+
+// Columnas que NUNCA deben mapearse a campos de datos (son indices/contadores)
+const INDEX_COLUMN_PATTERNS = [
+  /^n[°º.]?$/i,       // N°, N., Nº
+  /^nro\.?$/i,         // Nro, Nro.
+  /^#$/,               // #
+  /^no\.?$/i,          // No, No.
+  /^item$/i,           // Item
+  /^ord(en)?$/i,       // Ord, Orden
+];
 
 /**
  * Normaliza texto para comparacion (quita acentos, lowercase, trim)
@@ -44,7 +54,9 @@ function normalize(text) {
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ');
+    .replace(/[.]/g, ' ')  // "Nro.Estudiantes" -> "nro estudiantes"
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -187,7 +199,15 @@ function processSheet(sheet, sheetName) {
 
   const { headerRowIndex, columnMap, subHeaderUsed } = headerInfo;
 
-  console.log(`[ExcelParser]   Header en fila ${headerRowIndex} (subHeader=${subHeaderUsed}): ${JSON.stringify(columnMap)}`);
+  // Mostrar la fila raw del header para debugging
+  const headerRow = rawData[headerRowIndex];
+  const headerCells = headerRow.map((cell, idx) => `${colIdxToLetter(idx)}="${String(cell).substring(0, 25)}"`).filter(s => !s.endsWith('=""'));
+  console.log(`[ExcelParser]   Header raw fila ${headerRowIndex}: [${headerCells.join(', ')}]`);
+  if (subHeaderUsed && rawData[headerRowIndex + 1]) {
+    const subRow = rawData[headerRowIndex + 1];
+    const subCells = subRow.map((cell, idx) => `${colIdxToLetter(idx)}="${String(cell).substring(0, 25)}"`).filter(s => !s.endsWith('=""'));
+    console.log(`[ExcelParser]   Sub-header raw fila ${headerRowIndex + 1}: [${subCells.join(', ')}]`);
+  }
 
   // Paso 3: Extraer clases desde la fila despues del header
   // Si se detecto sub-header (DIA/HORA debajo de HORARIO), saltar esa fila tambien
@@ -256,6 +276,27 @@ function fillMergedCells(data, merges) {
 }
 
 /**
+ * Verifica si una celda de header es una columna de indice/contador (N°, Nro, #, etc.)
+ */
+function isIndexColumn(cellNorm) {
+  if (!cellNorm) return false;
+  return INDEX_COLUMN_PATTERNS.some(pattern => pattern.test(cellNorm));
+}
+
+/**
+ * Convierte indice numerico a letra de columna Excel (0=A, 1=B, 25=Z, 26=AA)
+ */
+function colIdxToLetter(idx) {
+  let letter = '';
+  let n = idx;
+  while (n >= 0) {
+    letter = String.fromCharCode((n % 26) + 65) + letter;
+    n = Math.floor(n / 26) - 1;
+  }
+  return letter;
+}
+
+/**
  * Encuentra la fila de encabezados buscando palabras clave
  * Soporta headers de 2 filas (ej: HORARIO en fila 3, DIA/HORA en fila 4)
  * Retorna { headerRowIndex, columnMap }
@@ -276,8 +317,20 @@ function findHeaderRow(data) {
     const map = {};
     let score = 0;
     let subHeaderDetected = false;
+    const excludedCols = new Set(); // columnas de indice que deben ignorarse
 
+    // Paso 0: Identificar columnas de indice (N°, Nro, #) para excluirlas
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
+      const cellNorm = normalize(String(row[colIdx]));
+      if (isIndexColumn(cellNorm)) {
+        excludedCols.add(colIdx);
+      }
+    }
+
+    // Paso 1: Buscar match con cada tipo de columna en la fila principal
+    for (let colIdx = 0; colIdx < row.length; colIdx++) {
+      if (excludedCols.has(colIdx)) continue; // saltar columnas de indice
+
       const cellNorm = normalize(String(row[colIdx]));
       if (!cellNorm || cellNorm.length === 0) continue;
 
@@ -286,14 +339,14 @@ function findHeaderRow(data) {
         if (map[key] !== undefined) continue; // ya encontrada
 
         for (const kw of keywords) {
-          // Match exacto o por inclusion, pero evitar falsos positivos:
-          // "horario" contiene "hora" -> no queremos que "horario" matchee "hora"
-          // Solo matchear si el keyword es substring Y no es un grupo-header como "horario"
           const isMatch = cellNorm === kw || cellNorm.includes(kw);
           if (isMatch) {
-            // Evitar que "horario" matchee como "hora" - es un grupo-header, no la columna hora real
+            // Evitar que "horario" matchee como "hora" - es un grupo-header
             if (key === 'hora' && (cellNorm === 'horario' || cellNorm === 'horarios')) {
-              // No mapear - sera resuelta por sub-header
+              break;
+            }
+            // Evitar que "horas materia" o "nro. horas" matchee como "hora"
+            if (key === 'hora' && (cellNorm.includes('horas materia') || cellNorm.includes('nro') || cellNorm.includes('total'))) {
               break;
             }
             map[key] = colIdx;
@@ -304,56 +357,53 @@ function findHeaderRow(data) {
       }
     }
 
-    // Verificar si la siguiente fila es una sub-header (DIA, HORA, PREGRADO, etc.)
-    // y mejorar el mapa con esas columnas adicionales
-    // Sub-headers REEMPLAZAN detecciones del parent (ej: HORARIO -> DIA + HORA)
+    // Paso 2: Verificar sub-header en la siguiente fila
     if (rowIdx + 1 < searchRange) {
       const nextRow = data[rowIdx + 1];
       if (nextRow && nextRow.length > 0) {
-        // Primero verificar si parece un sub-header (tiene DIA y/o HORA, o PREGRADO/POSGRADO)
-        let hasSubHeader = false;
-        const isDiaKw = (s) => COLUMN_KEYWORDS.dia.some(kw => s.includes(kw) || s === kw);
-        const isHoraKw = (s) => COLUMN_KEYWORDS.hora.some(kw => s.includes(kw) || s === kw);
+        const isDiaKw = (s) => COLUMN_KEYWORDS.dia.some(kw => s === kw || s.includes(kw));
+        const isHoraKw = (s) => {
+          if (s === 'horario' || s === 'horarios') return false;
+          if (s.includes('horas materia') || s.includes('nro') || s.includes('total')) return false;
+          return COLUMN_KEYWORDS.hora.some(kw => s === kw || s.includes(kw));
+        };
         const isPregradoKw = (s) => s.includes('pregrado') || s.includes('posgrado') || s.includes('postgrado');
+
+        // Detectar que tipos de sub-headers hay
+        let hasDiaHoraSubHeader = false;
+        let hasTituloSubHeader = false;
         for (let colIdx = 0; colIdx < nextRow.length; colIdx++) {
           const cellNorm = normalize(String(nextRow[colIdx]));
-          if (isDiaKw(cellNorm) || isHoraKw(cellNorm) || isPregradoKw(cellNorm)) {
-            hasSubHeader = true;
-            break;
-          }
+          if (isDiaKw(cellNorm) || isHoraKw(cellNorm)) hasDiaHoraSubHeader = true;
+          if (isPregradoKw(cellNorm)) hasTituloSubHeader = true;
         }
 
-        if (hasSubHeader) {
+        if (hasDiaHoraSubHeader || hasTituloSubHeader) {
           subHeaderDetected = true;
-          // Si hay sub-header, eliminar detecciones del parent que seran reemplazadas
-          // porque probablemente son headers de grupo (HORARIO -> DIA + HORA)
-          if (map.hora !== undefined) {
-            delete map.hora;
-            score--;
-          }
-          if (map.dia !== undefined) {
-            delete map.dia;
-            score--;
+
+          // Solo eliminar dia/hora del parent SI el sub-header tiene dia/hora
+          // (evitar borrar dia/hora validos cuando solo hay sub-header de PREGRADO)
+          if (hasDiaHoraSubHeader) {
+            if (map.hora !== undefined) { delete map.hora; score--; }
+            if (map.dia !== undefined) { delete map.dia; score--; }
           }
 
+          // Escanear sub-header para mapear columnas
           for (let colIdx = 0; colIdx < nextRow.length; colIdx++) {
+            if (excludedCols.has(colIdx)) continue;
             const cellNorm = normalize(String(nextRow[colIdx]));
             if (!cellNorm || cellNorm.length === 0) continue;
 
-            if (isDiaKw(cellNorm) && map.dia === undefined) {
-              map.dia = colIdx;
-              score++;
-            } else if (isHoraKw(cellNorm) && map.hora === undefined) {
-              map.hora = colIdx;
-              score++;
+            if (hasDiaHoraSubHeader) {
+              if (isDiaKw(cellNorm) && map.dia === undefined) { map.dia = colIdx; score++; }
+              else if (isHoraKw(cellNorm) && map.hora === undefined) { map.hora = colIdx; score++; }
             }
-            // Tambien mapear pregrado/posgrado del sub-header
-            if (cellNorm.includes('pregrado') && !cellNorm.includes('posgrado') && map.titulo_pregrado === undefined) {
-              map.titulo_pregrado = colIdx;
-              score++;
-            } else if ((cellNorm.includes('posgrado') || cellNorm.includes('postgrado')) && map.titulo_posgrado === undefined) {
-              map.titulo_posgrado = colIdx;
-              score++;
+            if (hasTituloSubHeader) {
+              if (cellNorm.includes('pregrado') && !cellNorm.includes('posgrado') && map.titulo_pregrado === undefined) {
+                map.titulo_pregrado = colIdx; score++;
+              } else if ((cellNorm.includes('posgrado') || cellNorm.includes('postgrado')) && map.titulo_posgrado === undefined) {
+                map.titulo_posgrado = colIdx; score++;
+              }
             }
           }
         }
@@ -366,12 +416,27 @@ function findHeaderRow(data) {
       bestRow = rowIdx;
       bestMap = { ...map };
       bestHasSubHeader = subHeaderDetected;
+
+      // Log candidato para debug
+      const colLetters = {};
+      for (const [k, v] of Object.entries(map)) colLetters[k] = `${colIdxToLetter(v)}(${v})`;
+      console.log(`[ExcelParser]   Candidato header fila ${rowIdx} (score=${score}, excluidas=[${[...excludedCols].map(c => colIdxToLetter(c)).join(',')}]): ${JSON.stringify(colLetters)}`);
     }
   }
 
   if (bestRow === -1 || !bestMap) {
     return null;
   }
+
+  // Validacion post-mapeo: verificar que materia y docente no apunten a la misma columna
+  if (bestMap.materia === bestMap.docente) {
+    console.warn(`[ExcelParser] ⚠️ materia y docente apuntan a la misma columna ${colIdxToLetter(bestMap.materia)}! Posible error.`);
+  }
+
+  // Log final del mapa elegido con letras de columna
+  const finalLetters = {};
+  for (const [k, v] of Object.entries(bestMap)) finalLetters[k] = `${colIdxToLetter(v)}(${v})`;
+  console.log(`[ExcelParser]   Header elegido: fila ${bestRow} → ${JSON.stringify(finalLetters)}`);
 
   return { headerRowIndex: bestRow, columnMap: bestMap, subHeaderUsed: bestHasSubHeader };
 }
@@ -472,6 +537,26 @@ function extractClasses(data, startRow, columnMap) {
 
     if (!materiaFinal) continue;
 
+    // VALIDACION: Si materia es puramente numérica, es un N°, ciclo o índice
+    // leído de la columna equivocada → NO es una materia real
+    if (/^\d{1,4}$/.test(materiaFinal.trim())) {
+      // Log solo las primeras ocurrencias para no saturar
+      if (clases.length < 3) {
+        console.log(`[ExcelParser]   Fila ${i} SKIP: materia numérica "${materiaFinal}"`);
+      }
+      continue;
+    }
+
+    // VALIDACION: Si materia tiene solo 1-2 caracteres, probablemente es un paralelo o indice
+    if (materiaFinal.trim().length <= 2) {
+      continue;
+    }
+
+    // VALIDACION: Si docente es puramente numérico, limpiar (probablemente leyó Nro.Horas o similar)
+    if (docente && /^\d{1,4}$/.test(docente.trim())) {
+      docente = lastDocente || '';
+    }
+
     // Filtrar por lista negra
     const materiaNorm = normalize(materiaFinal);
     if (MATERIA_BLACK_LIST.some(item => materiaNorm.includes(normalize(item)))) {
@@ -547,19 +632,29 @@ function extractClasses(data, startRow, columnMap) {
     }
   }
 
-  // POST-VALIDACION: detectar si materia tiene valores sospechosos (puro numeros)
-  const numericMaterias = clases.filter(c => c.materia && /^\d{1,3}$/.test(c.materia.trim()));
-  if (numericMaterias.length > 0 && clases.length > 0) {
-    const pct = ((numericMaterias.length / clases.length) * 100).toFixed(0);
-    console.warn(`[ExcelParser] ⚠️ ALERTA: ${numericMaterias.length}/${clases.length} clases (${pct}%) tienen materia numérica. Posible mapeo incorrecto de columnas.`);
-    console.warn(`[ExcelParser]   Ejemplos: ${numericMaterias.slice(0, 5).map(c => `materia="${c.materia}" docente="${c.docente}" ciclo="${c.ciclo}"`).join(' | ')}`);
-  }
-
-  // Log resumen de extraccion
+  // POST-VALIDACION: detectar problemas en los datos extraidos
   if (clases.length > 0) {
-    console.log(`[ExcelParser]   Primeras 3 clases extraidas:`);
-    clases.slice(0, 3).forEach((c, i) => {
-      console.log(`[ExcelParser]     [${i}] materia="${c.materia}" docente="${c.docente}" ciclo="${c.ciclo}" paralelo="${c.paralelo}" dia="${c.dia}" hora="${c.hora_inicio}-${c.hora_fin}" est=${c.num_estudiantes}`);
+    // Check 1: materias numericas (no deberian existir despues del filtro, pero por si acaso)
+    const numericMaterias = clases.filter(c => c.materia && /^\d{1,4}$/.test(c.materia.trim()));
+    if (numericMaterias.length > 0) {
+      const pct = ((numericMaterias.length / clases.length) * 100).toFixed(0);
+      console.warn(`[ExcelParser] ⚠️ ALERTA: ${numericMaterias.length}/${clases.length} clases (${pct}%) tienen materia numérica.`);
+    }
+
+    // Check 2: docentes vacios o todos iguales
+    const docentes = new Set(clases.map(c => c.docente).filter(Boolean));
+    if (docentes.size <= 1 && clases.length > 3) {
+      console.warn(`[ExcelParser] ⚠️ ALERTA: Solo ${docentes.size} docente(s) distintos en ${clases.length} clases: [${[...docentes].join(', ')}]`);
+    }
+
+    // Check 3: materias unicas vs total (si hay pocas unicas, probablemente datos repetidos)
+    const materias = new Set(clases.map(c => c.materia));
+    console.log(`[ExcelParser]   Resumen: ${clases.length} clases, ${materias.size} materias unicas, ${docentes.size} docentes unicos`);
+
+    // Log primeras 5 clases para verificacion
+    console.log(`[ExcelParser]   Primeras 5 clases extraidas:`);
+    clases.slice(0, 5).forEach((c, i) => {
+      console.log(`[ExcelParser]     [${i}] materia="${c.materia}" docente="${c.docente}" ciclo="${c.ciclo}" paralelo="${c.paralelo}" dia="${c.dia}" hora="${c.hora_inicio}-${c.hora_fin}" est=${c.num_estudiantes} aula="${c.aula}"`);
     });
   }
 
