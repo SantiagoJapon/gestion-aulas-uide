@@ -1,5 +1,6 @@
 const { User, Carrera, sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
+const N8nService = require('../services/n8n.service');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -168,6 +169,16 @@ const updateDirectorCarrera = async (req, res) => {
 
     await usuario.update({ carrera_director: carreraResult[0].carrera });
 
+    // Notificar al director via Telegram si tiene telegram_id
+    if (usuario.telegram_id) {
+      N8nService.notificarDirector({
+        nombre: `${usuario.nombre} ${usuario.apellido}`,
+        telegram_id: String(usuario.telegram_id),
+        password: '(usa tu contraseña actual)',
+        carrera: carreraResult[0].carrera
+      });
+    }
+
     res.json({
       success: true,
       message: 'Carrera asignada',
@@ -200,6 +211,9 @@ const createUsuario = async (req, res) => {
       finalCarrera = req.usuario.carrera_director;
     }
 
+    // Guardar password original antes del hash para notificación
+    const passwordOriginal = password;
+
     // Crear el usuario (el password se hashea en el hook beforeCreate)
     const newUsuario = await User.create({
       nombre,
@@ -212,6 +226,16 @@ const createUsuario = async (req, res) => {
       telefono: telefono || null,
       estado: 'activo'
     });
+
+    // Si es director y tiene telegram_id, notificar via n8n/Telegram
+    if (finalRol === 'director' && newUsuario.telegram_id) {
+      N8nService.notificarDirector({
+        nombre: `${nombre} ${apellido}`,
+        telegram_id: String(newUsuario.telegram_id),
+        password: passwordOriginal,
+        carrera: finalCarrera || ''
+      });
+    }
 
     res.status(201).json({
       success: true,

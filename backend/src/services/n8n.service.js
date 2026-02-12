@@ -110,6 +110,44 @@ class N8nService {
   }
 
   /**
+   * Notificar a un director sus credenciales via Telegram (a través de n8n)
+   * @param {Object} datosDirector - Datos del director
+   * @param {string} datosDirector.nombre - Nombre completo
+   * @param {string} datosDirector.telegram_id - ID de Telegram del director
+   * @param {string} datosDirector.password - Password temporal
+   * @param {string} datosDirector.carrera - Nombre de la carrera asignada
+   * @returns {Promise<Object>}
+   */
+  static async notificarDirector(datosDirector) {
+    try {
+      console.log(`📤 Enviando credenciales de director a n8n (notificar_director)...`);
+      const response = await axios.post(
+        `${N8N_WEBHOOK_URL}/maestro`,
+        {
+          accion: 'notificar_director',
+          datos: {
+            nombre: datosDirector.nombre,
+            telegram_id: datosDirector.telegram_id,
+            password: datosDirector.password,
+            carrera: datosDirector.carrera
+          },
+          timestamp: new Date().toISOString()
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000
+        }
+      );
+      console.log('✅ Credenciales de director enviadas via n8n/Telegram');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al notificar director via n8n:', error.message);
+      // No lanzar error - la notificación es best-effort, no debe bloquear la creación
+      return null;
+    }
+  }
+
+  /**
    * Verificar salud de n8n
    */
   static async healthCheck() {
@@ -122,9 +160,6 @@ class N8nService {
     }
   }
 }
-
-module.exports = N8nService;
-
 
 module.exports = N8nService;
 

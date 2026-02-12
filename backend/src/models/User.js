@@ -103,6 +103,11 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
+  telegram_id: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    unique: true
+  },
   estado: {
     type: DataTypes.ENUM('activo', 'inactivo'),
     allowNull: false,
