@@ -267,6 +267,9 @@ const iniciarServidor = async () => {
     // Probar conexión a la base de datos
     await testConnection();
 
+    // Cargar todos los modelos y relaciones antes de sincronizar
+    require('./models');
+
     // Sincronizar modelos con la base de datos sin perder datos
     console.log('🔄 Sincronizando modelos con PostgreSQL...');
     await syncDatabase({
