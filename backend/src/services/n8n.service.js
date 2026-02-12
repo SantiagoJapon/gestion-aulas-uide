@@ -110,10 +110,11 @@ class N8nService {
   }
 
   /**
-   * Notificar a un director sus credenciales via Telegram (a través de n8n)
+   * Notificar a un director sus credenciales via Telegram o WhatsApp (a través de n8n)
    * @param {Object} datosDirector - Datos del director
    * @param {string} datosDirector.nombre - Nombre completo
-   * @param {string} datosDirector.telegram_id - ID de Telegram del director
+   * @param {string} datosDirector.telegram_id - ID de Telegram (opcional)
+   * @param {string} datosDirector.telefono - Número de teléfono (opcional)
    * @param {string} datosDirector.password - Password temporal
    * @param {string} datosDirector.carrera - Nombre de la carrera asignada
    * @returns {Promise<Object>}
@@ -127,7 +128,8 @@ class N8nService {
           accion: 'notificar_director',
           datos: {
             nombre: datosDirector.nombre,
-            telegram_id: datosDirector.telegram_id,
+            telegram_id: datosDirector.telegram_id || null,
+            telefono: datosDirector.telefono || null,
             password: datosDirector.password,
             carrera: datosDirector.carrera
           },
@@ -138,11 +140,10 @@ class N8nService {
           timeout: 15000
         }
       );
-      console.log('✅ Credenciales de director enviadas via n8n/Telegram');
+      console.log('✅ Credenciales de director enviadas a n8n');
       return response.data;
     } catch (error) {
       console.error('❌ Error al notificar director via n8n:', error.message);
-      // No lanzar error - la notificación es best-effort, no debe bloquear la creación
       return null;
     }
   }

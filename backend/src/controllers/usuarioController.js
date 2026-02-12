@@ -169,11 +169,12 @@ const updateDirectorCarrera = async (req, res) => {
 
     await usuario.update({ carrera_director: carreraResult[0].carrera });
 
-    // Notificar al director via Telegram si tiene telegram_id
-    if (usuario.telegram_id) {
+    // Notificar al director si tiene telegram_id o telefono
+    if (usuario.telegram_id || usuario.telefono) {
       N8nService.notificarDirector({
         nombre: `${usuario.nombre} ${usuario.apellido}`,
-        telegram_id: String(usuario.telegram_id),
+        telegram_id: usuario.telegram_id ? String(usuario.telegram_id) : null,
+        telefono: usuario.telefono,
         password: '(usa tu contraseña actual)',
         carrera: carreraResult[0].carrera
       });
@@ -227,11 +228,12 @@ const createUsuario = async (req, res) => {
       estado: 'activo'
     });
 
-    // Si es director y tiene telegram_id, notificar via n8n/Telegram
-    if (finalRol === 'director' && newUsuario.telegram_id) {
+    // Si es director y tiene telegram_id o telefono, notificar via n8n
+    if (finalRol === 'director' && (newUsuario.telegram_id || newUsuario.telefono)) {
       N8nService.notificarDirector({
         nombre: `${nombre} ${apellido}`,
-        telegram_id: String(newUsuario.telegram_id),
+        telegram_id: newUsuario.telegram_id ? String(newUsuario.telegram_id) : null,
+        telefono: newUsuario.telefono,
         password: passwordOriginal,
         carrera: finalCarrera || ''
       });

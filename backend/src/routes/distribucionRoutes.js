@@ -30,8 +30,8 @@ router.get('/clases', verificarAuth, verificarRol('director', 'admin'), getClase
 router.get('/simulado', verificarAuth, verificarAdmin, getDistribucionSimulada);
 router.get('/cuadro', verificarAuth, verificarAdmin, getCuadroClases);
 
-// Mi distribución (profesores/directores ven sus clases)
-router.get('/mi-distribucion', verificarAuth, verificarRol('profesor', 'docente', 'director', 'admin'), getMiDistribucion);
+// Mi distribución (profesores/directores/estudiantes ven sus clases)
+router.get('/mi-distribucion', verificarAuth, verificarRol('profesor', 'docente', 'director', 'admin', 'estudiante'), getMiDistribucion);
 
 // Reporte de distribución
 router.get('/reporte', verificarAuth, verificarRol('director', 'admin'), getReporteDistribucion);

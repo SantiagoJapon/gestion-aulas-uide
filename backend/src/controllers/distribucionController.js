@@ -412,6 +412,45 @@ function convertirHora(hora) {
   return (parseInt(partes[0]) || 0) * 60 + (parseInt(partes[1]) || 0);
 }
 
+/**
+ * Normaliza un ciclo/nivel a número entero.
+ * Soporta formatos: "Octavo", "8vo", "8", "OCTAVO", "8VO", etc.
+ */
+function normalizarCiclo(valor) {
+  if (!valor) return null;
+  const v = valor.toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Si ya es un número directo
+  const num = parseInt(v);
+  if (!isNaN(num) && num > 0 && num <= 12) return num;
+
+  // Extraer número de abreviaciones: "1ro", "2do", "3ro", "4to", "5to", "6to", "7mo", "8vo", "9no", "10mo"
+  const matchAbrev = v.match(/^(\d+)/);
+  if (matchAbrev) {
+    const n = parseInt(matchAbrev[1]);
+    if (n > 0 && n <= 12) return n;
+  }
+
+  // Texto completo a número
+  const textoANumero = {
+    'primero': 1, 'segundo': 2, 'tercero': 3, 'cuarto': 4,
+    'quinto': 5, 'sexto': 6, 'septimo': 7, 'octavo': 8,
+    'noveno': 9, 'decimo': 10, 'undecimo': 11, 'duodecimo': 12
+  };
+
+  return textoANumero[v] || null;
+}
+
+/**
+ * Normaliza texto removiendo tildes y pasando a minúsculas para comparación flexible.
+ */
+function normalizarTexto(texto) {
+  if (!texto) return '';
+  return texto.toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 const updateClase = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -536,6 +575,28 @@ const getMiDistribucion = async (req, res) => {
     } else if (usuario.rol === 'director' && usuario.carrera_director) {
       whereClause = 'WHERE c.carrera = :carrera';
       replacements.carrera = usuario.carrera_director;
+    } else if (usuario.rol === 'estudiante') {
+      // Filtrar por carrera (comparación flexible) + ciclo del estudiante + solo clases con aula asignada
+      const cicloNum = normalizarCiclo(usuario.nivel);
+      if (cicloNum) {
+        whereClause = `WHERE LOWER(TRANSLATE(c.carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) LIKE LOWER(TRANSLATE(:carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) AND c.aula_asignada IS NOT NULL AND c.aula_asignada != ''`;
+        replacements.carrera = `%${normalizarTexto(usuario.escuela)}%`;
+
+        // Recopilar todas las formas posibles del ciclo para matching flexible
+        const formasCiclo = [cicloNum.toString()];
+        const sufijos = ['ro', 'do', 'to', 'mo', 'vo', 'no'];
+        sufijos.forEach(s => formasCiclo.push(cicloNum + s));
+        const nombres = ['', 'primero', 'segundo', 'tercero', 'cuarto', 'quinto', 'sexto', 'septimo', 'octavo', 'noveno', 'decimo'];
+        if (nombres[cicloNum]) formasCiclo.push(nombres[cicloNum]);
+
+        whereClause += ` AND (${formasCiclo.map((_, i) => `LOWER(TRANSLATE(c.ciclo, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) = LOWER(:ciclo${i})`).join(' OR ')})`;
+        formasCiclo.forEach((forma, i) => {
+          replacements[`ciclo${i}`] = forma;
+        });
+      } else {
+        // Si no se puede determinar el ciclo, no mostrar nada para evitar exponer datos incorrectos
+        whereClause = 'WHERE 1=0';
+      }
     }
 
     // Si hay carrera_id en query, usarlo como filtro adicional

@@ -373,6 +373,12 @@ function extractClasses(data, startRow, columnMap) {
     // Estudiantes - puede ser numero o texto
     let numEstudiantes = getNumber(row, columnMap.estudiantes);
 
+    // Horario - extraer valores raw para parseSchedule
+    const diaRaw = getString(row, columnMap.dia);
+    const horaRaw = getString(row, columnMap.hora);
+    const horaInicioRaw = getString(row, columnMap.hora_inicio);
+    const horaFinRaw = getString(row, columnMap.hora_fin);
+
     // Propagar valores de celdas fusionadas (docente, ciclo, paralelo)
     if (docente) lastDocente = docente; else docente = lastDocente;
     if (ciclo) lastCiclo = ciclo; else ciclo = lastCiclo;

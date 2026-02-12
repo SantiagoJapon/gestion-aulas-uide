@@ -126,7 +126,7 @@ const CarreraTable: React.FC = () => {
         />
         <button
           onClick={handleAdd}
-          disabled={adding || !newCarrera.trim()}
+          disabled={adding}
           className="bg-uide-blue text-white font-black py-3 px-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-uide-blue/10 flex items-center justify-center gap-2 text-sm uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {adding ? (
