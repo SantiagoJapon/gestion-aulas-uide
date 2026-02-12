@@ -389,9 +389,37 @@ function extractClasses(data, startRow, columnMap) {
   let lastCodigo = '';
   let lastMateria = '';
 
+  // Palabras clave que indican cambio de seccion (resetear propagacion)
+  const SECTION_KEYWORDS = ['tiempo completo', 'tiempo parcial', 'docentes tiempo', 'catedraticos', 'profesores tiempo'];
+
+  // LISTA NEGRA: Evitar extraer filas que no son clases
+  const MATERIA_BLACK_LIST = [
+    'subtotal', 'total', 'receso', 'almuerzo', 'tutor_a', 'atenci_n a estudiantes',
+    'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'tutor_a',
+    'pregrado', 'posgrado', 'horario', 'malla', 'docente', 'materia',
+    'docentes tiempo', 'tiempo completo', 'tiempo parcial', 'escuela de',
+    'planificacion academica', 'universidad', 'extension'
+  ];
+
   for (let i = startRow; i < data.length; i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
+
+    // Detectar filas de seccion ("DOCENTES TIEMPO COMPLETO", "DOCENTES TIEMPO PARCIAL")
+    // Concatenar todos los valores de la fila para buscar keywords de seccion
+    const rowText = row.filter(Boolean).map(v => normalize(String(v))).join(' ');
+    const isSection = SECTION_KEYWORDS.some(kw => rowText.includes(kw));
+    if (isSection) {
+      // Resetear propagacion al cambiar de seccion
+      console.log(`[ExcelParser]   Seccion detectada en fila ${i}: "${rowText.substring(0, 60)}..." - reseteando propagacion`);
+      lastDocente = '';
+      lastCiclo = '';
+      lastParalelo = '';
+      lastMalla = '';
+      lastCodigo = '';
+      lastMateria = '';
+      continue;
+    }
 
     // Extraer valores
     const materia = getString(row, columnMap.materia);
@@ -434,13 +462,6 @@ function extractClasses(data, startRow, columnMap) {
       if (!dia && !hora && !horaInicio) continue; // fila vacia
       // Es continuacion: usaremos la ultima materia procesada
     }
-
-    // LISTA NEGRA: Evitar extraer filas que no son clases
-    const MATERIA_BLACK_LIST = [
-      'subtotal', 'total', 'receso', 'almuerzo', 'tutor_a', 'atenci_n a estudiantes',
-      'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'tutor_a',
-      'pregrado', 'posgrado', 'horario', 'malla', 'docente', 'materia'
-    ];
 
     let materiaFinal = materia;
     if (!materiaFinal) {
