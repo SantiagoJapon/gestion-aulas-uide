@@ -55,9 +55,6 @@ const Incidencia = sequelize.define('Incidencia', {
     underscored: true
 });
 
-// Relaciones
-Incidencia.belongsTo(Usuario, { foreignKey: 'usuario_id', as: 'reportadoPor' });
-// Si modelo Aula tiene PK 'codigo' (string), podríamos relacionar:
-// Incidencia.belongsTo(Aula, { foreignKey: 'aula_codigo', targetKey: 'codigo', as: 'aula' });
+// Relaciones definidas en models/index.js para evitar duplicados
 
 module.exports = Incidencia;
