@@ -55,6 +55,7 @@ export interface User {
     carrera_normalizada: string;
   };
   estado: 'activo' | 'inactivo';
+  requiere_cambio_password?: boolean;
 }
 
 export interface LoginResponse {
@@ -538,6 +539,39 @@ export const distribucionService = {
 };
 
 // ============================================
+// BÚSQUEDA
+// ============================================
+
+export interface SearchResult {
+  id: string;
+  type: 'materia' | 'docente' | 'aula' | 'estudiante';
+  title: string;
+  subtitle: string;
+  icon: string;
+  link: string;
+}
+
+export const searchService = {
+  // Búsqueda global (Spotlight)
+  globalSearch: async (q: string): Promise<{ success: boolean; results: SearchResult[] }> => {
+    const response = await api.get('/search/global', { params: { q } });
+    return response.data;
+  },
+
+  // Buscar disponibilidad de aulas
+  buscarDisponibilidad: async (params: {
+    dia: string;
+    hora_inicio: string;
+    hora_fin: string;
+    capacidad_minima?: number;
+  }): Promise<{ success: boolean; count: number; aulas: Aula[] }> => {
+    const response = await api.get('/search/disponibilidad', { params });
+    return response.data;
+  },
+};
+
+
+// ============================================
 // PLANIFICACIONES
 // ============================================
 
@@ -880,10 +914,19 @@ export interface Docente {
   id: number;
   nombre: string;
   email: string | null;
+  telefono?: string | null;
   titulo_pregrado: string | null;
   titulo_posgrado: string | null;
   tipo: string;
   carrera_id: number;
+  usuario_id?: number | null;
+  usuario?: {
+    id: number;
+    email: string;
+    estado: string;
+    requiere_cambio_password: boolean;
+    last_login?: string;
+  };
   carrera?: {
     id: number;
     carrera: string;
@@ -908,6 +951,16 @@ export const docenteService = {
 
   updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
     const response = await api.put<{ success: boolean; docente: Docente; mensaje: string }>(`/docentes/${id}`, data);
+    return response.data;
+  },
+
+  updateTelefono: async (id: number, telefono: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>(`/docentes/${id}/telefono`, { telefono });
+    return response.data;
+  },
+
+  generarCredenciales: async (carrera_id?: number): Promise<{ success: boolean; mensaje: string; stats: any }> => {
+    const response = await api.post<{ success: boolean; mensaje: string; stats: any }>('/docentes/generar-credenciales', { carrera_id });
     return response.data;
   }
 };

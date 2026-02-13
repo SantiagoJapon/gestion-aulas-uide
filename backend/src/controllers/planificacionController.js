@@ -10,6 +10,7 @@ const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
 const { processExcel } = require('../services/excel-parser.service');
+const { analizarExcelConIA, esOpenAIConfigurado } = require('../services/openai.service');
 const distribucionService = require('../services/distribucion.service');
 
 const eventEmitter = new EventEmitter();
@@ -84,7 +85,34 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     // 📊 PARSEAR EXCEL CON NUEVO SERVICIO INTELIGENTE
     // ==========================================
-    const parseResult = processExcel(req.file.buffer);
+    let parseResult = processExcel(req.file.buffer);
+
+    // ANALISIS DE CALIDAD - Si el parser local da resultados sospechosos, intentar con IA (OpenAI)
+    const uniqueMaterias = new Set(parseResult.clases.map(c => c.materia)).size;
+    const isSuspicious = parseResult.clases.length > 5 && uniqueMaterias < (parseResult.clases.length * 0.1); // Menos del 10% de materias únicas es raro
+
+    if ((parseResult.clases.length === 0 || isSuspicious) && esOpenAIConfigurado()) {
+      console.log('🤖 Parser local con resultados insuficientes o sospechosos. Reintentando con IA...');
+      try {
+        const XLSX = require('xlsx');
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        const iaResult = await analizarExcelConIA(rawData, nombreCarrera);
+        if (iaResult && iaResult.clases && iaResult.clases.length > 0) {
+          parseResult = {
+            clases: iaResult.clases,
+            hojaUsada: workbook.SheetNames[0] + ' (IA)',
+            totalHojas: workbook.SheetNames.length,
+            debug: { method: 'openai', columns: iaResult.columnas_detectadas }
+          };
+        }
+      } catch (iaError) {
+        console.error('❌ Error en análisis de IA:', iaError.message);
+        // Continuamos con el resultado del parser local si la IA falla
+      }
+    }
 
     console.log(`📚 Excel procesado: ${parseResult.clases.length} clases de hoja "${parseResult.hojaUsada}"`);
     if (parseResult.debug?.columnMap) {
@@ -126,7 +154,40 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
     // ==========================================
-    const { Clase, Aula, Docente } = require('../models');
+    const { Clase, Aula, Docente, User } = require('../models');
+    const whatsappService = require('../services/whatsappService');
+
+    // Función auxiliar para crear usuario (copiada de docenteController o importada)
+    const crearUsuarioParaDocente = async (docente, t) => {
+      try {
+        if (docente.usuario_id) return null;
+        const partes = docente.nombre.trim().split(' ');
+        const nombre = partes[0] || 'Docente';
+        const apellido = partes.slice(1).join(' ') || 'UIDE';
+        let email = docente.email;
+        if (!email) {
+          email = `${nombre.toLowerCase()}.${apellido.toLowerCase().replace(/\s+/g, '')}@docente.uide.edu.ec`;
+        }
+        const existingUser = await User.findOne({ where: { email }, transaction: t });
+        if (existingUser) {
+          await docente.update({ usuario_id: existingUser.id }, { transaction: t });
+          return null;
+        }
+        const user = await User.create({
+          nombre, apellido, email,
+          password: 'uide2024',
+          rol: 'docente',
+          estado: 'activo',
+          requiere_cambio_password: true,
+          telefono: docente.telefono
+        }, { transaction: t });
+        await docente.update({ usuario_id: user.id }, { transaction: t });
+        return user;
+      } catch (e) {
+        console.error('Error auto-creando usuario para docente:', e.message);
+        return null;
+      }
+    };
 
     console.log(`🗑️ Eliminando clases antiguas de ${nombreCarrera}...`);
     const clasesEliminadas = await Clase.destroy({
@@ -162,11 +223,12 @@ exports.subirPlanificacion = async (req, res) => {
             let where = { nombre: clase.docente };
             if (meta.email) where = { [require('sequelize').Op.or]: [{ nombre: clase.docente }, { email: meta.email }] };
 
-            const [docenteRecord] = await Docente.findOrCreate({
+            const [docenteRecord, created] = await Docente.findOrCreate({
               where,
               defaults: {
                 nombre: clase.docente,
                 email: meta.email || null,
+                telefono: meta.telefono || null,
                 titulo_pregrado: meta.titulo_pregrado || null,
                 titulo_posgrado: meta.titulo_posgrado || null,
                 tipo: meta.tipo || 'Tiempo Completo',
@@ -175,10 +237,20 @@ exports.subirPlanificacion = async (req, res) => {
               transaction
             });
 
+            // SI ES NUEVO: Crear cuenta de usuario automáticamente y enviar WhatsApp
+            if (created) {
+              const newUser = await crearUsuarioParaDocente(docenteRecord, transaction);
+              if (newUser && docenteRecord.telefono) {
+                const msj = `*UIDE Gestión de Aulas*\n\nHola ${docenteRecord.nombre}, se ha generado tu acceso automático:\n\n📧 *User:* ${newUser.email}\n🔑 *Clave:* uide2024\n\n🌐 ${process.env.FRONTEND_URL || 'http://localhost:5173'}`;
+                whatsappService.sendMessage(docenteRecord.telefono, msj).catch(e => console.error('Error WhatsApp auto:', e));
+              }
+            }
+
             // Si el registro ya existe, actualizar títulos/email si vienen en el Excel
-            if (docenteRecord && (meta.email || meta.titulo_pregrado || meta.titulo_posgrado)) {
+            if (docenteRecord && (meta.email || meta.titulo_pregrado || meta.titulo_posgrado || meta.telefono)) {
               await docenteRecord.update({
                 email: meta.email || docenteRecord.email,
+                telefono: meta.telefono || docenteRecord.telefono,
                 titulo_pregrado: meta.titulo_pregrado || docenteRecord.titulo_pregrado,
                 titulo_posgrado: meta.titulo_posgrado || docenteRecord.titulo_posgrado,
                 tipo: meta.tipo || docenteRecord.tipo
@@ -277,9 +349,26 @@ exports.subirPlanificacion = async (req, res) => {
       estado: 'pendiente'
     });
 
+    // ==========================================
+    // 📊 GENERAR REPORTE DE SALUD DE DATOS
+    // ==========================================
+    const sinHorario = parseResult.clases.filter(c => !c.dia || !c.hora_inicio).length;
+    const sinEstudiantes = parseResult.clases.filter(c => !c.num_estudiantes || c.num_estudiantes === 0).length;
+    const sinDocente = parseResult.clases.filter(c => !c.docente).length;
+
+    const reporteSalud = {
+      total_clases: parseResult.clases.length,
+      clases_sin_horario: sinHorario,
+      clases_sin_estudiantes: sinEstudiantes,
+      clases_sin_docente: sinDocente,
+      estado_general: (sinHorario > 0 || sinEstudiantes > 0) ? 'atencion_requerida' : 'bueno',
+      recomendacion: sinHorario > 0 ? 'Hay materias sin horario definido que no podrán asignarse a un aula.' : 'Los datos parecen estar listos para la distribución.'
+    };
+
     res.json({
       success: true,
-      mensaje: 'Planificación subida exitosamente. Pendiente de revisión por administración.',
+      mensaje: 'Planificación subida exitosamente y procesada para revisión.',
+      reporte_salud: reporteSalud,
       resultado: {
         clases_guardadas: clasesGuardadas,
         hoja_usada: parseResult.hojaUsada,
@@ -287,7 +376,7 @@ exports.subirPlanificacion = async (req, res) => {
         errores: errores.length > 0 ? errores : null,
         distribucion: {
           estado: 'pendiente',
-          mensaje: 'La planificación está en cola para revisión anual/mensual por administración'
+          mensaje: 'La planificación ha sido cargada y está lista para la distribución maestra institucional.'
         }
       }
     });
@@ -325,6 +414,7 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
         c.hora_fin,
         c.docente,
         c.aula_asignada,
+        d.estado as estado,
         a.nombre as aula_nombre,
         a.codigo as aula_codigo,
         a.capacidad as aula_capacidad,
@@ -332,6 +422,7 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
         a.piso,
         car.carrera as carrera_nombre
       FROM clases c
+      LEFT JOIN distribuciones d ON d.clase_id = c.id
       LEFT JOIN aulas a ON a.codigo = c.aula_asignada
       LEFT JOIN uploads_carreras car ON car.id = c.carrera_id
       WHERE 1=1

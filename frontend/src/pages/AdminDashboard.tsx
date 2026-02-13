@@ -15,7 +15,9 @@ import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import EstudianteTable from '../components/EstudianteTable';
 import DocenteTable from '../components/DocenteTable';
 import IncidenciasView from '../components/IncidenciasView';
+import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import DashboardLayout from '../components/layout/DashboardLayout';
+
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
 export default function AdminDashboard() {
@@ -28,7 +30,8 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'disponibilidad' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+
 
   useEffect(() => {
     loadStats();
@@ -178,6 +181,9 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+
+      case 'disponibilidad':
+        return <DisponibilidadAulas />;
 
       case 'espacios':
         return (

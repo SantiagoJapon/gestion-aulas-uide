@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import CommandKSearch from './CommandKSearch';
 
 interface NavItem {
     label: string;
@@ -26,6 +27,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     const { user, logout } = useContext(AuthContext);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
     // Simulación de notificaciones
     const [notifications, setNotifications] = useState([
         { id: 1, from: 'Sistema', text: 'Bienvenido al nuevo dashboard', time: 'Hace 5 min', read: false },
@@ -41,6 +43,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     const navItems: NavItem[] = [
         { label: 'Inicio', icon: 'dashboard', tab: 'general' },
         { label: 'Distribución', icon: 'calendar_apps_script', tab: 'distribucion', roles: ['admin'] },
+        { label: 'Disponibilidad', icon: 'event_available', tab: 'disponibilidad', roles: ['admin', 'director'] },
         { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'] },
         { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'] },
         { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'] },
@@ -62,6 +65,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
     return (
         <div className="flex h-screen overflow-hidden bg-background font-sans text-foreground antialiased transition-colors duration-300">
+            {/* Global Search Interface */}
+            <CommandKSearch />
 
             {/* Mobile Menu Overlay */}
             {isSidebarOpen && (
@@ -74,7 +79,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             {/* Sidebar Navigation */}
             <aside className={`glass-sidebar w-64 flex flex-col fixed lg:sticky top-0 left-0 bottom-[88px] lg:bottom-0 lg:h-full z-30 lg:z-40 transition-transform duration-300 ease-in-out transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} shadow-2xl lg:shadow-none`}>
                 <div className="p-6">
-                    <div className="flex items-center justify-between lg:justify-start gap-3 mb-10">
+                    <div className="flex items-center justify-between lg:justify-start gap-3 mb-8">
                         <div className="flex items-center gap-3">
                             <div className="size-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
                                 <img src="/logo-uide.webp" alt="UIDE Logo" className="w-full h-full object-contain p-1" />
@@ -89,6 +94,30 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             className="lg:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                         >
                             <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    {/* Spotlight Trigger */}
+                    <div className="mb-6 px-1">
+                        <button
+                            onClick={() => {
+                                const event = new KeyboardEvent('keydown', {
+                                    key: 'k',
+                                    ctrlKey: true,
+                                    bubbles: true
+                                });
+                                window.dispatchEvent(event);
+                            }}
+                            className="w-full h-11 flex items-center justify-between px-4 bg-muted/50 hover:bg-muted border border-border/50 rounded-xl text-muted-foreground hover:text-foreground transition-all group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">search</span>
+                                <span className="text-xs font-bold">Buscar...</span>
+                            </div>
+                            <div className="flex items-center gap-0.5">
+                                <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-[9px] font-black border border-border/50 shadow-[0_1px_1px_rgba(0,0,0,0.1)]">⌘</kbd>
+                                <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-[9px] font-black border border-border/50 shadow-[0_1px_1px_rgba(0,0,0,0.1)]">K</kbd>
+                            </div>
                         </button>
                     </div>
 

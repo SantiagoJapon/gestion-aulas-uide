@@ -98,6 +98,10 @@ User.hasMany(Incidencia, { foreignKey: 'usuario_id', as: 'incidencias' });
 Incidencia.belongsTo(User, { foreignKey: 'usuario_id', as: 'reportadoPor' });
 Incidencia.belongsTo(Aula, { foreignKey: 'aula_codigo', targetKey: 'codigo', as: 'aula' });
 
+// Docente <-> User (Vincular perfil académico con cuenta de acceso)
+Docente.belongsTo(User, { foreignKey: 'usuario_id', as: 'usuario' });
+User.hasOne(Docente, { foreignKey: 'usuario_id', as: 'docente' });
+
 module.exports = {
   sequelize,
   User,

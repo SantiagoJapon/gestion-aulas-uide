@@ -4,6 +4,8 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { distribucionService, notificacionService, incidenciaService } from '../services/api';
 import UserSettings from '../components/UserSettings';
+import HorarioVisual from '../components/HorarioVisual';
+
 
 // --- Utility Functions ---
 
@@ -342,52 +344,7 @@ const TimelineDocente = ({ classes, onClassClick }: { classes: any[], onClassCli
   )
 }
 
-const HorarioTable = ({ schedule }: { schedule: any[] }) => {
-  // Reutilizamos la lógica simple de grilla pero adaptada
-  const hours = Array.from({ length: 14 }, (_, i) => i + 7);
-  const days = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES'];
 
-  if (!schedule || schedule.length === 0) return <div className="text-center p-8 text-muted-foreground text-sm">No hay horario disponible.</div>;
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[800px] border border-border rounded-xl bg-card">
-        <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] divide-x divide-border border-b border-border bg-muted/30">
-          <div className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground">Hora</div>
-          {days.map(d => (
-            <div key={d} className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground">{d}</div>
-          ))}
-        </div>
-        <div className="divide-y divide-border">
-          {hours.map(h => (
-            <div key={h} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] divide-x divide-border group hover:bg-muted/10">
-              <div className="p-3 text-center text-xs font-bold text-muted-foreground flex items-center justify-center border-r bg-muted/5">
-                {h}:00
-              </div>
-              {days.map(d => {
-                // Buscar clase en este slot
-                const clase = schedule.find(c =>
-                  c.dia.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === d &&
-                  parseInt(c.hora_inicio.split(':')[0]) === h
-                );
-
-                if (clase) {
-                  return (
-                    <div key={d} className="p-2 bg-primary/10 border-l border-primary/20 m-1 rounded-lg">
-                      <p className="text-[10px] font-black uppercase text-primary leading-tight">{clase.materia}</p>
-                      <p className="text-[9px] font-bold text-muted-foreground mt-0.5">{clase.aula}</p>
-                    </div>
-                  );
-                }
-                return <div key={d} className="h-12"></div>;
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function ProfesorDashboard() {
   const { user } = useContext(AuthContext);
@@ -500,10 +457,7 @@ export default function ProfesorDashboard() {
       case 'horario':
         return (
           <div className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-black text-foreground">Horario Semanal</h2>
-            <DashboardWidget noPadding>
-              <HorarioTable schedule={schedule} />
-            </DashboardWidget>
+            <HorarioVisual mode="personal" title="Mi Horario Académico" />
           </div>
         );
 

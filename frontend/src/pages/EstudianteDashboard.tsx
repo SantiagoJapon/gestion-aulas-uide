@@ -4,6 +4,8 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { distribucionService, reservaService, notificacionService, Notificacion } from '../services/api';
 import UserSettings from '../components/UserSettings';
+import HorarioVisual from '../components/HorarioVisual';
+
 
 // --- Utility Functions ---
 
@@ -325,56 +327,7 @@ const AvisosWidget = () => {
   )
 }
 
-const HorarioView = ({ schedule }: { schedule: any[] }) => {
-  const hours = Array.from({ length: 14 }, (_, i) => i + 7); // 7am to 8pm
-  const days = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES'];
 
-  return (
-    <div className="overflow-x-auto pb-4">
-      <div className="min-w-[800px] bg-card border border-border rounded-xl overflow-hidden">
-        <div className="grid grid-cols-6 border-b border-border bg-muted/50">
-          <div className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground border-r border-border">Hora</div>
-          {days.map(d => (
-            <div key={d} className="p-3 text-center text-[10px] font-black uppercase text-muted-foreground border-r border-border last:border-0">{d}</div>
-          ))}
-        </div>
-        {hours.map(h => (
-          <div key={h} className="grid grid-cols-6 border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
-            <div className="p-3 text-center text-xs font-bold text-muted-foreground border-r border-border flex items-center justify-center">
-              {h}:00
-            </div>
-            {days.map(d => {
-              // Find class for this day and hour
-              const clase = schedule.find(c => {
-                // Normalizar día de API
-                const apiDia = c.dia.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const diaActual = d.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-                // Chequear hora inicia
-                const [startH] = c.hora_inicio.split(':').map(Number);
-                return apiDia === diaActual && startH === h;
-              });
-
-              return (
-                <div key={`${d}-${h}`} className="p-1 border-r border-border last:border-0 min-h-[80px] relative">
-                  {clase && (
-                    <div className="absolute inset-1 bg-primary/10 border border-primary/20 rounded-lg p-2 flex flex-col justify-between hover:bg-primary/20 transition-colors cursor-pointer group">
-                      <span className="text-[9px] font-black uppercase text-primary leading-tight line-clamp-2">{clase.materia}</span>
-                      <div className="flex items-end justify-between">
-                        <span className="text-[9px] font-bold text-muted-foreground bg-white/50 dark:bg-black/20 px-1 rounded">{clase.aula || '?'}</span>
-                        <span className="material-symbols-outlined text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity">info</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function EstudianteDashboard() {
   const { user } = useContext(AuthContext);
@@ -492,27 +445,7 @@ export default function EstudianteDashboard() {
       case 'horario':
         return (
           <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-black text-foreground">Mi Horario</h2>
-                <p className="text-sm text-muted-foreground">Vista semanal de tus materias asignadas.</p>
-              </div>
-              <button
-                onClick={() => alert("Generando PDF...")}
-                className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold hover:bg-muted transition-colors"
-              >
-                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
-                Descargar
-              </button>
-            </div>
-
-            <DashboardWidget noPadding>
-              {loading ? (
-                <div className="p-12 text-center text-muted-foreground">Cargando horario completo...</div>
-              ) : (
-                <HorarioView schedule={schedule} />
-              )}
-            </DashboardWidget>
+            <HorarioVisual mode="personal" title="Mi Horario Estudiantil" />
           </div>
         );
 

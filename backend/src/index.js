@@ -184,6 +184,11 @@ app.use('/api/incidencias', incidenciaRoutes);
 const docenteRoutes = require('./routes/docenteRoutes');
 app.use('/api/docentes', docenteRoutes);
 
+// Rutas de Búsqueda Global y Disponibilidad
+const searchRoutes = require('./routes/searchRoutes');
+app.use('/api/search', searchRoutes);
+
+
 const { sequelize } = require('./config/database');
 const { QueryTypes } = require('sequelize');
 

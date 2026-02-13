@@ -35,6 +35,18 @@ const Docente = sequelize.define('Docente', {
   email: {
     type: DataTypes.STRING(100),
     allowNull: true
+  },
+  telefono: {
+    type: DataTypes.STRING(15),
+    allowNull: true
+  },
+  usuario_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'usuarios',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'docentes',

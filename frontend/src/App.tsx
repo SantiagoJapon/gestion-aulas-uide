@@ -12,6 +12,8 @@ import DirectorDashboard from './pages/DirectorDashboard';
 import ProfesorDashboard from './pages/ProfesorDashboard';
 import EstudianteDashboard from './pages/EstudianteDashboard';
 
+import ForcePasswordChange from './pages/ForcePasswordChange';
+
 // Componente interno que usa el contexto
 const AppRoutes = () => {
   const { token, user } = useContext(AuthContext);
@@ -19,6 +21,12 @@ const AppRoutes = () => {
   // Redirigir a dashboard según rol si está autenticado
   const getDefaultRoute = () => {
     if (!token || !user) return '/login';
+
+    // Si requiere cambio de password, forzarlo sin importar el rol
+    if (user.requiere_cambio_password) {
+      return '/cambiar-password';
+    }
+
     switch (user.rol) {
       case 'admin':
         return '/admin';
@@ -41,6 +49,14 @@ const AppRoutes = () => {
         <Route
           path="/login"
           element={token ? <Navigate to={getDefaultRoute()} replace /> : <Login />}
+        />
+        <Route
+          path="/cambiar-password"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'director', 'profesor', 'docente', 'estudiante']}>
+              <ForcePasswordChange />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/register"

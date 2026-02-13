@@ -13,14 +13,14 @@ const XLSX = require('xlsx');
 const COLUMN_KEYWORDS = {
   // --- Especificos primero para evitar falsos positivos ---
   codigo: ['codigo de la materia', 'codigo de materia', 'codigo materia', 'cod materia', 'codigo', 'cod', 'cod.'],
-  horas_materia: ['horas materia', 'nro horas', 'nro  horas', '# de horas', 'total horas clase', 'total horas', 'horas totales'],
+  horas_materia: ['horas materia', 'nro horas', 'nro  horas', '# de horas', 'total horas clase', 'total horas', 'horas totales', 'horas docente'],
   horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente', 'componente academico'],
   horas_practicas: ['horas practicas', 'practicas', 'componente practico'],
   aula_numero: ['aula nro', 'aula numero', 'salon nro'],
 
   // --- Luego los campos principales ---
   materia: ['materia', 'asignatura', 'nombre materia', 'nombre de la materia', 'curso', 'unidad curricular'],
-  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor', 'teacher', 'instructor', 'catedratico'],
+  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor', 'teacher', 'instructor', 'catedratico', 'nombres', 'apellidos y nombres', 'titular'],
   titulo_pregrado: ['titulo pregrado', 'pregrado', 'título pregrado'],
   titulo_posgrado: ['titulo posgrado', 'posgrado', 'postgrado', 'título posgrado'],
   email: ['email', 'correo electro', 'correo', 'mail'],
@@ -405,6 +405,10 @@ function findHeaderRow(data) {
             }
             // Guard MATERIA: si contiene "horas", es conteo de horas
             if (key === 'materia' && cellNorm.includes('horas')) {
+              break;
+            }
+            // Guard MATERIA EXTRA: no permitir que "docente" o "profesor" matchee con materia
+            if (key === 'materia' && (cellNorm.includes('docente') || cellNorm.includes('profesor') || cellNorm.includes('docencia'))) {
               break;
             }
             // Guard CICLO: si contiene "componente", es componente academico no ciclo

@@ -107,6 +107,10 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('activo', 'inactivo'),
     allowNull: false,
     defaultValue: 'activo'
+  },
+  requiere_cambio_password: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   tableName: 'usuarios',

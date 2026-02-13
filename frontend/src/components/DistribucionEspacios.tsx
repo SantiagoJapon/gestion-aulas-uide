@@ -9,6 +9,8 @@ import {
   FaChevronRight,
   FaInfoCircle
 } from 'react-icons/fa';
+import FilterChips from './common/FilterChips';
+import Highlight from './common/Highlight';
 
 interface ClaseDistribucion {
   id: number;
@@ -94,6 +96,35 @@ export default function DistribucionEspacios() {
     return [...new Set(clases.map(c => c.carrera).filter(Boolean))].sort();
   }, [clases]);
 
+  // Filter Chips Logic
+  const activeChips = useMemo(() => {
+    const chips: { id: string; label: string; value: string }[] = [];
+    if (searchTerm) chips.push({ id: 'search', label: 'Búsqueda', value: searchTerm });
+    if (filtroCiclo) chips.push({ id: 'ciclo', label: 'Ciclo', value: `Ciclo ${filtroCiclo}` });
+    if (filtroCarrera) chips.push({ id: 'carrera', label: 'Carrera', value: filtroCarrera });
+    if (filtroEstado) chips.push({ id: 'estado', label: 'Estado', value: filtroEstado.charAt(0).toUpperCase() + filtroEstado.slice(1) });
+    if (soloConflictos) chips.push({ id: 'conflictos', label: 'Filtro', value: 'Solo Conflictos' });
+    return chips;
+  }, [searchTerm, filtroCiclo, filtroCarrera, filtroEstado, soloConflictos]);
+
+  const removeFilter = (id: string) => {
+    switch (id) {
+      case 'search': setSearchTerm(''); break;
+      case 'ciclo': setFiltroCiclo(''); break;
+      case 'carrera': setFiltroCarrera(''); break;
+      case 'estado': setFiltroEstado(''); break;
+      case 'conflictos': setSoloConflictos(false); break;
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setFiltroCiclo('');
+    setFiltroCarrera('');
+    setFiltroEstado('');
+    setSoloConflictos(false);
+  };
+
   // Filtered classes
   const clasesFiltradas = useMemo(() => {
     return clases.filter(clase => {
@@ -162,16 +193,12 @@ export default function DistribucionEspacios() {
 
   const generatePageNumbers = () => {
     const pages: (number | string)[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (currentPage > 3) pages.push('...');
-      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
         pages.push(i);
+      } else if (pages[pages.length - 1] !== '...') {
+        pages.push('...');
       }
-      if (currentPage < totalPages - 2) pages.push('...');
-      pages.push(totalPages);
     }
     return pages;
   };
@@ -180,17 +207,18 @@ export default function DistribucionEspacios() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-        <span className="ml-3 text-muted-foreground">Cargando distribucion...</span>
+        <span className="ml-3 text-muted-foreground font-bold">Cargando distribución...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-        <p className="text-red-700">{error}</p>
-        <button onClick={cargarDatos} className="mt-3 text-sm text-red-600 underline hover:text-red-800">
-          Reintentar
+      <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-8 text-center max-w-lg mx-auto">
+        <span className="material-symbols-outlined text-4xl text-destructive mb-4">error</span>
+        <p className="text-destructive font-bold mb-2">{error}</p>
+        <button onClick={cargarDatos} className="px-6 py-2 bg-destructive text-destructive-foreground rounded-full text-xs font-black uppercase tracking-widest hover:shadow-lg transition-all">
+          Reintentar Carga
         </button>
       </div>
     );
@@ -199,211 +227,246 @@ export default function DistribucionEspacios() {
   return (
     <div className="space-y-6">
       {/* Progress Bar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            Progreso General de Distribucion
-          </h3>
-          <span className="text-2xl font-bold text-gray-900">
-            {estadisticas.porcentaje_completado}%
-          </span>
+      <div className="bg-card dark:bg-slate-900 rounded-3xl border border-border p-8 shadow-sm overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-8 opacity-5 select-none pointer-events-none">
+          <span className="material-symbols-outlined text-[120px]">analytics</span>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${getProgressColor(estadisticas.porcentaje_completado)}`}
-            style={{ width: `${estadisticas.porcentaje_completado}%` }}
-          />
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">
+                Progreso General
+              </h3>
+              <p className="text-2xl font-black text-foreground">
+                Estado de Distribución
+              </p>
+            </div>
+            <div className="text-right">
+              <span className="text-4xl font-black text-primary">
+                {estadisticas.porcentaje_completado}%
+              </span>
+            </div>
+          </div>
+          <div className="w-full bg-muted rounded-full h-4 overflow-hidden border border-border shadow-inner">
+            <div
+              className={`h-full rounded-full transition-all duration-1000 ease-out shadow-lg ${getProgressColor(estadisticas.porcentaje_completado)}`}
+              style={{ width: `${estadisticas.porcentaje_completado}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-4">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+              {estadisticas.asignadas} de {estadisticas.total_clases} clases asignadas correctamente
+            </p>
+            <div className="flex gap-4">
+              {/* Mini badges if needed */}
+            </div>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
-          {estadisticas.asignadas} de {estadisticas.total_clases} clases asignadas
-        </p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Total Clases</p>
-          <p className="text-3xl font-bold text-gray-900">{estadisticas.total_clases}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-xs font-medium text-green-600 uppercase tracking-wide mb-1">Asignadas</p>
-          <p className="text-3xl font-bold text-green-600">{estadisticas.asignadas}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Pendientes</p>
-          <p className="text-3xl font-bold text-gray-500">{estadisticas.pendientes}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-xs font-medium text-amber-600 uppercase tracking-wide mb-1">Conflictos</p>
-          <p className="text-3xl font-bold text-amber-600">{estadisticas.conflictos}</p>
-        </div>
+        {[
+          { label: 'Total Clases', value: estadisticas.total_clases, icon: 'grid_view', color: 'text-foreground' },
+          { label: 'Asignadas', value: estadisticas.asignadas, icon: 'check_circle', color: 'text-green-500' },
+          { label: 'Pendientes', value: estadisticas.pendientes, icon: 'pending', color: 'text-muted-foreground' },
+          { label: 'Conflictos', value: estadisticas.conflictos, icon: 'warning', color: 'text-amber-500' }
+        ].map((stat, i) => (
+          <div key={i} className="bg-card dark:bg-slate-900 rounded-2xl border border-border p-6 shadow-sm hover:shadow-md transition-all group">
+            <div className="flex justify-between items-start mb-4">
+              <div className={`size-10 rounded-xl flex items-center justify-center bg-muted group-hover:bg-primary/10 transition-colors`}>
+                <span className={`material-symbols-outlined ${stat.color}`}>{stat.icon}</span>
+              </div>
+              <span className="material-symbols-outlined text-muted-foreground/20">trending_up</span>
+            </div>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">{stat.label}</p>
+            <p className="text-3xl font-black text-foreground">{stat.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filters & Search */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-card dark:bg-slate-900 rounded-2xl border border-border p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+          <div className="relative flex-1 min-w-[240px]">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/60" size={12} />
             <input
               type="text"
               placeholder="Buscar por materia, docente, aula..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              className="w-full pl-10 pr-4 py-2.5 text-sm bg-muted/30 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/50 font-medium"
             />
           </div>
 
-          {/* Ciclo filter */}
-          <select
-            value={filtroCiclo}
-            onChange={(e) => setFiltroCiclo(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-          >
-            <option value="">Todos los Ciclos</option>
-            {ciclosUnicos.map(c => (
-              <option key={c} value={c}>Ciclo {c}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filtroCiclo}
+              onChange={(e) => setFiltroCiclo(e.target.value)}
+              className="px-3 py-2.5 text-sm font-bold border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground transition-all cursor-pointer shadow-sm"
+            >
+              <option value="">Todos los Ciclos</option>
+              {ciclosUnicos.map(c => <option key={c} value={c}>Ciclo {c}</option>)}
+            </select>
 
-          {/* Carrera filter */}
-          <select
-            value={filtroCarrera}
-            onChange={(e) => setFiltroCarrera(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-          >
-            <option value="">Todas las Carreras</option>
-            {carrerasUnicas.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            <select
+              value={filtroCarrera}
+              onChange={(e) => setFiltroCarrera(e.target.value)}
+              className="px-3 py-2.5 text-sm font-bold border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground transition-all cursor-pointer shadow-sm max-w-[200px]"
+            >
+              <option value="">Todas las Carreras</option>
+              {carrerasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
 
-          {/* Estado filter */}
-          <select
-            value={filtroEstado}
-            onChange={(e) => {
-              setFiltroEstado(e.target.value);
-              if (e.target.value === 'conflicto') setSoloConflictos(false);
-            }}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-          >
-            <option value="">Todos los Estados</option>
-            <option value="asignada">Asignada</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="conflicto">Conflicto</option>
-          </select>
+            <select
+              value={filtroEstado}
+              onChange={(e) => {
+                setFiltroEstado(e.target.value);
+                if (e.target.value === 'conflicto') setSoloConflictos(false);
+              }}
+              className="px-3 py-2.5 text-sm font-bold border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground transition-all cursor-pointer shadow-sm"
+            >
+              <option value="">Todos los Estados</option>
+              <option value="asignada">Asignada</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="conflicto">Conflicto</option>
+            </select>
 
-          {/* Conflicts toggle */}
-          <button
-            onClick={() => {
-              setSoloConflictos(!soloConflictos);
-              if (!soloConflictos) setFiltroEstado('');
-            }}
-            className={`inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors ${
-              soloConflictos
-                ? 'bg-amber-50 border-amber-300 text-amber-700'
-                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <FaExclamationTriangle size={12} />
-            Solo Conflictos
-          </button>
+            <button
+              onClick={() => {
+                setSoloConflictos(!soloConflictos);
+                if (!soloConflictos) setFiltroEstado('');
+              }}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl border transition-all ${soloConflictos
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-500/20'
+                  : 'bg-card border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+            >
+              <FaExclamationTriangle size={12} className={soloConflictos ? 'animate-pulse' : ''} />
+              Conflictos
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Chips Interface */}
+        <div className="mt-4 pt-4 border-t border-border/50">
+          <FilterChips
+            chips={activeChips}
+            onRemove={removeFilter}
+            onClearAll={clearAllFilters}
+          />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-card dark:bg-slate-900 rounded-3xl border border-border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Cod.
-                </th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Materia
-                </th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Ciclo
-                </th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Docente
-                </th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Horario
-                </th>
-                <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Est.
-                </th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Aula
-                </th>
-                <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">
-                  Estado
-                </th>
+              <tr className="bg-muted/30 border-b border-border">
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Cod.</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Materia</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Ciclo</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Par.</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Docente</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Horario</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Est.</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Aula</th>
+                <th className="px-6 py-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Estado</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border/50">
               {clasesPaginadas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-gray-400">
-                    No se encontraron clases con los filtros aplicados
+                  <td colSpan={9} className="text-center py-24">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="size-20 bg-muted/50 rounded-full flex items-center justify-center border border-border">
+                        <span className="material-symbols-outlined text-5xl text-muted-foreground/30">search_off</span>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-black text-lg text-foreground">No encontramos nada</p>
+                        <p className="text-xs text-muted-foreground font-medium">No hay clases que coincidan con los criterios aplicados.</p>
+                      </div>
+                      <button
+                        onClick={clearAllFilters}
+                        className="mt-4 px-8 py-3 bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest rounded-full hover:shadow-xl hover:shadow-primary/20 transition-all active:scale-95"
+                      >
+                        Limpiar todos los filtros
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 clasesPaginadas.map((clase) => (
                   <tr
                     key={clase.id}
-                    className={`hover:bg-gray-50/50 transition-colors ${
-                      clase.estado === 'conflicto' ? 'bg-amber-50/30' : ''
-                    }`}
+                    className={`group hover:bg-muted/20 transition-colors ${clase.estado === 'conflicto' ? 'bg-amber-500/[0.03]' : ''
+                      }`}
                   >
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-mono text-gray-500">
-                        {String(clase.id).padStart(4, '0')}
-                      </span>
+                    <td className="px-6 py-5">
+                      <span className="text-[10px] font-black font-mono text-muted-foreground/60">#{String(clase.id).padStart(4, '0')}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]" title={clase.materia}>
-                          {clase.materia}
+                    <td className="px-6 py-5">
+                      <div className="min-w-[200px]">
+                        <p className="text-sm font-black text-foreground truncate group-hover:text-primary transition-colors" title={clase.materia}>
+                          <Highlight text={clase.materia} query={searchTerm} />
                         </p>
-                        <p className="text-xs text-gray-400">{clase.carrera}</p>
+                        <p className="text-[11px] font-bold text-muted-foreground/50 uppercase tracking-tighter mt-0.5">
+                          <Highlight text={clase.carrera} query={searchTerm} />
+                        </p>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                    <td className="px-6 py-5">
+                      <span className="inline-flex items-center justify-center size-8 rounded-xl bg-muted text-foreground text-xs font-black border border-border shadow-sm">
                         {clase.ciclo || '-'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-gray-700 truncate max-w-[150px]" title={clase.docente}>
-                        {clase.docente || 'Sin asignar'}
+                    <td className="px-6 py-5 text-center">
+                      <span className="text-xs font-black text-muted-foreground">{clase.paralelo}</span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <p className="text-sm font-bold text-foreground truncate max-w-[180px]" title={clase.docente}>
+                        <Highlight text={clase.docente || 'Sin docente'} query={searchTerm} />
                       </p>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">
-                        <p className="text-gray-700 font-medium">{clase.dia}</p>
-                        <p className="text-xs text-gray-400">
-                          {clase.hora_inicio} - {clase.hora_fin}
+                    <td className="px-6 py-5">
+                      <div className="text-xs">
+                        <p className="font-black text-foreground mb-1 flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-primary/40"></span>
+                          {clase.dia}
                         </p>
+                        <div className="flex items-center gap-1.5 text-muted-foreground font-bold opacity-70">
+                          <span className="material-symbols-outlined text-[14px]">schedule</span>
+                          {clase.hora_inicio} - {clase.hora_fin}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="text-sm font-semibold text-gray-700">
-                        {clase.num_estudiantes || 0}
-                      </span>
+                    <td className="px-6 py-5 text-center">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-muted/50 rounded-xl border border-border/50">
+                        <span className="material-symbols-outlined text-[16px] text-muted-foreground">groups</span>
+                        <span className="text-xs font-black text-foreground">{clase.num_estudiantes || 0}</span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-5">
                       {clase.aula_asignada ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                          {clase.aula_asignada}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-black bg-primary/10 text-primary border border-primary/20 shadow-sm">
+                            <span className="material-symbols-outlined text-[16px]">meeting_room</span>
+                            <Highlight text={clase.aula_asignada} query={searchTerm} />
+                          </span>
+                          {clase.aula_capacidad && (
+                            <span className="text-[9px] font-black text-muted-foreground ml-1 uppercase tracking-[0.1em] opacity-60">Cap. {clase.aula_capacidad}</span>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-xs text-gray-400 italic">Sin asignar</span>
+                        <div className="flex items-center gap-2 text-muted-foreground/40 italic">
+                          <span className="material-symbols-outlined text-[18px]">event_busy</span>
+                          <span className="text-[11px] font-bold">Sin asignar</span>
+                        </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-6 py-5 text-center">
                       {getEstadoBadge(clase.estado)}
                     </td>
                   </tr>
@@ -413,57 +476,60 @@ export default function DistribucionEspacios() {
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Improved Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span>Filas por pagina:</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-gray-200 rounded px-2 py-1 text-sm bg-white"
-              >
-                <option value={10}>10</option>
-                <option value={15}>15</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-              <span className="ml-2">
-                {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, clasesFiltradas.length)} de {clasesFiltradas.length}
-              </span>
+          <div className="bg-muted/10 px-6 py-5 flex items-center justify-between border-t border-border">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Filas:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-card border border-border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                >
+                  {[10, 15, 25, 50, 100].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-widest">
+                Mostrando <span className="text-foreground">{Math.min(clasesFiltradas.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, clasesFiltradas.length)}</span> de <span className="text-foreground">{clasesFiltradas.length}</span>
+              </p>
             </div>
-            <div className="flex items-center gap-1">
+
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="size-9 flex items-center justify-center rounded-xl bg-card border border-border text-muted-foreground hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:shadow-md active:scale-95"
               >
                 <FaChevronLeft size={12} />
               </button>
-              {generatePageNumbers().map((page, idx) =>
-                typeof page === 'string' ? (
-                  <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">...</span>
-                ) : (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                      currentPage === page
-                        ? 'bg-primary text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                )
-              )}
+
+              <div className="flex items-center gap-1 mx-2">
+                {generatePageNumbers().map((page, idx) => (
+                  page === '...' ? (
+                    <span key={`el-${idx}`} className="px-2 text-muted-foreground font-black">...</span>
+                  ) : (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(Number(page))}
+                      className={`size-9 rounded-xl text-xs font-black transition-all ${currentPage === page
+                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                          : 'bg-card border border-border text-muted-foreground hover:bg-muted'
+                        }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                ))}
+              </div>
+
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="size-9 flex items-center justify-center rounded-xl bg-card border border-border text-muted-foreground hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:shadow-md active:scale-95"
               >
                 <FaChevronRight size={12} />
               </button>
@@ -472,25 +538,28 @@ export default function DistribucionEspacios() {
         )}
       </div>
 
-      {/* Legend */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <FaInfoCircle className="text-gray-400" size={14} />
-          <h4 className="text-sm font-semibold text-gray-600">Leyenda</h4>
+      {/* Improved Legend */}
+      <div className="bg-card dark:bg-slate-900 rounded-3xl border border-border p-6 shadow-sm overflow-hidden border-l-[6px] border-l-primary/30">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="size-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-[20px]">info</span>
+          </div>
+          <h4 className="text-xs font-black text-foreground uppercase tracking-[0.2em]">Guía de Estados</h4>
         </div>
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <FaCheckCircle className="text-green-500" size={14} />
-            <span className="text-gray-600">Asignada - Aula confirmada sin conflictos</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <FaExclamationTriangle className="text-amber-500" size={14} />
-            <span className="text-gray-600">Conflicto - Solapamiento de horario en el aula</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <FaMinusCircle className="text-gray-400" size={14} />
-            <span className="text-gray-600">Pendiente - Sin aula asignada</span>
-          </div>
+        <div className="flex flex-wrap gap-8">
+          {[
+            { label: 'Asignada', desc: 'Aula confirmada sin conflictos detectados', badge: 'asignada' },
+            { label: 'Conflicto', desc: 'Error de solapamiento en el aula asignada', badge: 'conflicto' },
+            { label: 'Pendiente', desc: 'Clase aún no tiene un espacio físico', badge: 'pendiente' }
+          ].map((item, i) => (
+            <div key={i} className="flex gap-4 max-w-xs">
+              <div className="mt-1">{getEstadoBadge(item.badge)}</div>
+              <div>
+                <p className="text-[11px] font-black text-foreground uppercase tracking-widest mb-1">{item.label}</p>
+                <p className="text-xs text-muted-foreground font-medium leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

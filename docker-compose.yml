@@ -56,6 +56,10 @@ services:
       - AI_PROVIDER=${AI_PROVIDER:-anthropic}
       - N8N_WEBHOOK_URL=http://n8n:5678/webhook
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-bot}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
       - "3000:3000"
     volumes:

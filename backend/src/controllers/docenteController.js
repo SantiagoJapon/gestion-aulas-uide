@@ -1,6 +1,7 @@
-const { Docente, Clase, Carrera } = require('../models');
+const { Docente, Clase, Carrera, User } = require('../models');
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const whatsappService = require('../services/whatsappService');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -15,8 +16,51 @@ const handle500 = (res, error, context) => {
 };
 
 /**
+ * Función auxiliar para generar un usuario para un docente
+ */
+const crearUsuarioParaDocente = async (docente, transaction = null) => {
+    // Si ya tiene usuario, no hacer nada
+    if (docente.usuario_id) return null;
+
+    // Split nombre y apellido
+    const partes = docente.nombre.trim().split(' ');
+    const nombre = partes[0] || 'Docente';
+    const apellido = partes.slice(1).join(' ') || 'UIDE';
+
+    // Generar email único si no tiene
+    let email = docente.email;
+    if (!email) {
+        email = `${nombre.toLowerCase()}.${apellido.toLowerCase().replace(/\s+/g, '')}@docente.uide.edu.ec`;
+    }
+
+    // Verificar si el email ya existe para evitar errores
+    const existingUser = await User.findOne({ where: { email }, transaction });
+    if (existingUser) {
+        // Vincular al usuario existente si no tiene docente vinculado
+        await docente.update({ usuario_id: existingUser.id }, { transaction });
+        return existingUser;
+    }
+
+    // Crear el usuario
+    const user = await User.create({
+        nombre,
+        apellido,
+        email,
+        password: 'uide2024', // Password por defecto solicitado
+        rol: 'docente',
+        estado: 'activo',
+        requiere_cambio_password: true,
+        telefono: docente.telefono
+    }, { transaction });
+
+    // Vincular al docente
+    await docente.update({ usuario_id: user.id }, { transaction });
+
+    return user;
+};
+
+/**
  * Obtener lista de docentes con carga y filtros
- * GET /api/docentes
  */
 exports.getDocentes = async (req, res) => {
     try {
@@ -30,22 +74,19 @@ exports.getDocentes = async (req, res) => {
             where.nombre = { [Op.iLike]: `%${search}%` };
         }
 
-        // Filtrado por carrera (Seguridad y lógica de Director)
+        // Filtrado por carrera
         if (usuario.rol === 'director') {
-            // Si es director, solo ve su carrera asignada en carrera_director
             const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
             if (carreraObj) {
                 where.carrera_id = carreraObj.id;
             } else {
-                // Si no tiene carrera asignada, no devuelve nada
                 return res.json({ success: true, docentes: [] });
             }
         } else if (carrera_id) {
-            // Si es admin y pasa carrera_id, filtrar por ella
             where.carrera_id = carrera_id;
         }
 
-        // Obtener docentes con su carrera y carga agrupada
+        // Obtener docentes con su carrera y usuario vinculado
         const docentes = await Docente.findAll({
             where,
             include: [
@@ -53,13 +94,17 @@ exports.getDocentes = async (req, res) => {
                     model: Carrera,
                     as: 'carrera',
                     attributes: ['id', 'carrera']
+                },
+                {
+                    model: User,
+                    as: 'usuario',
+                    attributes: ['id', 'email', 'estado', 'requiere_cambio_password', 'last_login']
                 }
             ],
             order: [['nombre', 'ASC']]
         });
 
-        // Enriquecer con carga (total clases y horas)
-        // Usamos una query separada o sumamos en JS para evitar problemas de group by complejos con asociaciones
+        // Enriquecer con carga
         const docentesIds = docentes.map(d => d.id);
         let cargaMap = {};
 
@@ -110,7 +155,6 @@ exports.getDocentes = async (req, res) => {
 
 /**
  * Obtener detalle de un docente
- * GET /api/docentes/:id
  */
 exports.getDocenteById = async (req, res) => {
     try {
@@ -118,7 +162,8 @@ exports.getDocenteById = async (req, res) => {
         const docente = await Docente.findByPk(id, {
             include: [
                 { model: Carrera, as: 'carrera' },
-                { model: Clase, as: 'clases' }
+                { model: Clase, as: 'clases' },
+                { model: User, as: 'usuario' }
             ]
         });
 
@@ -137,12 +182,11 @@ exports.getDocenteById = async (req, res) => {
 
 /**
  * Actualizar datos de un docente
- * PUT /api/docentes/:id
  */
 exports.updateDocente = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nombre, email, titulo_pregrado, titulo_posgrado, tipo } = req.body;
+        const { nombre, email, titulo_pregrado, titulo_posgrado, tipo, telefono } = req.body;
 
         const docente = await Docente.findByPk(id);
         if (!docente) {
@@ -154,7 +198,8 @@ exports.updateDocente = async (req, res) => {
             email,
             titulo_pregrado,
             titulo_posgrado,
-            tipo
+            tipo,
+            telefono
         });
 
         res.json({
@@ -164,5 +209,68 @@ exports.updateDocente = async (req, res) => {
         });
     } catch (error) {
         handle500(res, error, 'updateDocente');
+    }
+};
+
+/**
+ * Actualizar solo el teléfono del docente
+ */
+exports.updateTelefono = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { telefono } = req.body;
+
+        const docente = await Docente.findByPk(id);
+        if (!docente) return res.status(404).json({ success: false, message: 'Docente no encontrado' });
+
+        await docente.update({ telefono });
+
+        // Si tiene usuario vinculado, actualizar también su teléfono para el bot
+        if (docente.usuario_id) {
+            await User.update({ telefono }, { where: { id: docente.usuario_id } });
+        }
+
+        res.json({ success: true, message: 'Teléfono actualizado' });
+    } catch (error) {
+        handle500(res, error, 'updateTelefono');
+    }
+};
+
+/**
+ * Generar credenciales masivamente para docentes sin cuenta
+ */
+exports.generarCredencialesMasivo = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const { carrera_id } = req.body;
+        const where = { usuario_id: null };
+        if (carrera_id) where.carrera_id = carrera_id;
+
+        const docentes = await Docente.findAll({ where, transaction });
+        let creados = 0;
+        let conTelefono = 0;
+
+        for (const docente of docentes) {
+            const user = await crearUsuarioParaDocente(docente, transaction);
+            if (user) {
+                creados++;
+                // Enviar WhatsApp si tiene teléfono
+                if (docente.telefono) {
+                    const mensaje = `*UIDE Gestión de Aulas*\n\nHola ${docente.nombre}, se han generado tus credenciales de acceso:\n\n📧 *Email:* ${user.email}\n🔑 *Clave temporal:* uide2024\n\n_Por seguridad, el sistema te pedirá cambiar tu clave al ingresar._\n\n🌐 Accede aquí: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`;
+                    await whatsappService.sendMessage(docente.telefono, mensaje);
+                    conTelefono++;
+                }
+            }
+        }
+
+        await transaction.commit();
+        res.json({
+            success: true,
+            mensaje: `Se crearon ${creados} cuentas de usuario. ${conTelefono} notificaciones enviadas por WhatsApp.`,
+            stats: { creados, notificados: conTelefono }
+        });
+    } catch (error) {
+        if (transaction) await transaction.rollback();
+        handle500(res, error, 'generarCredencialesMasivo');
     }
 };

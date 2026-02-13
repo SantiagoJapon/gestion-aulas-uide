@@ -12,28 +12,25 @@ const { Op } = require('sequelize');
 // ============================================
 
 const REGLAS_AULAS = {
-  // Aulas excluidas de distribución automática (reservables manualmente con aprobación admin)
+  // Aulas excluidas de distribución automática
   excluidas_distribucion: ['AUDITORIO'],
 
-  // Aulas exclusivas por carrera (solo esa carrera puede usarlas)
-  // Códigos y nombres reales de la BD:
-  //   AUDIENCIAS / Sala de Audiencias → Derecho
-  //   AULA20 / Aula 20 - Laboratorio de Psicología → Psicología
-  //   C15,C16,C17,C18 / Aula C15-C18 - Arquitectura → Arquitectura (Taller maquetería)
+  // Aulas exclusivas por carrera
   exclusivas: {
     'SALA DE AUDIENCIAS': ['DERECHO'],
     'AUDIENCIAS': ['DERECHO'],
     'AULA 20': ['PSICOLOGIA', 'PSICOLOGÍA'],
     'AULA20': ['PSICOLOGIA', 'PSICOLOGÍA'],
     'LABORATORIO DE PSICOLOGIA': ['PSICOLOGIA', 'PSICOLOGÍA'],
-    'C15': ['ARQUITECTURA'],
-    'C16': ['ARQUITECTURA'],
-    'C17': ['ARQUITECTURA'],
-    'C18': ['ARQUITECTURA'],
+    'AULA 16': ['ARQUITECTURA'],
+    'AULA 17': ['ARQUITECTURA'],
+    'AULA 18': ['ARQUITECTURA'],
+    'A16': ['ARQUITECTURA'],
+    'A17': ['ARQUITECTURA'],
+    'A18': ['ARQUITECTURA'],
   },
 
-  // Aulas con prioridad para una carrera (otras pueden usarlas si sobran)
-  // Códigos reales: LAB1, LAB2, LAB3
+  // Aulas con prioridad para una carrera
   prioridad: {
     'LABORATORIO 1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
     'LABORATORIO 2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
@@ -56,7 +53,6 @@ function aulaExcluidaDeDistribucion(aula) {
   const codigo = normalizarTexto(aula.codigo);
   const tipo = normalizarTexto(aula.tipo);
 
-  // Auditorio: no se asigna automáticamente (se reserva con aprobación admin)
   for (const excluida of REGLAS_AULAS.excluidas_distribucion) {
     if (nombre.includes(excluida) || codigo.includes(excluida) || tipo === excluida) {
       return true;
@@ -70,9 +66,16 @@ function aulaEsExclusiva(aula, carreraClase) {
   const codigo = normalizarTexto(aula.codigo);
   const carreraNorm = normalizarTexto(carreraClase);
 
+  // Regla especial para Aulas 16, 17, 18 de Arquitectura (Taller de maquetería)
+  const isArqRoom = (nombre.includes('16') || nombre.includes('17') || nombre.includes('18')) &&
+    (nombre.includes('AULA') || codigo.includes('A'));
+
+  if (isArqRoom) {
+    return carreraNorm.includes('ARQUITECTURA') ? 'permitida' : 'bloqueada';
+  }
+
   for (const [aulaKey, carreras] of Object.entries(REGLAS_AULAS.exclusivas)) {
     if (nombre.includes(aulaKey) || codigo.includes(aulaKey)) {
-      // Esta aula es exclusiva: solo las carreras listadas pueden usarla
       return carreras.some(c => carreraNorm.includes(c)) ? 'permitida' : 'bloqueada';
     }
   }
@@ -93,141 +96,121 @@ function aulaConPrioridad(aula) {
 
 class DistribucionService {
 
-  /**
-   * Ejecuta la distribución automática de aulas
-   */
-  /**
-   * Ejecuta la distribución automática de aulas
-   * @param {number|null} carreraId - ID de la carrera para filtrar (opcional)
-   */
   async ejecutarDistribucion(carreraId = null) {
     try {
-      console.log(`🚀 Iniciando distribución automática de aulas... ${carreraId ? `(Carrera ID: ${carreraId})` : '(GLOBLAL)'}`);
+      console.log(`🚀 Iniciando GRAN DISTRIBUCIÓN MAESTRA... ${carreraId ? `(Filtro Carrera: ${carreraId})` : '(TOTAL INSTITUCIONAL)'}`);
 
-      // Obtener nombre de carrera si se pasó ID
       let nombreCarrera = null;
       if (carreraId) {
         const carrera = await Carrera.findByPk(carreraId);
         if (carrera) nombreCarrera = carrera.carrera;
       }
 
-      // PASO 0: Limpiar distribución previa de esta carrera para evitar duplicados/errores
-      console.log(`🧹 Limpiando distribución previa para ${nombreCarrera || 'GLOBAL'}...`);
+      // 1. LIMPIEZA
       const whereClasesLimpieza = {};
       if (nombreCarrera) whereClasesLimpieza.carrera = nombreCarrera;
 
-      const clasesLimpieza = await Clase.findAll({
-        attributes: ['id'],
-        where: whereClasesLimpieza
-      });
-
+      const clasesLimpieza = await Clase.findAll({ attributes: ['id', 'materia'], where: whereClasesLimpieza });
       if (clasesLimpieza.length > 0) {
-        const idsLimpieza = clasesLimpieza.map(c => c.id);
-        await Distribucion.destroy({
-          where: { clase_id: idsLimpieza }
-        });
-        console.log(`   ✅ Eliminados registros de distribución de ${idsLimpieza.length} clases.`);
+        await Distribucion.destroy({ where: { clase_id: clasesLimpieza.map(c => c.id) } });
+        await Clase.update({ aula_asignada: null }, { where: whereClasesLimpieza });
       }
 
-      // PASO 1: Validar aulas pre-asignadas (Solo de esta carrera si se especifica)
-      await this.validarAulasPreasignadas(nombreCarrera);
+      // 2. CARGAR CLASES Y AULAS
+      const whereClases = { aula_asignada: null };
+      if (nombreCarrera) whereClases.carrera = nombreCarrera;
 
-      // PASO 2: Obtener clases PENDIENTES de distribución
-      // Si hay carreraId, solo buscamos las de esa carrera
-      const whereClases = {
-        aula_asignada: null
-      };
-
-      if (nombreCarrera) {
-        whereClases.carrera = nombreCarrera;
-      }
-
-      const clases = await Clase.findAll({
-        where: whereClases,
-        order: [['num_estudiantes', 'DESC']]
-      });
-
-      console.log(`📚 Clases a distribuir: ${clases.length}`);
-
-      if (clases.length === 0) {
-        return {
-          success: true,
-          mensaje: 'No hay clases pendientes de distribución',
-          estadisticas: {
-            total_procesadas: 0,
-            exitosas: 0,
-            fallidas: 0
-          }
-        };
-      }
-
-      // Obtener todas las aulas disponibles
+      const todasLasClases = await Clase.findAll({ where: whereClases });
       const todasAulas = await Aula.findAll({
-        where: {
-          estado: { [Op.iLike]: 'DISPONIBLE' }
-        },
+        where: { estado: { [Op.iLike]: 'DISPONIBLE' } },
         order: [['capacidad', 'ASC']]
       });
-
       const aulas = todasAulas.filter(a => !aulaExcluidaDeDistribucion(a));
 
-      // PASO CRITICO: Cargar ocupación GLOBAL (de TODAS las carreras)
-      // para no sobrescribir ni chocar con otras clases ya asignadas
+      // Cargar ocupación actual
       const aulasOcupadas = {};
-      const clasesYaAsignadas = await Clase.findAll({
-        where: { aula_asignada: { [Op.not]: null } }
+      const clasesConAula = await Clase.findAll({ where: { aula_asignada: { [Op.not]: null } } });
+      for (const c of clasesConAula) {
+        if (!aulasOcupadas[c.aula_asignada]) aulasOcupadas[c.aula_asignada] = [];
+        aulasOcupadas[c.aula_asignada].push({
+          dia: c.dia,
+          inicio: this.convertirHoraAMinutos(c.hora_inicio),
+          fin: this.convertirHoraAMinutos(c.hora_fin)
+        });
+      }
+
+      // ==========================================
+      // 🏆 RANKING DE PRIORIDAD (Procesamiento por Fases)
+      // ==========================================
+
+      // Fase 1: Materias con requerimientos de Aula Específica (Labs, Talleres, Audiencias)
+      const fase1 = todasLasClases.filter(c => {
+        const mat = normalizarTexto(c.materia);
+        return mat.includes('LAB') || mat.includes('TALLER') || mat.includes('AUDIENCIA') || mat.includes('PRACTI');
       });
 
-      for (const c of clasesYaAsignadas) {
-        if (c.aula_asignada && c.dia && c.hora_inicio && c.hora_fin) {
-          if (!aulasOcupadas[c.aula_asignada]) aulasOcupadas[c.aula_asignada] = [];
-          aulasOcupadas[c.aula_asignada].push({
-            dia: c.dia,
-            inicio: this.convertirHoraAMinutos(c.hora_inicio),
-            fin: this.convertirHoraAMinutos(c.hora_fin)
-          });
-        }
-      }
+      // Fase 2: Clases Masivas (Prioridad por cupo)
+      const fase2 = todasLasClases.filter(c => !fase1.includes(c) && c.num_estudiantes >= 35)
+        .sort((a, b) => b.num_estudiantes - a.num_estudiantes);
+
+      // Fase 3: Resto de clases
+      const fase3 = todasLasClases.filter(c => !fase1.includes(c) && !fase2.includes(c));
+
+      console.log(`📊 Plan de Distribución: Fase1=${fase1.length}, Fase2=${fase2.length}, Fase3=${fase3.length}`);
 
       let exitosas = 0;
       let fallidas = 0;
-      const clasesRestantes = [];
+      let sobrecupos = 0;
 
-      // PASO 3: Asignar (Igual que antes, pero 'clases' está filtrado)
-      for (const clase of clases) {
-        const aulaAsignada = this.buscarAulaOptima(clase, aulas, aulasOcupadas, true);
-        if (aulaAsignada) {
-          await this.confirmarAsignacion(clase, aulaAsignada, aulasOcupadas);
-          exitosas++;
-        } else {
-          clasesRestantes.push(clase);
+      const procesarFase = async (listaClases, estrictoCapacidad = true) => {
+        for (const clase of listaClases) {
+          const result = this.buscarAulaOptima(clase, aulas, aulasOcupadas, estrictoCapacidad);
+          if (result) {
+            await this.confirmarAsignacion(clase, result.aula, aulasOcupadas, result.isOvercapacity);
+            exitosas++;
+            if (result.isOvercapacity) sobrecupos++;
+          } else {
+            clase._failed = true;
+          }
         }
-      }
+      };
 
-      // PASO 4: Asignar restantes
-      for (const clase of clasesRestantes) {
-        const aulaAsignada = this.buscarAulaOptima(clase, aulas, aulasOcupadas, false);
-        if (aulaAsignada) {
-          await this.confirmarAsignacion(clase, aulaAsignada, aulasOcupadas);
-          exitosas++;
-        } else {
-          fallidas++;
-          console.log(`  ❌ ${clase.carrera} - ${clase.materia} (${clase.num_estudiantes} est.) → Sin aula disponible`);
+      // Ejecución de fases
+      await procesarFase(fase1, true);
+      await procesarFase(fase2, true);
+      await procesarFase(fase3, true);
+
+      // Fase de Reintento (Flexibilidad de cupo para las que fallaron)
+      const fallidasFase123 = todasLasClases.filter(c => c._failed);
+      if (fallidasFase123.length > 0) {
+        console.log(`⚠️ Intentando asignar ${fallidasFase123.length} clases fallidas con flexibilidad de cupo...`);
+        for (const clase of fallidasFase123) {
+          const result = this.buscarAulaOptima(clase, aulas, aulasOcupadas, false); // No estricto
+          if (result) {
+            await this.confirmarAsignacion(clase, result.aula, aulasOcupadas, true);
+            exitosas++;
+            sobrecupos++;
+          } else {
+            fallidas++;
+            console.log(`  ❌ SIN ESPACIO: ${clase.materia} (${clase.num_estudiantes} est) no encontró aula en ningún horario.`);
+          }
         }
       }
 
       return {
         success: true,
-        mensaje: 'Distribución completada exitosamente',
+        mensaje: 'Distribución Maestra completada',
         estadisticas: {
-          total_procesadas: clases.length,
+          total: todasLasClases.length,
           exitosas,
-          fallidas
+          fallidas,
+          sobrecupos,
+          eficiencia: ((exitosas / todasLasClases.length) * 100).toFixed(1) + '%'
         }
       };
 
     } catch (error) {
-      console.error('❌ Error en distribución:', error);
+      console.error('❌ Error en gran distribución:', error);
       throw error;
     }
   }
@@ -235,8 +218,12 @@ class DistribucionService {
   /**
    * Confirma la asignación de un aula a una clase
    */
-  async confirmarAsignacion(clase, aula, aulasOcupadas) {
-    await clase.update({ aula_asignada: aula.codigo });
+  async confirmarAsignacion(clase, aula, aulasOcupadas, isOvercapacity = false) {
+    await clase.update({
+      aula_asignada: aula.codigo,
+      // Guardar metadato de sobrecupo si es necesario
+      // (Podríamos agregar una columna 'notificaciones' o similar en el futuro)
+    });
 
     if (clase.dia && clase.hora_inicio && clase.hora_fin) {
       await Distribucion.create({
@@ -244,10 +231,9 @@ class DistribucionService {
         aula_id: aula.id,
         dia: clase.dia,
         hora_inicio: clase.hora_inicio,
-        hora_fin: clase.hora_fin
+        hora_fin: clase.hora_fin,
+        estado: isOvercapacity ? 'sobrecupo' : 'confirmada'
       });
-    } else {
-      console.log(`  ⚠️ Clase ${clase.materia} sin horario completo - solo se asignó aula, sin registro en distribución`);
     }
 
     // Registrar horario ocupado
@@ -260,68 +246,55 @@ class DistribucionService {
       });
     }
 
-    console.log(`  ✅ ${clase.carrera} - ${clase.materia} (${clase.num_estudiantes} est.) → ${aula.codigo} (Cap: ${aula.capacidad})`);
+    const logMsg = isOvercapacity
+      ? `  ⚠️ SOBRECUPO: ${clase.materia} (${clase.num_estudiantes} est) → ${aula.codigo} (Cap: ${aula.capacidad})`
+      : `  ✅ OK: ${clase.materia} (${clase.num_estudiantes} est) → ${aula.codigo} (Cap: ${aula.capacidad})`;
+    console.log(logMsg);
   }
 
   /**
    * Busca el aula óptima para una clase respetando las reglas UIDE
    */
-  buscarAulaOptima(clase, aulas, aulasOcupadas, soloConRegla) {
+  buscarAulaOptima(clase, aulas, aulasOcupadas, estrictoCapacidad = true) {
     let mejorAula = null;
-    let menorDiferencia = Infinity;
+    let menorScore = Infinity;
+    let isOvercapacity = false;
 
+    // 1. Intentar encontrar aula con capacidad suficiente
     for (const aula of aulas) {
-      // Verificar capacidad
-      if (aula.capacidad < (clase.num_estudiantes || 1)) continue;
+      if (estrictoCapacidad && aula.capacidad < (clase.num_estudiantes || 1)) continue;
 
-      // Verificar reglas de exclusividad
       const exclusividad = aulaEsExclusiva(aula, clase.carrera);
       if (exclusividad === 'bloqueada') continue;
 
-      // Verificar prioridad (Labs 1,2,3 → Informática)
       const carrerasPrioritarias = aulaConPrioridad(aula);
       const carreraNorm = normalizarTexto(clase.carrera);
-      const esPrioritaria = carrerasPrioritarias &&
-        carrerasPrioritarias.some(c => carreraNorm.includes(c));
+      const esPrioritaria = carrerasPrioritarias && carrerasPrioritarias.some(c => carreraNorm.includes(c));
 
-      if (soloConRegla) {
-        // Primera pasada: solo asignar si hay match de regla
-        if (exclusividad !== 'permitida' && !esPrioritaria) continue;
-      } else {
-        // Segunda pasada: evitar labs prioritarios si la clase no es de la carrera prioritaria
-        if (carrerasPrioritarias && !esPrioritaria) continue;
-      }
+      // Si el aula tiene prioridad para otra carrera, no usarla en estricto (proteger recursos)
+      if (carrerasPrioritarias && !esPrioritaria && estrictoCapacidad) continue;
 
-      // Verificar disponibilidad horaria
       if (!this.aulaDisponibleEnHorario(aula.codigo, clase, aulasOcupadas)) continue;
 
-      // Buscar la de menor diferencia de capacidad
-      const diferencia = aula.capacidad - (clase.num_estudiantes || 1);
-      if (diferencia < menorDiferencia) {
-        menorDiferencia = diferencia;
+      // CÁLCULO DE SCORE DE CALIDAD DE ASIGNACIÓN
+      // Menor score es mejor.
+      const diferenciaCapacidad = Math.abs(aula.capacidad - (clase.num_estudiantes || 1));
+
+      // Bonus por Especialidad: Si el aula es exclusiva o prioritaria para esta carrera, 
+      // reducir el score drásticamente para preferirla sobre aulas genéricas.
+      const isExclusiveMatch = Object.keys(REGLAS_AULAS.exclusivas).some(key => normalizarTexto(aula.nombre).includes(key));
+      const hasBonus = isExclusiveMatch || esPrioritaria;
+
+      const score = diferenciaCapacidad - (hasBonus ? 1000 : 0);
+
+      if (score < menorScore) {
+        menorScore = score;
         mejorAula = aula;
+        isOvercapacity = aula.capacidad < (clase.num_estudiantes || 1);
       }
     }
 
-    // Si no se encontró en segunda pasada, intentar con labs prioritarios (si sobran)
-    if (!mejorAula && !soloConRegla) {
-      for (const aula of aulas) {
-        if (aula.capacidad < (clase.num_estudiantes || 1)) continue;
-
-        const exclusividad = aulaEsExclusiva(aula, clase.carrera);
-        if (exclusividad === 'bloqueada') continue;
-
-        if (!this.aulaDisponibleEnHorario(aula.codigo, clase, aulasOcupadas)) continue;
-
-        const diferencia = aula.capacidad - (clase.num_estudiantes || 1);
-        if (diferencia < menorDiferencia) {
-          menorDiferencia = diferencia;
-          mejorAula = aula;
-        }
-      }
-    }
-
-    return mejorAula;
+    return mejorAula ? { aula: mejorAula, isOvercapacity } : null;
   }
 
   /**

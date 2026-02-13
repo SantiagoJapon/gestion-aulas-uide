@@ -12,8 +12,10 @@ import SubirEstudiantes from '../components/SubirEstudiantes';
 import DocenteTable from '../components/DocenteTable';
 import EstudianteTable from '../components/EstudianteTable';
 import ClaseEditModal from '../components/ClaseEditModal';
+import DisponibilidadAulas from '../components/DisponibilidadAulas';
 
 const DirectorDashboard = () => {
+
   const { user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -23,9 +25,72 @@ const DirectorDashboard = () => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [editingClase, setEditingClase] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isComunicadoOpen, setIsComunicadoOpen] = useState(false); // Modal para comunicados
+  const [isComunicadoOpen, setIsComunicadoOpen] = useState(false);
+  const [healthReport, setHealthReport] = useState<any>(null);
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
 
-  // ... (Subcomponente interno o externo, aquí interno por brevedad)
+  // Modal de Reporte de Salud (Feedback para el Director)
+  const HealthReportModal = () => {
+    if (!isHealthModalOpen || !healthReport) return null;
+
+    const { total_clases, clases_sin_horario, clases_sin_estudiantes, clases_sin_docente, estado_general, recomendacion } = healthReport;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+        <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-border p-8 space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className={`size-10 rounded-2xl flex items-center justify-center ${estado_general === 'bueno' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>
+                <span className="material-symbols-outlined">{estado_general === 'bueno' ? 'verified' : 'warning'}</span>
+              </div>
+              <h3 className="text-xl font-black text-foreground tracking-tight">Reporte de Salud de Datos</h3>
+            </div>
+            <button onClick={() => setIsHealthModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-border/50">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Total Procesado</p>
+              <p className="text-2xl font-black text-foreground">{total_clases}</p>
+            </div>
+            <div className={`p-4 rounded-3xl border border-border/50 ${clases_sin_horario > 0 ? 'bg-red-500/5' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Horario</p>
+              <p className={`text-2xl font-black ${clases_sin_horario > 0 ? 'text-red-500' : 'text-foreground'}`}>{clases_sin_horario}</p>
+            </div>
+            <div className={`p-4 rounded-3xl border border-border/50 ${clases_sin_estudiantes > 0 ? 'bg-amber-500/5' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Estudiantes</p>
+              <p className={`text-2xl font-black ${clases_sin_estudiantes > 0 ? 'text-amber-500' : 'text-foreground'}`}>{clases_sin_estudiantes}</p>
+            </div>
+            <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-border/50">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Docente</p>
+              <p className="text-2xl font-black text-foreground">{clases_sin_docente}</p>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-3xl bg-primary/5 border border-primary/10">
+            <h4 className="text-xs font-black text-primary uppercase tracking-widest mb-2">Recomendación</h4>
+            <p className="text-sm font-medium text-foreground/80 leading-relaxed italic">
+              "{recomendacion}"
+            </p>
+          </div>
+
+          <div className="pt-4 flex gap-3">
+            <Button variant="primary" fullWidth onClick={() => setIsHealthModalOpen(false)}>
+              Entendido
+            </Button>
+            {estado_general !== 'bueno' && (
+              <Button variant="secondary" fullWidth onClick={() => { setIsHealthModalOpen(false); }}>
+                Corregir Excel
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const ComunicadoModal = () => {
     const [titulo, setTitulo] = useState('');
     const [mensaje, setMensaje] = useState('');
@@ -38,19 +103,15 @@ const DirectorDashboard = () => {
       e.preventDefault();
       setSending(true);
       try {
-        // El director envía a su carrera por defecto (backend valida req.user.carrera_id o carrera_director)
-        // No necesitamos enviar carrera_id explícito si el backend lo deduce, 
-        // pero para seguridad enviamos el que tenemos en user context si existe.
         const carreraId = user?.carrera?.id;
-
         await notificacionService.crear({
           titulo,
           mensaje,
           tipo: 'CARRERA',
           prioridad,
-          carrera_id: carreraId // Opcional si el backend es inteligente
+          carrera_id: carreraId
         });
-        alert("Comunicado enviado exitosamente a todos los estudiantes de la carrera.");
+        alert("Comunicado enviado exitosamente.");
         setIsComunicadoOpen(false);
         setTitulo('');
         setMensaje('');
@@ -66,34 +127,22 @@ const DirectorDashboard = () => {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
         <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl border border-border p-6 space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-xl font-black text-foreground tracking-tight">Nuevo Comunicado Oficial</h3>
+            <h3 className="text-xl font-black text-foreground tracking-tight">Nuevo Comunicado</h3>
             <button onClick={() => setIsComunicadoOpen(false)} className="text-muted-foreground hover:text-foreground">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
           <form onSubmit={handleEnviar} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase">Título</label>
-              <input
-                required
-                value={titulo}
-                onChange={e => setTitulo(e.target.value)}
-                className="w-full bg-muted/30 border border-border rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="Ej: Inicio de Exámenes Parciales"
-              />
+              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Título</label>
+              <input required value={titulo} onChange={e => setTitulo(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-border rounded-xl px-4 py-2.5 text-sm font-medium" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase">Mensaje</label>
-              <textarea
-                required
-                value={mensaje}
-                onChange={e => setMensaje(e.target.value)}
-                className="w-full bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none h-32 resize-none"
-                placeholder="Escriba el contenido del comunicado..."
-              />
+              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Mensaje</label>
+              <textarea required value={mensaje} onChange={e => setMensaje(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-border rounded-xl px-4 py-3 text-sm h-32 font-medium" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase">Prioridad</label>
+              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Prioridad</label>
               <div className="flex gap-2">
                 {['BAJA', 'MEDIA', 'ALTA'].map(p => (
                   <button
@@ -110,12 +159,10 @@ const DirectorDashboard = () => {
                 ))}
               </div>
             </div>
-            <div className="pt-2">
-              <Button variant="primary" fullWidth loading={sending} type="submit">
-                <span className="material-symbols-outlined text-lg mr-2">send</span>
-                Enviar Comunicado
-              </Button>
-            </div>
+            <Button variant="primary" fullWidth loading={sending} type="submit">
+              <span className="material-symbols-outlined text-lg mr-2">send</span>
+              Enviar Ahora
+            </Button>
           </form>
         </div>
       </div>
@@ -173,8 +220,13 @@ const DirectorDashboard = () => {
       const res = await planificacionService.subirPlanificacion(selectedFile, carreraId);
       if (res.success) {
         setSelectedFile(null);
+        if (res.reporte_salud) {
+          setHealthReport(res.reporte_salud);
+          setIsHealthModalOpen(true);
+        } else {
+          alert('Planificación subida exitosamente');
+        }
         loadStats();
-        alert('Planificación subida exitosamente');
       }
     } catch (error: any) {
       const mensaje = error.response?.data?.mensaje || error.message || 'Error al subir planificación';
@@ -224,7 +276,7 @@ const DirectorDashboard = () => {
                 noPadding
               >
                 <div className="p-2 min-h-[500px] overflow-hidden rounded-[2rem]">
-                  <HorarioVisual />
+                  <HorarioVisual carreraId={user?.carrera?.id} />
                 </div>
               </DashboardWidget>
             </div>
@@ -274,6 +326,11 @@ const DirectorDashboard = () => {
                                   <span className="px-3 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase shadow-sm animate-pulse flex items-center justify-center gap-1 mx-auto w-fit">
                                     <span className="material-symbols-outlined text-xs">warning</span>
                                     Conflicto
+                                  </span>
+                                ) : clase.estado === 'sobrecupo' ? (
+                                  <span className="px-3 py-1 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase shadow-sm flex items-center justify-center gap-1 mx-auto w-fit">
+                                    <span className="material-symbols-outlined text-xs">event_seat</span>
+                                    Sobrecupo
                                   </span>
                                 ) : clase.aula_asignada ? (
                                   <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20 uppercase shadow-sm">
@@ -432,7 +489,10 @@ const DirectorDashboard = () => {
         );
       case 'heatmap':
         return <MapaCalor />;
+      case 'disponibilidad':
+        return <DisponibilidadAulas />;
       case 'estudiantes':
+
         const nombreCarrera = user?.carrera?.carrera || user?.carrera_director || '';
         return (
           <div className="space-y-12 animate-fade-in pb-20">
@@ -510,6 +570,7 @@ const DirectorDashboard = () => {
         onUpdate={handleClaseUpdate}
       />
 
+      <HealthReportModal />
       <ComunicadoModal />
     </DashboardLayout>
   );

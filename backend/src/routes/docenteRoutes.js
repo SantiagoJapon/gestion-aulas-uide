@@ -12,4 +12,10 @@ router.get('/:id', verificarAuth, verificarRol('admin', 'director'), docenteCont
 // Actualizar docente
 router.put('/:id', verificarAuth, verificarRol('admin'), docenteController.updateDocente);
 
+// Actualizar teléfono de docente (para WhatsApp)
+router.put('/:id/telefono', verificarAuth, verificarRol('admin', 'director'), docenteController.updateTelefono);
+
+// Generar credenciales masivo
+router.post('/generar-credenciales', verificarAuth, verificarRol('admin'), docenteController.generarCredencialesMasivo);
+
 module.exports = router;
