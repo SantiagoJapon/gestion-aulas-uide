@@ -98,7 +98,7 @@ exports.getDocentes = async (req, res) => {
                 {
                     model: User,
                     as: 'usuario',
-                    attributes: ['id', 'email', 'estado', 'requiere_cambio_password', 'last_login']
+                    attributes: ['id', 'email', 'estado', 'requiere_cambio_password']
                 }
             ],
             order: [['nombre', 'ASC']]
@@ -109,39 +109,56 @@ exports.getDocentes = async (req, res) => {
         let cargaMap = {};
 
         if (docentesIds.length > 0) {
-            const carga = await sequelize.query(`
-        SELECT
-          docente_id,
-          COUNT(*) as total_clases,
-          COALESCE(SUM(
-            CASE
-              WHEN hora_inicio IS NOT NULL AND hora_fin IS NOT NULL AND hora_inicio <> '' AND hora_fin <> '' THEN
-                (EXTRACT(HOUR FROM hora_fin::TIME) * 60 + EXTRACT(MINUTE FROM hora_fin::TIME)) -
-                (EXTRACT(HOUR FROM hora_inicio::TIME) * 60 + EXTRACT(MINUTE FROM hora_inicio::TIME))
-              ELSE 0
-            END
-          ) / 60.0, 0) as total_horas,
-          STRING_AGG(DISTINCT materia, ', ') as materias
-        FROM clases
-        WHERE docente_id IN (:docentesIds)
-        GROUP BY docente_id
-      `, {
-                replacements: { docentesIds },
-                type: QueryTypes.SELECT
+            // Obtenemos todas las clases de estos docentes
+            const todasLasClases = await Clase.findAll({
+                where: { docente_id: { [Op.in]: docentesIds } },
+                attributes: ['docente_id', 'materia', 'hora_inicio', 'hora_fin']
             });
 
-            carga.forEach(item => {
-                cargaMap[item.docente_id] = {
-                    total_clases: parseInt(item.total_clases),
-                    total_horas: parseFloat(item.total_horas).toFixed(1),
-                    materias: item.materias
+            // Agrupamos en JS para evitar errores de casteo en SQL (ej: hora_inicio con formato inválido)
+            todasLasClases.forEach(clase => {
+                if (!cargaMap[clase.docente_id]) {
+                    cargaMap[clase.docente_id] = {
+                        total_clases: 0,
+                        total_minutos: 0,
+                        materiasSet: new Set()
+                    };
+                }
+
+                const stats = cargaMap[clase.docente_id];
+                stats.total_clases++;
+                if (clase.materia) stats.materiasSet.add(clase.materia);
+
+                // Calcular minutos (formato HH:MM o HH:MM:SS)
+                if (clase.hora_inicio && clase.hora_fin) {
+                    try {
+                        const [h1, m1] = clase.hora_inicio.split(':').map(Number);
+                        const [h2, m2] = clase.hora_fin.split(':').map(Number);
+
+                        if (!isNaN(h1) && !isNaN(m1) && !isNaN(h2) && !isNaN(m2)) {
+                            const minutos = (h2 * 60 + m2) - (h1 * 60 + m1);
+                            if (minutos > 0) stats.total_minutos += minutos;
+                        }
+                    } catch (e) {
+                        // Ignorar errores de parseo de hora individual
+                    }
+                }
+            });
+
+            // Convertir minutos a horas y sets a strings
+            Object.keys(cargaMap).forEach(id => {
+                const stats = cargaMap[id];
+                cargaMap[id] = {
+                    total_clases: stats.total_clases,
+                    total_horas: (stats.total_minutos / 60).toFixed(1),
+                    materias: Array.from(stats.materiasSet).join(', ')
                 };
             });
         }
 
         const result = docentes.map(d => ({
             ...d.toJSON(),
-            carga: cargaMap[d.id] || { total_clases: 0, total_horas: 0, materias: '' }
+            carga: cargaMap[d.id] || { total_clases: 0, total_horas: "0.0", materias: '' }
         }));
 
         res.json({
