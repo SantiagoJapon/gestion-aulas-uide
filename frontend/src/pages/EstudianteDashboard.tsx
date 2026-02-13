@@ -31,20 +31,30 @@ const getStatusClass = (start: string, end: string) => {
 
 // --- Widgets ---
 
-const TimelineClases = ({ clases }: { clases: any[] }) => {
-  if (clases.length === 0) {
+const TimelineClases = ({ clases, filter }: { clases: any[], filter?: string }) => {
+  const filtered = filter
+    ? clases.filter(c => c.materia.toLowerCase().includes(filter.toLowerCase()))
+    : clases;
+
+  if (filtered.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
-        <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">event_available</span>
-        <p className="text-sm font-bold text-slate-500">No tienes clases programadas para hoy.</p>
-        <p className="text-xs text-slate-400 mt-1">¡Aprovecha para estudiar o descansar!</p>
+        <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">
+          {filter ? 'search_off' : 'event_available'}
+        </span>
+        <p className="text-sm font-bold text-slate-500">
+          {filter ? `No hay clases que coincidan con "${filter}"` : 'No tienes clases programadas para hoy.'}
+        </p>
+        <p className="text-xs text-slate-400 mt-1">
+          {filter ? 'Intenta borrar el filtro o buscar otra materia.' : '¡Aprovecha para estudiar o descansar!'}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800">
-      {clases.map((c, i) => {
+      {filtered.map((c, i) => {
         const estado = getStatusClass(c.hora_inicio, c.hora_fin);
         return (
           <div key={i} className="relative pl-10 group">
@@ -335,6 +345,15 @@ export default function EstudianteDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Persistir filtro en localStorage
+  const [subjectFilter, setSubjectFilter] = useState(() => {
+    return localStorage.getItem('uide_student_subject_filter') || '';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('uide_student_subject_filter', subjectFilter);
+  }, [subjectFilter]);
+
   useEffect(() => {
     const fetchSchedule = async () => {
       try {
@@ -418,11 +437,23 @@ export default function EstudianteDashboard() {
                   subtitle="Clases de Hoy"
                   icon="timeline"
                   iconColor="text-uide-blue"
+                  action={
+                    <div className="relative group">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-uide-blue transition-colors">search</span>
+                      <input
+                        type="text"
+                        placeholder="Filtrar materia..."
+                        value={subjectFilter}
+                        onChange={(e) => setSubjectFilter(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none w-32 sm:w-48 transition-all"
+                      />
+                    </div>
+                  }
                 >
                   {loading ? (
                     <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
                   ) : (
-                    <TimelineClases clases={clasesHoy} />
+                    <TimelineClases clases={clasesHoy} filter={subjectFilter} />
                   )}
                 </DashboardWidget>
               </div>
