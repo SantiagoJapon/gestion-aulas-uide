@@ -51,7 +51,7 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
   useEffect(() => {
     loadEstudiantes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, carreraNombre]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

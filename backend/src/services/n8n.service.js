@@ -110,27 +110,25 @@ class N8nService {
   }
 
   /**
-   * Notificar a un director sus credenciales via Telegram o WhatsApp (a través de n8n)
+   * Notificar a un director sus credenciales via WhatsApp (Evolution API a través de n8n)
    * @param {Object} datosDirector - Datos del director
    * @param {string} datosDirector.nombre - Nombre completo
-   * @param {string} datosDirector.telegram_id - ID de Telegram (opcional)
-   * @param {string} datosDirector.telefono - Número de teléfono (opcional)
+   * @param {string} datosDirector.telefono - Número de teléfono WhatsApp
    * @param {string} datosDirector.password - Password temporal
    * @param {string} datosDirector.carrera - Nombre de la carrera asignada
    * @returns {Promise<Object>}
    */
   static async notificarDirector(datosDirector) {
     try {
-      console.log(`📤 Enviando credenciales de director a n8n (notificar_director)...`);
+      console.log(`📤 Enviando credenciales de director a n8n via WhatsApp (notificar_director)...`);
       const response = await axios.post(
         `${N8N_WEBHOOK_URL}/maestro`,
         {
           accion: 'notificar_director',
           datos: {
             nombre: datosDirector.nombre,
-            telegram_id: datosDirector.telegram_id || null,
             telefono: datosDirector.telefono || null,
-            password: datosDirector.password,
+            password_temporal: datosDirector.password,
             carrera: datosDirector.carrera
           },
           timestamp: new Date().toISOString()

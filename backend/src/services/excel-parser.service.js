@@ -22,17 +22,28 @@ const COLUMN_KEYWORDS = {
   estudiantes: [
     '# estudiantes', 'nro estudiantes', 'num estudiantes',
     'numero estudiantes', 'numero de estudiantes', 'cantidad estudiantes',
-    'nro alumnos', 'num alumnos',
+    'nro alumnos', 'num alumnos', 'nro  alumnos',
     '# alumnos', 'numero alumnos', 'numero de alumnos', 'cantidad alumnos',
     'estudiantes', 'alumnos'
   ],
   paralelo: ['paralelo', 'grupo', 'seccion'],
   ciclo: ['ciclo', 'nivel', 'semestre'],
   codigo: ['codigo de la materia', 'codigo materia', 'cod materia', 'codigo', 'cod'],
-  aula: ['aula/lab', 'aula / lab', 'aula nro', 'aula', 'salon', 'lab'],
+  aula_numero: ['aula nro', 'aula numero'],
+  aula: ['aula/lab', 'aula / lab', 'aula', 'salon', 'lab'],
   malla: ['malla'],
-  horas_materia: ['horas materia', 'nro horas', '# de horas', 'total horas'],
+  modalidad: ['modalidad'],
+  creditos: ['creditos', 'credito'],
+  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],
+  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],
+  horas_materia: ['horas materia', 'nro horas', 'nro  horas', '# de horas', 'total horas', 'total horas clase'],
 };
+
+// Palabras que indican que una columna NO es "hora" de horario sino "horas" de conteo
+const HORA_EXCLUSION_WORDS = [
+  'horas', 'teoricas', 'practicas', 'nro', 'total', '#', 'numero',
+  'componente', 'creditos', 'materia'
+];
 
 // Columnas que NUNCA deben mapearse a campos de datos (son indices/contadores)
 const INDEX_COLUMN_PATTERNS = [
@@ -345,9 +356,13 @@ function findHeaderRow(data) {
             if (key === 'hora' && (cellNorm === 'horario' || cellNorm === 'horarios')) {
               break;
             }
-            // Evitar que "horas materia" o "nro. horas" matchee como "hora"
-            if (key === 'hora' && (cellNorm.includes('horas materia') || cellNorm.includes('nro') || cellNorm.includes('total'))) {
+            // Evitar que columnas de conteo de horas matcheen como "hora" de horario
+            if (key === 'hora' && HORA_EXCLUSION_WORDS.some(w => cellNorm.includes(w))) {
               break;
+            }
+            // Si hay aula_numero, preferirla sobre aula generico para el campo aula
+            if (key === 'aula' && map.aula_numero !== undefined) {
+              break; // ya tenemos aula_numero que es mas especifico
             }
             map[key] = colIdx;
             score++;
@@ -453,6 +468,8 @@ function extractClasses(data, startRow, columnMap) {
   let lastMalla = '';
   let lastCodigo = '';
   let lastMateria = '';
+  let lastAula = '';
+  let lastNumEstudiantes = 0;
 
   // Palabras clave que indican cambio de seccion (resetear propagacion)
   const SECTION_KEYWORDS = ['tiempo completo', 'tiempo parcial', 'docentes tiempo', 'catedraticos', 'profesores tiempo'];
@@ -463,7 +480,8 @@ function extractClasses(data, startRow, columnMap) {
     'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'tutor_a',
     'pregrado', 'posgrado', 'horario', 'malla', 'docente', 'materia',
     'docentes tiempo', 'tiempo completo', 'tiempo parcial', 'escuela de',
-    'planificacion academica', 'universidad', 'extension'
+    'planificacion academica', 'universidad', 'extension', 'periodo',
+    'total horas docencia', 'total horas clase'
   ];
 
   for (let i = startRow; i < data.length; i++) {
@@ -483,6 +501,16 @@ function extractClasses(data, startRow, columnMap) {
       lastMalla = '';
       lastCodigo = '';
       lastMateria = '';
+      lastAula = '';
+      lastNumEstudiantes = 0;
+      continue;
+    }
+
+    // Detectar filas de malla ("MALLA 2019", "MALLA 2023") - capturar malla y continuar
+    const mallaMatch = rowText.match(/malla\s+(\d{4})/);
+    if (mallaMatch && !rowText.includes('docente') && !rowText.includes('materia')) {
+      lastMalla = mallaMatch[1];
+      console.log(`[ExcelParser]   Malla detectada en fila ${i}: ${lastMalla}`);
       continue;
     }
 
@@ -493,7 +521,8 @@ function extractClasses(data, startRow, columnMap) {
     let paralelo = getString(row, columnMap.paralelo);
     let malla = getString(row, columnMap.malla);
     let codigo = getString(row, columnMap.codigo);
-    const aula = getString(row, columnMap.aula);
+    // Preferir aula_numero (especifico) sobre aula (generico/tipo)
+    const aula = getString(row, columnMap.aula_numero) || getString(row, columnMap.aula);
 
     // Metadatos de docente
     const titulo_pregrado = getString(row, columnMap.titulo_pregrado);
@@ -528,10 +557,15 @@ function extractClasses(data, startRow, columnMap) {
       // Es continuacion: usaremos la ultima materia procesada
     }
 
+    // Propagar aula y num_estudiantes para filas de continuacion
+    let aulaFinal = aula;
+    if (aula) lastAula = aula; else aulaFinal = lastAula;
+    if (numEstudiantes > 0) lastNumEstudiantes = numEstudiantes;
+
     let materiaFinal = materia;
     if (!materiaFinal) {
       materiaFinal = lastMateria;
-      if (!numEstudiantes && clases.length > 0) numEstudiantes = clases[clases.length - 1].num_estudiantes;
+      if (!numEstudiantes) numEstudiantes = lastNumEstudiantes;
       if (!codigo) codigo = lastCodigo;
     }
 
@@ -591,7 +625,7 @@ function extractClasses(data, startRow, columnMap) {
         hora_fin: '',
         num_estudiantes: numEstudiantes,
         docente: docente || '',
-        aula: aula || '',
+        aula: aulaFinal || '',
         docente_metadata: {
           titulo_pregrado,
           titulo_posgrado,
@@ -603,11 +637,11 @@ function extractClasses(data, startRow, columnMap) {
       // Crear una entrada por cada sesion
       for (const session of sessions) {
         // Manejar aula multi-linea (LAB 2\r\nLAB 1 -> asignar cada aula a cada sesion)
-        let aulaSession = aula;
-        if (aula && aula.includes('\n')) {
-          const aulas = aula.split(/\r?\n/).map(a => a.trim()).filter(a => a);
+        let aulaSession = aulaFinal;
+        if (aulaFinal && aulaFinal.includes('\n')) {
+          const aulas = aulaFinal.split(/\r?\n/).map(a => a.trim()).filter(a => a);
           const sessionIdx = sessions.indexOf(session);
-          aulaSession = aulas[sessionIdx] || aulas[0] || aula;
+          aulaSession = aulas[sessionIdx] || aulas[0] || aulaFinal;
         }
 
         clases.push({
@@ -842,7 +876,9 @@ function getNumber(row, colIdx) {
 }
 
 /**
- * Deduplica clases basandose en materia + docente + paralelo + ciclo.
+ * Deduplica clases basandose en materia + docente + paralelo + ciclo + dia + hora_inicio.
+ * Incluye dia y hora_inicio en la clave para preservar sesiones multiples
+ * (ej: misma materia en Lunes y Miercoles son entradas diferentes).
  * Cuando hay duplicados, prioriza hojas con nombre "PLANIFICACION".
  * Ademas, entre duplicados elige el que tenga mas datos completos.
  */
@@ -856,12 +892,15 @@ function deduplicateClasses(clases) {
   let dupsRemoved = 0;
 
   for (const clase of clases) {
-    // Clave Compuesta (ADN de la clase): materia + docente + paralelo + ciclo
+    // Clave Compuesta: materia + docente + paralelo + ciclo + dia + hora_inicio
+    // dia y hora_inicio incluidos para preservar sesiones distintas de la misma materia
     const key = [
       normalize(clase.materia || ''),
       normalize(clase.docente || ''),
       normalize(clase.paralelo || ''),
-      normalize(clase.ciclo || '')
+      normalize(clase.ciclo || ''),
+      normalize(clase.dia || ''),
+      normalize(clase.hora_inicio || '')
     ].join('|');
 
     if (!uniqueMap.has(key)) {
