@@ -260,10 +260,19 @@ exports.updateDocente = async (req, res) => {
     try {
         const { id } = req.params;
         const { nombre, email, titulo_pregrado, titulo_posgrado, tipo, telefono } = req.body;
+        const usuario = req.usuario;
 
         const docente = await Docente.findByPk(id);
         if (!docente) {
             return res.status(404).json({ success: false, message: 'Docente no encontrado' });
+        }
+
+        // Seguridad: Si es director, validar que el docente sea de su carrera
+        if (usuario.rol === 'director') {
+            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+            if (!carreraObj || docente.carrera_id !== carreraObj.id) {
+                return res.status(403).json({ success: false, message: 'No tienes permiso para editar este docente' });
+            }
         }
 
         await docente.update({

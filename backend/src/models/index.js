@@ -15,10 +15,29 @@ const Reserva = require('./Reserva');
 const Notificacion = require('./Notificacion');
 const Incidencia = require('./Incidencia');
 const HistorialCarga = require('./HistorialCarga');
+const EstudianteMateria = require('./EstudianteMateria');
 
 // ============================================
 // RELACIONES ENTRE MODELOS
 // ============================================
+
+// Estudiante <-> Clase (Inscripciones)
+Estudiante.belongsToMany(Clase, {
+  through: EstudianteMateria,
+  foreignKey: 'estudiante_id',
+  otherKey: 'clase_id',
+  as: 'materiasInscritas'
+});
+Clase.belongsToMany(Estudiante, {
+  through: EstudianteMateria,
+  foreignKey: 'clase_id',
+  otherKey: 'estudiante_id',
+  as: 'alumnosInscritos'
+});
+
+// EstudianteMateria -> Estudiante/Clase (Individual)
+EstudianteMateria.belongsTo(Estudiante, { foreignKey: 'estudiante_id', as: 'estudiante' });
+EstudianteMateria.belongsTo(Clase, { foreignKey: 'clase_id', as: 'clase' });
 
 // Carrera <-> Clase
 Carrera.hasMany(Clase, { foreignKey: 'carrera_id', as: 'clases' });
@@ -119,5 +138,6 @@ module.exports = {
   Reserva,
   Notificacion,
   Incidencia,
-  HistorialCarga
+  HistorialCarga,
+  EstudianteMateria
 };

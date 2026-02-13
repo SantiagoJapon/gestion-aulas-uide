@@ -2,6 +2,8 @@ const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const distribucionService = require('../services/distribucion.service');
 const N8nService = require('../services/n8n.service');
+const { Carrera, Clase, Aula, Docente, EstudianteMateria } = require('../models');
+const { Op } = require('sequelize');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -566,41 +568,62 @@ const getMiDistribucion = async (req, res) => {
 
     // Filtrar según rol
     if (usuario.rol === 'profesor' || usuario.rol === 'docente') {
-      // Buscar clases del docente por nombre
-      const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
-      if (nombreCompleto) {
-        whereClause = 'WHERE LOWER(c.docente) LIKE LOWER(:docente)';
-        replacements.docente = `%${nombreCompleto}%`;
+      // 1. Intentar buscar por vinculación directa de ID (Más preciso)
+      const docenteRecord = await Docente.findOne({ where: { usuario_id: usuario.id } });
+
+      if (docenteRecord) {
+        whereClause = 'WHERE (c.docente_id = :docente_id OR LOWER(c.docente) LIKE LOWER(:docente_nombre))';
+        replacements.docente_id = docenteRecord.id;
+        replacements.docente_nombre = `%${docenteRecord.nombre}%`;
+      } else {
+        // Fallback: Buscar por nombre del usuario
+        const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+        if (nombreCompleto) {
+          whereClause = 'WHERE LOWER(c.docente) LIKE LOWER(:docente)';
+          replacements.docente = `%${nombreCompleto}%`;
+        }
       }
     } else if (usuario.rol === 'director' && usuario.carrera_director) {
       whereClause = 'WHERE c.carrera = :carrera';
       replacements.carrera = usuario.carrera_director;
     } else if (usuario.rol === 'estudiante') {
-      // Filtrar por carrera (comparación flexible) + ciclo del estudiante + solo clases con aula asignada
-      const cicloNum = normalizarCiclo(usuario.nivel);
-      if (cicloNum) {
-        whereClause = `WHERE LOWER(TRANSLATE(c.carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) LIKE LOWER(TRANSLATE(:carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) AND c.aula_asignada IS NOT NULL AND c.aula_asignada != ''`;
-        replacements.carrera = `%${normalizarTexto(usuario.escuela)}%`;
+      // 1. VERIFICACIÓN DE INSCRIPCIONES ESPECÍFICAS
+      // Buscamos si el estudiante tiene materias asignadas directamente
+      const inscripciones = await EstudianteMateria.findAll({
+        where: { estudiante_id: usuario.id }
+      });
 
-        // Recopilar todas las formas posibles del ciclo para matching flexible
-        const formasCiclo = [cicloNum.toString()];
-        const sufijos = ['ro', 'do', 'to', 'mo', 'vo', 'no'];
-        sufijos.forEach(s => formasCiclo.push(cicloNum + s));
-        const nombres = ['', 'primero', 'segundo', 'tercero', 'cuarto', 'quinto', 'sexto', 'septimo', 'octavo', 'noveno', 'decimo'];
-        if (nombres[cicloNum]) formasCiclo.push(nombres[cicloNum]);
-
-        whereClause += ` AND (${formasCiclo.map((_, i) => `LOWER(TRANSLATE(c.ciclo, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) = LOWER(:ciclo${i})`).join(' OR ')})`;
-        formasCiclo.forEach((forma, i) => {
-          replacements[`ciclo${i}`] = forma;
-        });
+      if (inscripciones.length > 0) {
+        const claseIds = inscripciones.map(ins => ins.clase_id);
+        whereClause = 'WHERE c.id IN (:claseIds)';
+        replacements.claseIds = claseIds;
+        console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id}`);
       } else {
-        // Si no se puede determinar el ciclo, no mostrar nada para evitar exponer datos incorrectos
-        whereClause = 'WHERE 1=0';
+        // 2. FALLBACK: Filtro por Carrera + Nivel (Diseño original)
+        console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones específicas, usando filtro por nivel.`);
+        const cicloNum = normalizarCiclo(usuario.nivel);
+        if (cicloNum) {
+          whereClause = `WHERE LOWER(TRANSLATE(c.carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) LIKE LOWER(TRANSLATE(:carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) AND c.aula_asignada IS NOT NULL AND c.aula_asignada != ''`;
+          replacements.carrera = `%${normalizarTexto(usuario.escuela)}%`;
+
+          const formasCiclo = [cicloNum.toString()];
+          const sufijos = ['ro', 'do', 'to', 'mo', 'vo', 'no'];
+          sufijos.forEach(s => formasCiclo.push(cicloNum + s));
+          const nombres = ['', 'primero', 'segundo', 'tercero', 'cuarto', 'quinto', 'sexto', 'septimo', 'octavo', 'noveno', 'decimo'];
+          if (nombres[cicloNum]) formasCiclo.push(nombres[cicloNum]);
+
+          whereClause += ` AND (${formasCiclo.map((_, i) => `LOWER(TRANSLATE(c.ciclo, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) = LOWER(:ciclo${i})`).join(' OR ')})`;
+          formasCiclo.forEach((forma, i) => {
+            replacements[`ciclo${i}`] = forma;
+          });
+        } else {
+          whereClause = 'WHERE 1=0';
+        }
       }
     }
 
-    // Si hay carrera_id en query, usarlo como filtro adicional
-    if (req.query.carrera_id) {
+    // Si hay carrera_id en query, usarlo como filtro adicional (si es admin o similar)
+    if (req.query.carrera_id && usuario.rol !== 'estudiante') {
       const prefix = whereClause ? 'AND' : 'WHERE';
       if (!isNaN(req.query.carrera_id)) {
         whereClause += ` ${prefix} c.carrera_id = :carrera_id`;
@@ -626,6 +649,7 @@ const getMiDistribucion = async (req, res) => {
     // Detectar conflictos en las clases obtenidas
     const conflictos = new Set();
     const clasesConAula = clases.filter(c => c.aula_asignada && c.dia && c.hora_inicio);
+    // ... (resto del código de conflictos se mantiene igual)
 
     for (let i = 0; i < clasesConAula.length; i++) {
       for (let j = i + 1; j < clasesConAula.length; j++) {
@@ -664,6 +688,7 @@ const getMiDistribucion = async (req, res) => {
         materia: fixEncoding(c.materia),
         carrera: fixEncoding(c.carrera),
         docente: fixEncoding(c.docente),
+        aula: c.aula_nombre || c.aula_asignada || 'S/A',
         estado: !c.aula_asignada ? 'pendiente' : conflictos.has(c.id) ? 'conflicto' : 'asignada'
       }))
     });

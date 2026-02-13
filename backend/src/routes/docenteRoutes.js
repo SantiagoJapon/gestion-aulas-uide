@@ -13,7 +13,7 @@ router.post('/', verificarAuth, verificarRol('admin', 'director'), docenteContro
 router.get('/:id', verificarAuth, verificarRol('admin', 'director'), docenteController.getDocenteById);
 
 // Actualizar docente
-router.put('/:id', verificarAuth, verificarRol('admin'), docenteController.updateDocente);
+router.put('/:id', verificarAuth, verificarRol('admin', 'director'), docenteController.updateDocente);
 
 // Actualizar teléfono de docente (para WhatsApp)
 router.put('/:id/telefono', verificarAuth, verificarRol('admin', 'director'), docenteController.updateTelefono);

@@ -11,8 +11,9 @@ import {
   LayoutGrid,
   ListTodo,
   RefreshCw,
-  Clock3,
-  Info
+  Info,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface ClaseHorario {
@@ -68,6 +69,15 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'dia' | 'semana'>('dia');
   const [selectedDia, setSelectedDia] = useState('Lunes');
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
+
+  const handleDiaChange = (nuevoDia: string) => {
+    const currentIndex = DIAS.indexOf(selectedDia);
+    const nextIndex = DIAS.indexOf(nuevoDia);
+
+    setSlideDirection(nextIndex > currentIndex ? 'right' : 'left');
+    setSelectedDia(nuevoDia);
+  };
 
   useEffect(() => {
     const today = new Intl.DateTimeFormat('es-ES', { weekday: 'long' }).format(new Date());
@@ -77,6 +87,13 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
 
     cargarHorario();
   }, [mode, carreraId]);
+
+  // Nuevo: Estado para acordeones en móvil (Vista semanal)
+  const [expandedDias, setExpandedDias] = useState<Record<string, boolean>>({});
+
+  const toggleDia = (dia: string) => {
+    setExpandedDias(prev => ({ ...prev, [dia]: !prev[dia] }));
+  };
 
   const cargarHorario = async () => {
     try {
@@ -157,20 +174,20 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header Premium */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card/50 p-6 rounded-[2rem] border border-border shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm border border-primary/10">
-            <Calendar className="size-7" />
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
+      {/* Header Premium - Optimizado para móvil */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card/50 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-border shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="size-10 sm:size-14 rounded-xl sm:rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm border border-primary/10">
+            <Calendar className="size-5 sm:size-7" />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-foreground tracking-tight">
-              {title || (mode === 'personal' ? 'Mi Horario Semanal' : 'Horario de Carrera')}
+            <h2 className="text-lg sm:text-2xl font-black text-foreground tracking-tight leading-tight">
+              {title || (mode === 'personal' ? 'Mi Horario Maestro' : 'Horario de Carrera')}
             </h2>
-            <p className="text-sm font-bold text-muted-foreground flex items-center gap-2">
-              <span className="inline-block size-2 rounded-full bg-green-500 animate-pulse"></span>
-              {clases.length} clases programadas
+            <p className="text-[10px] sm:text-sm font-bold text-muted-foreground flex items-center gap-1.5 sm:gap-2">
+              <span className="inline-block size-1.5 sm:size-2 rounded-full bg-green-500 animate-pulse"></span>
+              {clases.length} clases distribuidas
             </p>
           </div>
         </div>
@@ -178,28 +195,28 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
+          className="w-auto ml-auto sm:ml-0 inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-primary text-primary-foreground rounded-xl sm:rounded-2xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
         >
-          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Actualizando...' : 'Actualizar'}
+          <RefreshCw className={`size-3 sm:size-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden xs:inline">{refreshing ? 'Actualizando...' : 'Actualizar'}</span>
+          <span className="xs:hidden">{refreshing ? '...' : ''}</span>
         </button>
       </div>
 
-      {/* Controles de Vista */}
-      <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
-        {/* Selector de Días (Solo visible en modo día) */}
-        <div className={`flex gap-2 overflow-x-auto pb-2 w-full lg:w-auto no-scrollbar transition-all ${viewMode === 'semana' ? 'opacity-30 pointer-events-none grayscale' : ''}`}>
+      {/* Selector de Días y Modos */}
+      <div className="space-y-4">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar -mx-2 px-2 scroll-smooth">
           {DIAS.map(dia => (
             <button
               key={dia}
-              onClick={() => setSelectedDia(dia)}
-              className={`flex flex-col items-center gap-1 min-w-[80px] p-3 rounded-2xl border transition-all ${selectedDia === dia && viewMode === 'dia'
-                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
-                : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+              onClick={() => handleDiaChange(dia)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all whitespace-nowrap ${selectedDia === dia && viewMode === 'dia'
+                ? 'bg-primary text-white border-primary shadow-md'
+                : 'bg-card text-muted-foreground border-border hover:border-primary/30'
                 }`}
             >
-              <span className="text-[10px] font-black uppercase tracking-tighter">{dia}</span>
-              <span className={`size-5 rounded-full text-[10px] font-black flex items-center justify-center ${selectedDia === dia && viewMode === 'dia' ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
+              <span className="text-[11px] font-black uppercase tracking-tight">{dia.substring(0, 3)}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${selectedDia === dia && viewMode === 'dia' ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
                 }`}>
                 {clasesPorDia[dia].length}
               </span>
@@ -207,87 +224,85 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
           ))}
         </div>
 
-        {/* Toggle Mode */}
-        <div className="flex bg-muted/50 p-1.5 rounded-[1.5rem] border border-border shadow-inner">
+        <div className="flex bg-muted/30 p-1 rounded-2xl border border-border w-fit mx-auto sm:mx-0">
           <button
             onClick={() => setViewMode('dia')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${viewMode === 'dia'
-              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+            className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${viewMode === 'dia'
+              ? 'bg-primary text-primary-foreground shadow-md'
               : 'text-muted-foreground hover:text-foreground'
               }`}
           >
-            <ListTodo className="size-4" />
+            <ListTodo className="size-3.5" />
             Día
           </button>
           <button
             onClick={() => setViewMode('semana')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${viewMode === 'semana'
-              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+            className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${viewMode === 'semana'
+              ? 'bg-primary text-primary-foreground shadow-md'
               : 'text-muted-foreground hover:text-foreground'
               }`}
           >
-            <LayoutGrid className="size-4" />
+            <LayoutGrid className="size-3.5" />
             Semana
           </button>
         </div>
       </div>
 
-      {/* Grid de Contenido */}
-      <div className="bg-card min-h-[500px] rounded-[2.5rem] border border-border shadow-sm overflow-hidden p-8">
+      {/* Grid de Contenido - Rediseñado para Responsividad */}
+      <div className="bg-card min-h-[400px] rounded-[1.5rem] sm:rounded-[2.5rem] border border-border shadow-sm overflow-hidden p-4 sm:p-8">
         {viewMode === 'dia' ? (
-          /* VISTA POR DÍA */
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-3 mb-10">
-              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                <Clock3 className="size-5" />
+          /* VISTA POR DÍA - Con Animación de Swipe */
+          <div
+            key={selectedDia}
+            className={`max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300 ${slideDirection === 'right' ? 'slide-in-from-right-8' : 'slide-in-from-left-8'
+              }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="size-8 sm:size-10 rounded-lg sm:rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <BookOpen className="size-4 sm:size-5" />
               </div>
               <div>
-                <h3 className="text-xl font-black text-foreground tracking-tight">{selectedDia}</h3>
-                <p className="text-xs font-bold text-muted-foreground uppercase">{clasesPorDia[selectedDia].length} clases programadas</p>
+                <h3 className="text-lg sm:text-xl font-black text-foreground tracking-tight">{selectedDia}</h3>
+                <p className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase">{clasesPorDia[selectedDia].length} clases programadas</p>
               </div>
             </div>
 
             {clasesPorDia[selectedDia].length > 0 ? (
-              <div className="relative pl-10 space-y-6">
-                <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-primary/5 via-primary/20 to-primary/5"></div>
-
+              <div className="space-y-8">
                 {clasesPorDia[selectedDia].map((clase, idx) => {
                   const style = getColorForMateria(clase.materia);
                   return (
-                    <div key={idx} className="relative group animate-in slide-in-from-left duration-300" style={{ animationDelay: `${idx * 50}ms` }}>
-                      <div className={`absolute -left-[32px] top-1/2 -translate-y-1/2 size-4 rounded-full border-4 border-card z-10 shadow-sm transition-transform group-hover:scale-125 ${style.border.replace('border-', 'bg-')}`}></div>
+                    <div key={idx} className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
+                      {/* Indicador de Tiempo Grouping (Según Mockup 2) */}
+                      <div className="flex items-center justify-between px-2">
+                        <span className="text-[10px] sm:text-[11px] font-black text-muted-foreground/60 tracking-widest">{clase.hora_inicio} — {clase.hora_fin}</span>
+                        <span className="text-[9px] font-bold text-muted-foreground/40 uppercase bg-muted/30 px-2 py-0.5 rounded-full">1 clase</span>
+                      </div>
 
-                      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-[1.75rem] border-l-8 border transition-all hover:shadow-xl hover:translate-x-2 ${style.bg} ${style.border} group-hover:bg-white dark:group-hover:bg-slate-800`}>
-                        <div className="space-y-2">
-                          <h4 className={`text-lg font-black tracking-tight leading-none ${style.text}`}>{clase.materia}</h4>
-                          <div className="flex flex-wrap gap-4 items-center">
-                            <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                              <span className={`material-symbols-outlined text-[16px] ${style.icon}`}>fingerprint</span>
-                              {clase.aula_asignada}
-                            </span>
-                            <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                              <Clock className={`size-3.5 ${style.icon}`} />
+                      {/* Card de Materia */}
+                      <div className={`relative flex items-center justify-between p-4 sm:p-5 rounded-2xl sm:rounded-[1.75rem] border-l-[6px] sm:border-l-8 border transition-all hover:shadow-lg ${style.bg} ${style.border} group`}>
+                        <div className="flex-1 space-y-1 sm:space-y-2">
+                          <h4 className="text-sm sm:text-lg font-black tracking-tight leading-none text-foreground">{clase.materia}</h4>
+                          <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">ID_{clase.id}_{clase.paralelo || 'A'}</p>
+
+                          <div className="flex flex-wrap gap-4 items-center pt-1 sm:pt-2">
+                            <span className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold text-muted-foreground">
+                              <Clock className="size-3 sm:size-3.5 opacity-50" />
                               {clase.hora_inicio} - {clase.hora_fin}
+                            </span>
+                            <span className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold text-muted-foreground">
+                              <MapPin className="size-3 sm:size-3.5 opacity-50" />
+                              {clase.aula_asignada}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <div className="flex flex-col items-end">
-                            <span className="flex items-center gap-1.5 text-xs font-black text-foreground">
-                              <MapPin className={`size-3.5 ${style.icon}`} />
-                              {clase.aula_asignada}
-                            </span>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter truncate max-w-[150px]">
-                              {clase.docente || 'Docente sin asignar'}
-                            </p>
+                        <div className="flex items-center gap-3 sm:gap-6 ml-4">
+                          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full ${style.pill}`}>
+                            <Users className={`size-3 ${style.icon}`} />
+                            <span className={`text-[10px] font-black ${style.text}`}>{clase.num_estudiantes}</span>
                           </div>
-                          <div className={`size-10 rounded-xl flex items-center justify-center shadow-inner ${style.pill}`}>
-                            <span className={`text-[11px] font-black ${style.text}`}>{clase.num_estudiantes}</span>
-                          </div>
-                          <button className="size-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-white hover:text-primary transition-colors">
-                            <ChevronRight className="size-5" />
-                          </button>
+                          <ChevronRight className="size-4 text-muted-foreground/40 group-hover:translate-x-1 transition-transform" />
                         </div>
                       </div>
                     </div>
@@ -302,51 +317,107 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
             )}
           </div>
         ) : (
-          /* VISTA SEMANAL */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-            {DIAS.map(dia => (
-              <div key={dia} className="flex flex-col gap-4">
-                <div title={dia} className="bg-muted/30 p-4 rounded-3xl border border-border mb-2 flex justify-between items-center group hover:bg-muted/50 transition-colors">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{dia}</span>
-                  <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/10">
-                    {clasesPorDia[dia].length}
-                  </span>
-                </div>
+          /* VISTA SEMANAL - Accordion para Móvil y Grid para Desktop (Mockup 3) */
+          <div className="space-y-4">
+            {/* Desktop View (md+) */}
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+              {DIAS.map(dia => (
+                <div key={dia} className="flex flex-col gap-4">
+                  <div className="bg-muted/30 p-4 rounded-3xl border border-border mb-2 flex justify-between items-center group hover:bg-muted/50 transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{dia}</span>
+                    <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/10">
+                      {clasesPorDia[dia].length}
+                    </span>
+                  </div>
 
-                <div className="space-y-4">
-                  {clasesPorDia[dia].length > 0 ? (
-                    clasesPorDia[dia].map((clase, idx) => {
-                      const style = getColorForMateria(clase.materia);
-                      return (
-                        <div key={idx} className={`p-4 rounded-2xl border-l-4 border transition-all hover:shadow-md hover:-translate-y-1 ${style.bg} ${style.border}`}>
-                          <p className={`text-[11px] font-black leading-tight mb-2 ${style.text} line-clamp-2`}>{clase.materia}</p>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="size-3 text-muted-foreground" />
-                              <span className="text-[10px] font-bold text-muted-foreground">{clase.hora_inicio} - {clase.hora_fin}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1">
-                                <MapPin className="size-3 text-muted-foreground" />
-                                <span className={`text-[10px] font-black ${style.text}`}>{clase.aula_asignada}</span>
+                  <div className="space-y-4">
+                    {clasesPorDia[dia].length > 0 ? (
+                      clasesPorDia[dia].map((clase, idx) => {
+                        const style = getColorForMateria(clase.materia);
+                        return (
+                          <div key={idx} className={`p-4 rounded-2xl border-l-4 border transition-all hover:shadow-md hover:-translate-y-1 ${style.bg} ${style.border}`}>
+                            <p className={`text-[11px] font-black leading-tight mb-2 ${style.text} line-clamp-2`}>{clase.materia}</p>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="size-3 text-muted-foreground" />
+                                <span className="text-[10px] font-bold text-muted-foreground">{clase.hora_inicio} - {clase.hora_fin}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Users className="size-3 text-muted-foreground" />
-                                <span className="text-[10px] font-black text-foreground">{clase.num_estudiantes}</span>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="size-3 text-muted-foreground" />
+                                  <span className={`text-[10px] font-black ${style.text}`}>{clase.aula_asignada}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Users className="size-3 text-muted-foreground" />
+                                  <span className="text-[10px] font-black text-foreground">{clase.num_estudiantes}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
+                        )
+                      })
+                    ) : (
+                      <div className="h-24 rounded-2xl border border-dashed border-border flex items-center justify-center opacity-30">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Libre</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Mobile View (xs to sm) - Acordeón según Mockup 3 */}
+            <div className="md:hidden space-y-3">
+              {DIAS.map(dia => (
+                <div key={dia} className="bg-card rounded-2xl border border-border overflow-hidden transition-all">
+                  <button
+                    onClick={() => toggleDia(dia)}
+                    className="w-full flex items-center justify-between p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-black text-foreground">{dia}</span>
+                      <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-lg">
+                        {clasesPorDia[dia].length}
+                      </span>
+                    </div>
+                    {expandedDias[dia] ? (
+                      <ChevronUp className="size-4 text-muted-foreground/60" />
+                    ) : (
+                      <ChevronDown className="size-4 text-muted-foreground/60" />
+                    )}
+                  </button>
+
+                  {expandedDias[dia] && (
+                    <div className="p-4 pt-0 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {clasesPorDia[dia].length > 0 ? (
+                        clasesPorDia[dia].map((clase, idx) => {
+                          const style = getColorForMateria(clase.materia);
+                          return (
+                            <div key={idx} className={`p-4 rounded-xl border-l-4 border transition-all ${style.bg} ${style.border}`}>
+                              <h5 className="text-xs font-black text-foreground mb-1">{clase.materia}</h5>
+                              <div className="flex items-center gap-4">
+                                <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
+                                  <Clock className="size-3" />
+                                  {clase.hora_inicio} - {clase.hora_fin}
+                                </span>
+                                <span className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
+                                  <MapPin className="size-3" />
+                                  {clase.aula_asignada}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-8 text-center bg-muted/20 rounded-xl border border-dashed border-border">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Sin actividades</span>
                         </div>
-                      )
-                    })
-                  ) : (
-                    <div className="h-24 rounded-2xl border border-dashed border-border flex items-center justify-center opacity-30">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Libre</span>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>

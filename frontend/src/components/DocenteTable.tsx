@@ -110,11 +110,14 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                 if (res.success) {
                     setIsModalOpen(false);
                     loadDocentes();
+                    // Mostrar las credenciales al usuario como se pidió
+                    alert(`¡Docente Creado!\n\n📧 Email: ${res.docente?.email || 'El configurado'}\n🔑 Clave: uide2024\n\nEl docente ya puede acceder al sistema.`);
                 }
             }
         } catch (err: any) {
             console.error('Error guardando docente:', err);
-            alert(err.response?.data?.error || 'Error al guardar docente');
+            const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Error al guardar docente';
+            alert(`No se pudo guardar: ${errorMsg}`);
         } finally {
             setSaving(false);
         }

@@ -85,8 +85,19 @@ const loginEstudianteByCedula = async (req, res) => {
       });
     }
 
-    // TODO: Cuando exista la tabla estudiantes_materias, agregar consulta de materias
-    const materias = [];
+    // Obtener materias inscritas
+    const materias = await sequelize.query(`
+      SELECT c.id, c.materia, c.dia, c.hora_inicio, c.hora_fin, 
+             COALESCE(a.nombre, c.aula_asignada, 'S/A') as aula,
+             c.docente
+      FROM clases c
+      INNER JOIN estudiantes_materias em ON em.clase_id = c.id
+      LEFT JOIN aulas a ON a.codigo = c.aula_asignada
+      WHERE em.estudiante_id = :id
+    `, {
+      replacements: { id: estudiante.id },
+      type: QueryTypes.SELECT
+    });
 
     // Generar JWT para el estudiante
     const token = generarToken({
@@ -103,7 +114,10 @@ const loginEstudianteByCedula = async (req, res) => {
       nivel: estudiante.nivel,
       email: estudiante.email,
       edad: estudiante.edad,
-      materias
+      materias: materias.map(m => ({
+        ...m,
+        materia: String(m.materia).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      }))
     };
 
     res.json({
@@ -622,6 +636,52 @@ const subirEstudiantes = async (req, res) => {
           estudiantesGuardados++;
         } else {
           estudiantesActualizados++;
+        }
+
+        // --- NUEVO: Procesar Materias/Inscripciones desde la misma fila ---
+        const materiasRaw = row[columnMap.materiasCol] || row.materias || row.Materias;
+        if (materiasRaw) {
+          const listaMaterias = String(materiasRaw).split(/[,;|]/).map(m => m.trim()).filter(m => m.length > 0);
+
+          // Obtener ID del estudiante (si acaba de ser insertado/actualizado)
+          const [estRecord] = await sequelize.query(
+            'SELECT id FROM estudiantes WHERE cedula = :cedula',
+            { replacements: { cedula }, type: QueryTypes.SELECT, transaction }
+          );
+
+          if (estRecord) {
+            for (const materiaNombre of listaMaterias) {
+              // Buscar clase que coincida con la materia y el nivel/escuela
+              const claseCheck = await sequelize.query(
+                `SELECT id FROM clases 
+                 WHERE (materia ILIKE :materia OR :materia ILIKE CONCAT('%', materia, '%'))
+                 AND (carrera = :escuela OR carrera_id IN (SELECT id FROM uploads_carreras WHERE carrera = :escuela))
+                 LIMIT 1`,
+                {
+                  replacements: {
+                    materia: `%${materiaNombre}%`,
+                    escuela: escuela
+                  },
+                  type: QueryTypes.SELECT,
+                  transaction
+                }
+              );
+
+              if (claseCheck.length > 0) {
+                await sequelize.query(
+                  `INSERT INTO estudiantes_materias (estudiante_id, clase_id, created_at, updated_at)
+                   VALUES (:est_id, :clase_id, NOW(), NOW())
+                   ON CONFLICT (estudiante_id, clase_id) DO NOTHING`,
+                  {
+                    replacements: { est_id: estRecord.id, clase_id: claseCheck[0].id },
+                    type: QueryTypes.INSERT,
+                    transaction
+                  }
+                );
+                inscripcionesGuardadas++;
+              }
+            }
+          }
         }
 
       } catch (error) {
