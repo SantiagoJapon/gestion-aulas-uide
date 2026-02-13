@@ -602,6 +602,31 @@ export interface ListarPlanificacionesResponse {
   planificaciones: PlanificacionSubida[];
 }
 
+export interface ReporteSalud {
+  total_clases: number;
+  clases_sin_horario: number;
+  clases_sin_estudiantes: number;
+  clases_sin_docente: number;
+  estado_general: 'bueno' | 'atencion_requerida';
+  recomendacion: string;
+}
+
+export interface SubirPlanificacionResponse {
+  success: boolean;
+  mensaje: string;
+  reporte_salud?: ReporteSalud;
+  resultado?: {
+    clases_guardadas: number;
+    hoja_usada: string;
+    total_hojas: number;
+    errores: string[] | null;
+    distribucion: {
+      estado: string;
+      mensaje: string;
+    };
+  };
+}
+
 export const planificacionService = {
   // Listar planificaciones
   listar: async (): Promise<ListarPlanificacionesResponse> => {
@@ -610,11 +635,11 @@ export const planificacionService = {
   },
 
   // Subir planificación
-  subirPlanificacion: async (archivo: File, carreraId?: number): Promise<{ success: boolean; message: string }> => {
+  subirPlanificacion: async (archivo: File, carreraId?: number): Promise<SubirPlanificacionResponse> => {
     const formData = new FormData();
     formData.append('archivo', archivo);
     if (carreraId) formData.append('carrera_id', carreraId.toString());
-    const response = await api.post<{ success: boolean; message: string }>('/planificaciones/subir', formData, {
+    const response = await api.post<SubirPlanificacionResponse>('/planificaciones/subir', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data;

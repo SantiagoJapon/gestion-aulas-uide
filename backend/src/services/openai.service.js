@@ -1,9 +1,19 @@
-const OpenAI = require('openai');
+// El cliente se inicializa solo si es necesario para evitar errores si no hay API Key
+let openai = null;
 
-// Inicializar cliente de OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+function obtenerClienteOpenAI() {
+  if (openai) return openai;
+
+  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'tu_clave_api_aqui') {
+    throw new Error('OPENAI_API_KEY no configurada en el servidor.');
+  }
+
+  const OpenAI = require('openai');
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+  return openai;
+}
 
 /**
  * Analiza un Excel completo usando GPT-4 para extraer clases
@@ -11,14 +21,15 @@ const openai = new OpenAI({
  */
 async function analizarExcelConIA(excelData, carreraNombre) {
   try {
+    const client = obtenerClienteOpenAI();
     console.log('🤖 Analizando Excel con GPT-4...');
-    
+
     // Convertir las primeras 30 filas a texto para enviar a GPT-4
     const primerasFilas = excelData.slice(0, 30);
     const textoExcel = JSON.stringify(primerasFilas, null, 2);
-    
+
     console.log(`📄 Enviando ${primerasFilas.length} filas a GPT-4 para análisis...`);
-    
+
     const prompt = `Eres un asistente experto en análisis de datos académicos. Te voy a dar las primeras filas de un archivo Excel que contiene la planificación académica de la carrera "${carreraNombre}".
 
 Tu tarea es:
@@ -65,7 +76,7 @@ Devuelve SOLO un JSON válido con este formato (sin texto adicional):
 
 Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin explicaciones.`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: "gpt-4o",  // GPT-4 Optimized (más rápido y barato)
       messages: [
         {
@@ -83,7 +94,7 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
 
     const respuesta = completion.choices[0].message.content;
     console.log('🤖 Respuesta de GPT-4 recibida');
-    
+
     // Limpiar la respuesta por si GPT-4 agregó markdown
     let jsonLimpio = respuesta.trim();
     if (jsonLimpio.startsWith('```json')) {
@@ -91,14 +102,14 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
     } else if (jsonLimpio.startsWith('```')) {
       jsonLimpio = jsonLimpio.replace(/```\n?/g, '');
     }
-    
+
     const resultado = JSON.parse(jsonLimpio);
-    
+
     console.log('✅ Análisis completado:');
     console.log(`   📊 Fila de inicio de datos: ${resultado.fila_inicio_datos}`);
     console.log(`   📋 Clases detectadas: ${resultado.clases.length}`);
     console.log(`   🔍 Columnas identificadas:`, Object.keys(resultado.columnas_detectadas).filter(k => resultado.columnas_detectadas[k]));
-    
+
     // Si GPT-4 solo analizó las primeras filas, procesar el resto del Excel
     // usando las columnas detectadas
     if (resultado.fila_inicio_datos && resultado.columnas_detectadas.materia) {
@@ -108,20 +119,20 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
         resultado.fila_inicio_datos,
         resultado.columnas_detectadas
       );
-      
+
       resultado.clases = resultado.clases.concat(clasesAdicionales);
       console.log(`✅ Total de clases extraídas: ${resultado.clases.length}`);
     }
-    
+
     return resultado;
-    
+
   } catch (error) {
     console.error('❌ Error al analizar Excel con IA:', error.message);
-    
+
     if (error.status === 401) {
       throw new Error('API Key de OpenAI inválida. Configura OPENAI_API_KEY en .env');
     }
-    
+
     throw error;
   }
 }
@@ -131,17 +142,17 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
  */
 function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
   const clasesAdicionales = [];
-  
+
   // Procesar desde la fila 30 (GPT-4 ya procesó las primeras 30)
   for (let i = 30; i < excelData.length; i++) {
     const fila = excelData[i];
-    
+
     // Extraer datos usando las columnas detectadas
     const materia = fila[columnasDetectadas.materia];
-    
+
     // Si no hay materia, saltar esta fila
     if (!materia || materia.trim() === '') continue;
-    
+
     const clase = {
       materia: materia.trim(),
       ciclo: null,
@@ -153,7 +164,7 @@ function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
       docente: fila[columnasDetectadas.docente] || null,
       aula: fila[columnasDetectadas.aula] || null
     };
-    
+
     // Procesar horario
     const horario = fila[columnasDetectadas.horario];
     if (horario && typeof horario === 'string') {
@@ -163,10 +174,10 @@ function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
         clase.hora_fin = partesHora[1].trim();
       }
     }
-    
+
     clasesAdicionales.push(clase);
   }
-  
+
   return clasesAdicionales;
 }
 
@@ -175,10 +186,10 @@ function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
  */
 function extraerNumeroEstudiantes(valor) {
   if (!valor) return 0;
-  
+
   // Si ya es un número
   if (typeof valor === 'number') return Math.floor(valor);
-  
+
   // Si es string, extraer el primer número
   const match = String(valor).match(/\d+/);
   return match ? parseInt(match[0]) : 0;
@@ -188,9 +199,9 @@ function extraerNumeroEstudiantes(valor) {
  * Verifica si la API Key de OpenAI está configurada
  */
 function esOpenAIConfigurado() {
-  return !!(process.env.OPENAI_API_KEY && 
-            process.env.OPENAI_API_KEY !== 'tu_clave_api_aqui' &&
-            process.env.OPENAI_API_KEY.length > 20);
+  return !!(process.env.OPENAI_API_KEY &&
+    process.env.OPENAI_API_KEY !== 'tu_clave_api_aqui' &&
+    process.env.OPENAI_API_KEY.length > 20);
 }
 
 module.exports = {
