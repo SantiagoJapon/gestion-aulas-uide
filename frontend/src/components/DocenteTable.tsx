@@ -106,7 +106,11 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                     loadDocentes();
                 }
             } else {
-                alert('La creación manual de docentes no está habilitada. Se cargan automáticamente desde el Excel de planificación.');
+                const res = await docenteService.createDocente({ ...formData, carrera_id: carreraId });
+                if (res.success) {
+                    setIsModalOpen(false);
+                    loadDocentes();
+                }
             }
         } catch (err: any) {
             console.error('Error guardando docente:', err);
@@ -167,6 +171,13 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                    <button
+                        onClick={() => handleOpenModal()}
+                        className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-emerald-500/20 transition-all active:scale-95"
+                    >
+                        <span className="material-symbols-outlined text-sm">person_add</span>
+                        Nuevo Docente
+                    </button>
                     <button
                         onClick={handleGenerarCredenciales}
                         disabled={generando}

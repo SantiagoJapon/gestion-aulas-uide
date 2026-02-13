@@ -974,6 +974,11 @@ export const docenteService = {
     return response.data;
   },
 
+  createDocente: async (data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
+    const response = await api.post<{ success: boolean; docente: Docente; mensaje: string }>('/docentes', data);
+    return response.data;
+  },
+
   updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
     const response = await api.put<{ success: boolean; docente: Docente; mensaje: string }>(`/docentes/${id}`, data);
     return response.data;

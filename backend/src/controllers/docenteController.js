@@ -171,6 +171,62 @@ exports.getDocentes = async (req, res) => {
 };
 
 /**
+ * Crear un nuevo docente manualmente
+ */
+exports.createDocente = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const { nombre, email, telefono, titulo_pregrado, titulo_posgrado, tipo, carrera_id } = req.body;
+        const usuario = req.usuario;
+
+        let finalCarreraId = carrera_id;
+
+        // Si es director, forzar su carrera
+        if (usuario.rol === 'director') {
+            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+            if (!carreraObj) {
+                return res.status(404).json({ success: false, message: 'Carrera del director no encontrada' });
+            }
+            finalCarreraId = carreraObj.id;
+        }
+
+        if (!finalCarreraId) {
+            return res.status(400).json({ success: false, message: 'Se requiere ID de carrera' });
+        }
+
+        const docente = await Docente.create({
+            nombre,
+            email,
+            telefono,
+            titulo_pregrado,
+            titulo_posgrado,
+            tipo: tipo || 'Tiempo Completo',
+            carrera_id: finalCarreraId
+        }, { transaction });
+
+        // Crear usuario automáticamente
+        const user = await crearUsuarioParaDocente(docente, transaction);
+
+        await transaction.commit();
+
+        // Enviar notificación si tiene teléfono
+        if (telefono && user) {
+            const mensaje = `*UIDE Gestión de Aulas*\n\nHola ${nombre}, se te ha registrado como docente. Tus credenciales son:\n\n📧 *Email:* ${user.email}\n🔑 *Clave:* uide2024\n\n🌐 Accede aquí: ${process.env.FRONTEND_URL || 'http://uide.edu.ec'}`;
+            await whatsappService.sendMessage(telefono, mensaje).catch(e => console.error('Error enviando WA:', e));
+        }
+
+        res.json({
+            success: true,
+            docente,
+            mensaje: 'Docente creado exitosamente con credenciales de acceso.'
+        });
+    } catch (error) {
+        if (transaction) await transaction.rollback();
+        handle500(res, error, 'createDocente');
+    }
+};
+
+/**
  * Obtener detalle de un docente
  */
 exports.getDocenteById = async (req, res) => {
@@ -259,8 +315,19 @@ exports.updateTelefono = async (req, res) => {
 exports.generarCredencialesMasivo = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
-        const { carrera_id } = req.body;
+        const usuario = req.usuario;
+        let { carrera_id } = req.body;
         const where = { usuario_id: null };
+
+        // Si es director, forzar que solo sea su carrera
+        if (usuario.rol === 'director') {
+            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+            if (!carreraObj) {
+                return res.status(404).json({ success: false, message: 'Carrera del director no encontrada' });
+            }
+            carrera_id = carreraObj.id;
+        }
+
         if (carrera_id) where.carrera_id = carrera_id;
 
         const docentes = await Docente.findAll({ where, transaction });

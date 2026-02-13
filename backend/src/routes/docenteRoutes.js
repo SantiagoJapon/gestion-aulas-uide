@@ -6,6 +6,9 @@ const { verificarAuth, verificarRol } = require('../middleware/auth');
 // Dashboard de docentes: Accesible para Admin y Director
 router.get('/', verificarAuth, verificarRol('admin', 'director'), docenteController.getDocentes);
 
+// Crear nuevo docente manual
+router.post('/', verificarAuth, verificarRol('admin', 'director'), docenteController.createDocente);
+
 // Detalle de docente
 router.get('/:id', verificarAuth, verificarRol('admin', 'director'), docenteController.getDocenteById);
 
@@ -16,6 +19,6 @@ router.put('/:id', verificarAuth, verificarRol('admin'), docenteController.updat
 router.put('/:id/telefono', verificarAuth, verificarRol('admin', 'director'), docenteController.updateTelefono);
 
 // Generar credenciales masivo
-router.post('/generar-credenciales', verificarAuth, verificarRol('admin'), docenteController.generarCredencialesMasivo);
+router.post('/generar-credenciales', verificarAuth, verificarRol('admin', 'director'), docenteController.generarCredencialesMasivo);
 
 module.exports = router;
