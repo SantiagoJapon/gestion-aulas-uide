@@ -55,8 +55,8 @@ const Reserva = sequelize.define('Reserva', {
             key: 'id'
         }
     },
-    telegram_id: {
-        type: DataTypes.BIGINT,
+    telefono: {
+        type: DataTypes.STRING(20),
         allowNull: true
     },
     // Datos redundantes para facilitar consultas rápidas sin joins complejos

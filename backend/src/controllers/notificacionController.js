@@ -31,29 +31,29 @@ exports.crearNotificacion = async (req, res) => {
             leida: false
         });
 
-        // 🚀 ALERTA REAL-TIME VIA TELEGRAM
-        const telegramService = require('../services/telegramService');
+        // 🚀 ALERTA REAL-TIME VIA WHATSAPP
+        const whatsappService = require('../services/whatsappService');
         const telegramMsg = `🔔 *${titulo}*\n\n${mensaje}\n\n_Enviado desde el Portal UIDE_`;
 
         if (tipo === 'DIRECTA') {
             if (estudiante_id) {
                 // Buscar usuario_id del estudiante
                 const estudiante = await Estudiante.findByPk(estudiante_id);
-                if (estudiante) await telegramService.notifyUser(estudiante.usuario_id, telegramMsg);
+                if (estudiante) await whatsappService.notifyUser(estudiante.usuario_id, telegramMsg);
             } else if (destinatario_id) {
-                await telegramService.notifyUser(destinatario_id, telegramMsg);
+                await whatsappService.notifyUser(destinatario_id, telegramMsg);
             }
         } else if (tipo === 'CARRERA') {
-            await telegramService.notifyCareer(carrera_id, telegramMsg);
+            await whatsappService.notifyCareer(carrera_id, telegramMsg);
         } else if (tipo === 'CLASE') {
-            await telegramService.notifyClass(clase_id, telegramMsg);
+            await whatsappService.notifyClass(clase_id, telegramMsg);
         } else if (tipo === 'GLOBAL') {
-            // Mandar a todos los que tengan sesión vinculada
+            // Mandar a todos los que tengan sesión vinculada via WhatsApp
             const { sequelize } = require('../config/database');
             const { QueryTypes } = require('sequelize');
-            const sessions = await sequelize.query('SELECT DISTINCT telegram_id FROM bot_sessions', { type: QueryTypes.SELECT });
+            const sessions = await sequelize.query('SELECT DISTINCT telefono FROM bot_sessions WHERE telefono IS NOT NULL', { type: QueryTypes.SELECT });
             for (const s of sessions) {
-                await telegramService.sendMessage(s.telegram_id, telegramMsg);
+                await whatsappService.sendMessage(s.telefono, telegramMsg);
             }
         }
 

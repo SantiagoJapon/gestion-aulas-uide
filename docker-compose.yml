@@ -156,7 +156,7 @@ services:
       - "8080:8080"
     environment:
       - AUTHENTICATION_TYPE=apikey
-      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-uide_whatsapp_secret_2024}
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgres://postgres:postgres@postgres:5432/evolution_db
@@ -165,6 +165,7 @@ services:
       - CACHE_REDIS_URI=redis://redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
       - QRCODE_LIMIT=30
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
     volumes:
       - evolution_store:/evolution/store
       - evolution_instances:/evolution/instances
@@ -173,6 +174,31 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - app_network
+
+  # WhatsApp Bot - Roomie
+  whatsapp-bot:
+    build: ./whatsapp-bot-aulas
+    container_name: whatsapp_bot
+    restart: always
+    environment:
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE=bot
+      - BOT_PORT=3020
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=gestion_aulas
+      - DB_SSL=false
+      - VOICE_API_KEY=${VOICE_API_KEY:-}
+    ports:
+      - "3020:3020"
+    depends_on:
+      - postgres
+      - evolution-api
     networks:
       - app_network
 

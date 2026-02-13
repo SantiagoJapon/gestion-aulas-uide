@@ -6,16 +6,26 @@
 
 const XLSX = require('xlsx');
 
-// Palabras clave para detectar columnas (normalizadas, sin acentos)
-// Mas especificas primero para evitar falsos positivos
+// Palabras clave para detectar columnas (normalizadas, sin acentos).
+// ORDEN CRITICO: campos mas especificos PRIMERO para que se procesen antes
+// que los genericos. Ej: "codigo" antes de "materia" para que
+// "CODIGO DE LA MATERIA" no matchee con 'materia'.
 const COLUMN_KEYWORDS = {
-  materia: ['materia', 'asignatura', 'nombre materia', 'nombre de la materia', 'curso'],
-  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor', 'teacher', 'instructor'],
+  // --- Especificos primero para evitar falsos positivos ---
+  codigo: ['codigo de la materia', 'codigo de materia', 'codigo materia', 'cod materia', 'codigo', 'cod', 'cod.'],
+  horas_materia: ['horas materia', 'nro horas', 'nro  horas', '# de horas', 'total horas clase', 'total horas', 'horas totales'],
+  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente', 'componente academico'],
+  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],
+  aula_numero: ['aula nro', 'aula numero', 'salon nro'],
+
+  // --- Luego los campos principales ---
+  materia: ['materia', 'asignatura', 'nombre materia', 'nombre de la materia', 'curso', 'unidad curricular'],
+  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor', 'teacher', 'instructor', 'catedratico'],
   titulo_pregrado: ['titulo pregrado', 'pregrado', 'título pregrado'],
   titulo_posgrado: ['titulo posgrado', 'posgrado', 'postgrado', 'título posgrado'],
   email: ['email', 'correo electro', 'correo', 'mail'],
-  tipo_docente: ['tiempo completo', 'tiempo parcial', 'tipo docente', 'dedicacion'],
-  dia: ['dia de clase', 'dia clase', 'horario dia', 'dia horario', 'dia'],
+  tipo_docente: ['tiempo completo', 'tiempo parcial', 'tipo docente', 'dedicacion', 'categoria'],
+  dia: ['dia de clase', 'dia clase', 'horario dia', 'dia horario', '# horarios', 'horarios', 'dia'],
   hora: ['hora clase', 'horario hora', 'hora'],
   hora_inicio: ['hora_inicio', 'hora inicio', 'inicio'],
   hora_fin: ['hora_fin', 'hora fin', 'fin'],
@@ -26,17 +36,12 @@ const COLUMN_KEYWORDS = {
     '# alumnos', 'numero alumnos', 'numero de alumnos', 'cantidad alumnos',
     'estudiantes', 'alumnos'
   ],
-  paralelo: ['paralelo', 'grupo', 'seccion'],
-  ciclo: ['ciclo', 'nivel', 'semestre'],
-  codigo: ['codigo de la materia', 'codigo materia', 'cod materia', 'codigo', 'cod'],
-  aula_numero: ['aula nro', 'aula numero'],
-  aula: ['aula/lab', 'aula / lab', 'aula', 'salon', 'lab'],
-  malla: ['malla'],
-  modalidad: ['modalidad'],
+  paralelo: ['paralelo', 'grupo', 'seccion', 'paralelo/grupo'],
+  ciclo: ['ciclo', 'nivel', 'semestre', 'nivel/ciclo'],
+  aula: ['aula/lab', 'aula / lab', 'aula', 'salon', 'lab', 'laboratorio', 'virtual'],
+  malla: ['malla', 'plan estudios'],
+  modalidad: ['modalidad', 'tipo asistencia'],
   creditos: ['creditos', 'credito'],
-  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],
-  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],
-  horas_materia: ['horas materia', 'nro horas', 'nro  horas', '# de horas', 'total horas', 'total horas clase'],
 };
 
 // Palabras que indican que una columna NO es "hora" de horario sino "horas" de conteo
@@ -251,7 +256,43 @@ function processSheet(sheet, sheetName) {
     console.log(`[ExcelParser]     Fila ${dbg}: ${JSON.stringify(sample)}`);
   }
 
-  const clases = extractClasses(rawData, dataStartRow, columnMap);
+  let clases = extractClasses(rawData, dataStartRow, columnMap);
+
+  // POST-EXTRACCION: Si la mayoría de "materias" parecen códigos, intentar auto-corregir
+  if (clases.length > 0) {
+    const CODE_PATTERN = /^[A-Z]{2,5}[\d_][A-Z\d_]{2,}$/;
+    const codeLikeCount = clases.filter(c => c.materia && CODE_PATTERN.test(c.materia.trim())).length;
+    const codeRatio = codeLikeCount / clases.length;
+
+    if (codeRatio > 0.5) {
+      console.warn(`[ExcelParser] ⚠️ ${(codeRatio * 100).toFixed(0)}% de materias parecen CÓDIGOS. Intentando auto-corregir...`);
+
+      // Estrategia: buscar la columna inmediatamente a la derecha de la columna mapeada como 'materia'
+      const materiaCol = columnMap.materia;
+      const nextCol = materiaCol + 1;
+
+      // Verificar que la siguiente columna no esté asignada a otro campo
+      const assignedColValues = new Set(Object.values(columnMap));
+      if (!assignedColValues.has(nextCol) && nextCol < rawData[0].length) {
+        // Verificar que la siguiente columna tiene texto real (no códigos ni números)
+        const sampleValues = [];
+        for (let si = dataStartRow; si < Math.min(dataStartRow + 10, rawData.length); si++) {
+          const val = getString(rawData[si], nextCol);
+          if (val) sampleValues.push(val);
+        }
+        const hasRealNames = sampleValues.some(v => v.length > 3 && !CODE_PATTERN.test(v.trim()) && !/^\d+$/.test(v.trim()));
+
+        if (hasRealNames) {
+          console.log(`[ExcelParser]   Auto-corrigiendo: materia col ${colIdxToLetter(materiaCol)} → ${colIdxToLetter(nextCol)} (muestras: ${sampleValues.slice(0, 3).join(', ')})`);
+          // Reasignar: la columna actual pasa a ser 'codigo', la siguiente es 'materia'
+          columnMap.codigo = materiaCol;
+          columnMap.materia = nextCol;
+          // Re-extraer con el mapa corregido
+          clases = extractClasses(rawData, dataStartRow, columnMap);
+        }
+      }
+    }
+  }
 
   return {
     clases,
@@ -329,6 +370,7 @@ function findHeaderRow(data) {
     let score = 0;
     let subHeaderDetected = false;
     const excludedCols = new Set(); // columnas de indice que deben ignorarse
+    const assignedCols = new Set(); // columnas ya asignadas a un campo (evitar doble-mapeo)
 
     // Paso 0: Identificar columnas de indice (N°, Nro, #) para excluirlas
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
@@ -341,6 +383,7 @@ function findHeaderRow(data) {
     // Paso 1: Buscar match con cada tipo de columna en la fila principal
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
       if (excludedCols.has(colIdx)) continue; // saltar columnas de indice
+      if (assignedCols.has(colIdx)) continue; // saltar columnas ya mapeadas a otro campo
 
       const cellNorm = normalize(String(row[colIdx]));
       if (!cellNorm || cellNorm.length === 0) continue;
@@ -350,21 +393,43 @@ function findHeaderRow(data) {
         if (map[key] !== undefined) continue; // ya encontrada
 
         for (const kw of keywords) {
-          const isMatch = cellNorm === kw || cellNorm.includes(kw);
-          if (isMatch) {
-            // Evitar que "horario" matchee como "hora" - es un grupo-header
+          const isExact = cellNorm === kw;
+          const isPartial = !isExact && cellNorm.includes(kw);
+
+          if (isExact || isPartial) {
+            // --- Guards de exclusion por campo ---
+
+            // Guard MATERIA: si contiene "codigo"/"cod ", es columna de codigos, no de nombres
+            if (key === 'materia' && (cellNorm.includes('codigo') || cellNorm.includes('cod '))) {
+              break; // no seguir probando keywords de materia para esta celda
+            }
+            // Guard MATERIA: si contiene "horas", es conteo de horas
+            if (key === 'materia' && cellNorm.includes('horas')) {
+              break;
+            }
+            // Guard CICLO: si contiene "componente", es componente academico no ciclo
+            if (key === 'ciclo' && cellNorm.includes('componente')) {
+              break;
+            }
+            // Guard HORA: "horario"/"horarios" es un grupo-header, no la columna hora
             if (key === 'hora' && (cellNorm === 'horario' || cellNorm === 'horarios')) {
               break;
             }
-            // Evitar que columnas de conteo de horas matcheen como "hora" de horario
+            // Guard HORA: columnas de conteo de horas no son "hora" de horario
             if (key === 'hora' && HORA_EXCLUSION_WORDS.some(w => cellNorm.includes(w))) {
               break;
             }
-            // Si hay aula_numero, preferirla sobre aula generico para el campo aula
+            // Guard AULA: si ya existe aula_numero, preferirla
             if (key === 'aula' && map.aula_numero !== undefined) {
-              break; // ya tenemos aula_numero que es mas especifico
+              break;
             }
+            // Guard EMAIL: si contiene "titulo" o "pregrado" o "posgrado", no es email
+            if (key === 'email' && (cellNorm.includes('titulo') || cellNorm.includes('pregrado') || cellNorm.includes('posgrado'))) {
+              break;
+            }
+
             map[key] = colIdx;
+            assignedCols.add(colIdx); // marcar columna como ocupada
             score++;
             break;
           }
@@ -477,20 +542,38 @@ function extractClasses(data, startRow, columnMap) {
   // LISTA NEGRA: Evitar extraer filas que no son clases
   const MATERIA_BLACK_LIST = [
     'subtotal', 'total', 'receso', 'almuerzo', 'tutor_a', 'atenci_n a estudiantes',
-    'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'tutor_a',
-    'pregrado', 'posgrado', 'horario', 'malla', 'docente', 'materia',
+    'gesti_n acad_mica', 'investigaci_n', 'vinculaci_n', 'consejer_a', 'pregrado',
+    'posgrado', 'horario', 'malla', 'docente', 'materia', 'total materias',
     'docentes tiempo', 'tiempo completo', 'tiempo parcial', 'escuela de',
     'planificacion academica', 'universidad', 'extension', 'periodo',
-    'total horas docencia', 'total horas clase'
+    'total horas docencia', 'total horas clase', 'complementarias', 'tesis',
+    'investigacion', 'graduados', 'gestion', 'calidad', 'responsable', 'club',
+    'distribucion docente', 'tutoria', 'vinculacion', 'consejeria',
+    'gestion academica', 'atencion a estudiantes', 'total general',
+    'catedraticos', 'profesores', 'coordinacion', 'direccion'
+  ];
+
+  // Palabras que indican FIN de la tabla de clases (secciones resumen)
+  const STOP_SECTION_KEYWORDS = [
+    'distribucion docente por semestre', 'distribucion docente',
+    'resumen de carga', 'resumen carga', 'resumen general',
+    'total de materias por docente', 'carga horaria docente'
   ];
 
   for (let i = startRow; i < data.length; i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
 
-    // Detectar filas de seccion ("DOCENTES TIEMPO COMPLETO", "DOCENTES TIEMPO PARCIAL")
-    // Concatenar todos los valores de la fila para buscar keywords de seccion
+    // Concatenar todos los valores de la fila para buscar keywords
     const rowText = row.filter(Boolean).map(v => normalize(String(v))).join(' ');
+
+    // Detectar secciones RESUMEN que indican fin de la tabla de clases
+    if (STOP_SECTION_KEYWORDS.some(kw => rowText.includes(kw))) {
+      console.log(`[ExcelParser]   STOP: Seccion resumen detectada en fila ${i}: "${rowText.substring(0, 80)}..." - deteniendo extraccion`);
+      break; // salir completamente del loop
+    }
+
+    // Detectar filas de seccion ("DOCENTES TIEMPO COMPLETO", "DOCENTES TIEMPO PARCIAL")
     const isSection = SECTION_KEYWORDS.some(kw => rowText.includes(kw));
     if (isSection) {
       // Resetear propagacion al cambiar de seccion
@@ -572,13 +655,16 @@ function extractClasses(data, startRow, columnMap) {
     if (!materiaFinal) continue;
 
     // VALIDACION: Si materia es puramente numérica, es un N°, ciclo o índice
-    // leído de la columna equivocada → NO es una materia real
     if (/^\d{1,4}$/.test(materiaFinal.trim())) {
-      // Log solo las primeras ocurrencias para no saturar
-      if (clases.length < 3) {
-        console.log(`[ExcelParser]   Fila ${i} SKIP: materia numérica "${materiaFinal}"`);
-      }
       continue;
+    }
+
+    // VALIDACION: Si materia parece un CÓDIGO (EJ: PP_06_SIMU, CC05A_IFT103)
+    // y tenemos una columna de materia real, probablemente tomamos la equivocada
+    const looksLikeCode = /^[A-Z]{2,5}[\d_][A-Z\d_]{2,}$/.test(materiaFinal.trim());
+    if (looksLikeCode && columnMap.codigo !== undefined && columnMap.materia !== columnMap.codigo) {
+      // Si el valor de materia ya existe en el campo codigo, es duplicado
+      // Pero si no, tal vez es efectivamente el nombre
     }
 
     // VALIDACION: Si materia tiene solo 1-2 caracteres, probablemente es un paralelo o indice

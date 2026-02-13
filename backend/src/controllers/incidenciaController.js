@@ -20,12 +20,17 @@ exports.crearIncidencia = async (req, res) => {
             usuario_id: usuarioId
         });
 
-        // 🚀 NOTIFICAR A ADMINS POR TELEGRAM
-        const telegramService = require('../services/telegramService');
-        const adminChannelId = process.env.TELEGRAM_ADMIN_CHANNEL_ID;
-        if (adminChannelId) {
-            const adminMsg = `⚠️ *NUEVA INCIDENCIA REPORTADA*\n\n*Aula:* ${aula_codigo}\n*Asunto:* ${titulo}\n*Prioridad:* ${prioridad || 'MEDIA'}\n*Repoirtado por:* ${req.usuario?.nombre || 'Docente'}\n\n_Favor revisar el panel de administración._`;
-            await telegramService.sendMessage(adminChannelId, adminMsg);
+        // Notificar a admins via WhatsApp
+        const whatsappService = require('../services/whatsappService');
+        const { sequelize: db } = require('../config/database');
+        const { QueryTypes: QT } = require('sequelize');
+        const admins = await db.query(
+            `SELECT telefono FROM bot_sessions WHERE rol = 'admin' AND telefono IS NOT NULL`,
+            { type: QT.SELECT }
+        );
+        const adminMsg = `*NUEVA INCIDENCIA REPORTADA*\n\n*Aula:* ${aula_codigo}\n*Asunto:* ${titulo}\n*Prioridad:* ${prioridad || 'MEDIA'}\n*Reportado por:* ${req.usuario?.nombre || 'Docente'}\n\n_Favor revisar el panel de administracion._`;
+        for (const adm of admins) {
+            await whatsappService.sendMessage(adm.telefono, adminMsg);
         }
 
         res.status(201).json({ success: true, incidencia });
@@ -85,10 +90,10 @@ exports.actualizarEstado = async (req, res) => {
 
         await incidencia.save();
 
-        // 🚀 NOTIFICAR AL USUARIO DEL CAMBIO DE ESTADO
-        const telegramService = require('../services/telegramService');
+        // Notificar al usuario del cambio de estado via WhatsApp
+        const whatsappService = require('../services/whatsappService');
         const userMsg = `🛠️ *ACTUALIZACIÓN DE INCIDENCIA*\n\nTu reporte sobre el aula *${incidencia.aula_codigo}* ha cambiado de estado.\n\n*Nuevo Estado:* ${estado}\n${respuesta_tecnica ? `*Respuesta:* ${respuesta_tecnica}` : ''}\n\n_Gracias por ayudarnos a mejorar._`;
-        await telegramService.notifyUser(incidencia.usuario_id, userMsg);
+        await whatsappService.notifyUser(incidencia.usuario_id, userMsg);
 
         res.json({ success: true, incidencia });
     } catch (error) {

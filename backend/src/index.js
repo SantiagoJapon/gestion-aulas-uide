@@ -180,6 +180,10 @@ app.use('/api/notificaciones', notificacionRoutes);
 const incidenciaRoutes = require('./routes/incidenciaRoutes');
 app.use('/api/incidencias', incidenciaRoutes);
 
+// Rutas de Docentes (Extraídos del Excel)
+const docenteRoutes = require('./routes/docenteRoutes');
+app.use('/api/docentes', docenteRoutes);
+
 const { sequelize } = require('./config/database');
 const { QueryTypes } = require('sequelize');
 

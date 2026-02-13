@@ -872,6 +872,46 @@ export const incidenciaService = {
   }
 };
 
+// ============================================
+// DOCENTES (Extraídos del Excel)
+// ============================================
+
+export interface Docente {
+  id: number;
+  nombre: string;
+  email: string | null;
+  titulo_pregrado: string | null;
+  titulo_posgrado: string | null;
+  tipo: string;
+  carrera_id: number;
+  carrera?: {
+    id: number;
+    carrera: string;
+  };
+  carga?: {
+    total_clases: number;
+    total_horas: number;
+    materias: string;
+  };
+}
+
+export const docenteService = {
+  getDocentes: async (params: { carrera_id?: number; tipo?: string; search?: string } = {}): Promise<{ success: boolean; docentes: Docente[] }> => {
+    const response = await api.get<{ success: boolean; docentes: Docente[] }>('/docentes', { params });
+    return response.data;
+  },
+
+  getDocenteById: async (id: number): Promise<{ success: boolean; docente: Docente }> => {
+    const response = await api.get<{ success: boolean; docente: Docente }>(`/docentes/${id}`);
+    return response.data;
+  },
+
+  updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
+    const response = await api.put<{ success: boolean; docente: Docente; mensaje: string }>(`/docentes/${id}`, data);
+    return response.data;
+  }
+};
+
 export default api;
 
 

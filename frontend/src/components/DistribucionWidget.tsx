@@ -18,10 +18,10 @@ interface EstadoDistribucion {
     clases_asignadas: number;
     clases_pendientes: number;
     porcentaje_completado: number;
-    director_nombre: string | null;
-    director_email: string | null;
+    director_nombre?: string | null;
+    director_email?: string | null;
   }>;
-  timestamp: string;
+  timestamp?: string;
 }
 
 const DistribucionWidget: React.FC = () => {
@@ -160,19 +160,18 @@ const DistribucionWidget: React.FC = () => {
                   </p>
                 </div>
                 <span
-                  className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                    carrera.porcentaje_completado === 100 
-                      ? 'bg-green-100 text-green-800' 
+                  className={`text-xs font-semibold px-2 py-1 rounded-full ${carrera.porcentaje_completado === 100
+                      ? 'bg-green-100 text-green-800'
                       : carrera.porcentaje_completado > 0
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
                 >
-                  {carrera.porcentaje_completado === 100 
-                    ? 'Completo' 
+                  {carrera.porcentaje_completado === 100
+                    ? 'Completo'
                     : carrera.porcentaje_completado > 0
-                    ? 'En proceso'
-                    : 'Pendiente'
+                      ? 'En proceso'
+                      : 'Pendiente'
                   }
                 </span>
               </div>

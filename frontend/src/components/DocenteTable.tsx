@@ -1,81 +1,54 @@
 import { useState, useEffect } from 'react';
-import { FaPlus, FaSearch, FaEdit, FaUserTie, FaTrash } from 'react-icons/fa';
+import { FaSearch, FaEdit, FaUserTie } from 'react-icons/fa';
 import { Button } from './common/Button';
 import { Modal } from './common/Modal';
-import { usuarioService, distribucionService, User } from '../services/api';
+import { docenteService, Docente } from '../services/api';
 
 interface DocenteTableProps {
     carreraId: number;
-    carreraNombre?: string;
 }
 
-export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableProps) {
-    const [docentes, setDocentes] = useState<User[]>([]);
+export default function DocenteTable({ carreraId }: DocenteTableProps) {
+    const [docentes, setDocentes] = useState<Docente[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingDocente, setEditingDocente] = useState<User | null>(null);
+    const [editingDocente, setEditingDocente] = useState<Docente | null>(null);
     const [formData, setFormData] = useState({
         nombre: '',
-        apellido: '',
         email: '',
-        cedula: '',
-        telefono: '',
-        password: '' // Solo para creación
+        titulo_pregrado: '',
+        titulo_posgrado: '',
+        tipo: 'Tiempo Completo'
     });
     const [saving, setSaving] = useState(false);
 
-    // Carga docente (horas, clases, conflictos)
-    const [cargaMap, setCargaMap] = useState<Record<string, { total_clases: number; clases_asignadas: number; horas_totales: number; conflictos: number }>>({});
-
     // Message Modal State
     const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
-    const [selectedDocenteForMessage, setSelectedDocenteForMessage] = useState<User | null>(null);
+    const [selectedDocenteForMessage, setSelectedDocenteForMessage] = useState<Docente | null>(null);
     const [messageData, setMessageData] = useState({ subject: '', body: '' });
     const [sendingMessage, setSendingMessage] = useState(false);
 
     useEffect(() => {
         loadDocentes();
-        loadCargaDocente();
     }, [carreraId]);
 
     const loadDocentes = async () => {
         try {
             setLoading(true);
-            const params: any = { rol: 'profesor' };
+            const params: any = {};
             if (carreraId && carreraId > 0) {
                 params.carrera_id = carreraId;
             }
-            const response = await usuarioService.getUsuarios(params);
-            setDocentes(response.usuarios || []);
+            const response = await docenteService.getDocentes(params);
+            setDocentes(response.docentes || []);
         } catch (err: any) {
             console.error('Error cargando docentes:', err);
         } finally {
             setLoading(false);
         }
-    };
-
-    const loadCargaDocente = async () => {
-        try {
-            const params = carreraId && carreraId > 0 ? carreraId : undefined;
-            const response = await distribucionService.getDocentesCarga(params);
-            if (response.success && response.docentes) {
-                const map: Record<string, { total_clases: number; clases_asignadas: number; horas_totales: number; conflictos: number }> = {};
-                for (const d of response.docentes) {
-                    map[d.docente.toLowerCase().trim()] = d;
-                }
-                setCargaMap(map);
-            }
-        } catch (err) {
-            console.error('Error cargando carga docente:', err);
-        }
-    };
-
-    const getCargaDocente = (docente: User) => {
-        const key = `${docente.nombre} ${docente.apellido}`.toLowerCase().trim();
-        return cargaMap[key] || null;
     };
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,31 +57,28 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
 
     const filteredDocentes = docentes.filter(d =>
         d.nombre.toLowerCase().includes(search.toLowerCase()) ||
-        d.apellido.toLowerCase().includes(search.toLowerCase()) ||
-        d.email.toLowerCase().includes(search.toLowerCase()) ||
-        (d.cedula && d.cedula.includes(search))
+        (d.email && d.email.toLowerCase().includes(search.toLowerCase())) ||
+        (d.carga?.materias && d.carga.materias.toLowerCase().includes(search.toLowerCase()))
     );
 
-    const handleOpenModal = (docente?: User) => {
+    const handleOpenModal = (docente?: Docente) => {
         if (docente) {
             setEditingDocente(docente);
             setFormData({
                 nombre: docente.nombre,
-                apellido: docente.apellido,
-                email: docente.email,
-                cedula: docente.cedula || '',
-                telefono: docente.telefono || '',
-                password: ''
+                email: docente.email || '',
+                titulo_pregrado: docente.titulo_pregrado || '',
+                titulo_posgrado: docente.titulo_posgrado || '',
+                tipo: docente.tipo || 'Tiempo Completo'
             });
         } else {
             setEditingDocente(null);
             setFormData({
                 nombre: '',
-                apellido: '',
                 email: '',
-                cedula: '',
-                telefono: '',
-                password: ''
+                titulo_pregrado: '',
+                titulo_posgrado: '',
+                tipo: 'Tiempo Completo'
             });
         }
         setIsModalOpen(true);
@@ -118,25 +88,12 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
         e.preventDefault();
         setSaving(true);
         try {
-            const payload: any = {
-                ...formData,
-                rol: 'profesor',
-                carrera_director: carreraNombre // Vincular a esta carrera
-            };
-
             if (editingDocente) {
-                // Actualizar
-                await usuarioService.updateUsuario(editingDocente.id, payload);
+                await docenteService.updateDocente(editingDocente.id, formData);
                 setIsModalOpen(false);
                 loadDocentes();
             } else {
-                // Crear
-                if (!payload.password) {
-                    payload.password = payload.cedula || 'uide123';
-                }
-                await usuarioService.createUsuario(payload);
-                setIsModalOpen(false);
-                loadDocentes();
+                alert('La creación manual de docentes no está habilitada. Se cargan automáticamente desde el Excel de planificación.');
             }
         } catch (err: any) {
             console.error('Error guardando docente:', err);
@@ -146,18 +103,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
         }
     };
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('¿Estás seguro de eliminar este docente?')) return;
-        try {
-            await usuarioService.deleteUsuario(id);
-            loadDocentes();
-        } catch (err: any) {
-            console.error('Error borrando docente:', err);
-            alert('Error al eliminar docente');
-        }
-    };
-
-    const handleOpenMessageModal = (docente: User) => {
+    const handleOpenMessageModal = (docente: Docente) => {
         setSelectedDocenteForMessage(docente);
         setMessageData({ subject: '', body: '' });
         setIsMessageModalOpen(true);
@@ -167,10 +113,9 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
         e.preventDefault();
         setSendingMessage(true);
         try {
-            // Simulación de envío al backend
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Nota: Podríamos integrar con el servicio de notificaciones aquí
             console.log('Mensaje enviado a:', selectedDocenteForMessage?.email, messageData);
-            alert(`Notificación enviada correctamente a ${selectedDocenteForMessage?.nombre} ${selectedDocenteForMessage?.apellido}`);
+            alert(`Notificación enviada correctamente a ${selectedDocenteForMessage?.nombre}`);
             setIsMessageModalOpen(false);
         } catch (err) {
             console.error('Error enviando mensaje:', err);
@@ -190,12 +135,9 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-foreground">Plantilla Docente</h2>
-                        <p className="text-sm text-muted-foreground">Gestión de profesores asignados a la carrera.</p>
+                        <p className="text-sm text-muted-foreground">Docentes extraídos de la planificación académica.</p>
                     </div>
                 </div>
-                <Button onClick={() => handleOpenModal()} variant="primary" icon={FaPlus}>
-                    Nuevo Docente
-                </Button>
             </div>
 
             {/* Buscador */}
@@ -203,7 +145,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                 <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                     type="text"
-                    placeholder="Buscar por nombre, cédula o correo..."
+                    placeholder="Buscar por nombre, correo o materia..."
                     value={search}
                     onChange={handleSearch}
                     className="w-full pl-10 pr-4 py-3 bg-card border border-border rounded-xl focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -217,7 +159,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                 ) : filteredDocentes.length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
                         <FaUserTie className="text-4xl mx-auto mb-3 opacity-20" />
-                        <p>No se encontraron docentes registrados.</p>
+                        <p>No se encontraron docentes registrados en esta carrera.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -225,10 +167,9 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                             <thead className="bg-muted/50 text-xs uppercase font-bold text-muted-foreground">
                                 <tr>
                                     <th className="px-6 py-4">Docente</th>
-                                    <th className="px-6 py-4">Contacto</th>
+                                    <th className="px-6 py-4">Títulos / Tipo</th>
                                     <th className="px-6 py-4 text-center">Carga</th>
-                                    <th className="px-6 py-4 text-center">Conflictos</th>
-                                    <th className="px-6 py-4 text-center">Estado</th>
+                                    <th className="px-6 py-4">Materias</th>
                                     <th className="px-6 py-4 text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -238,76 +179,41 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-                                                    {docente.nombre[0]}{docente.apellido[0]}
+                                                    {docente.nombre[0]}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-foreground">{docente.nombre} {docente.apellido}</p>
-                                                    <p className="text-xs text-muted-foreground">{docente.cedula || 'S/N'}</p>
+                                                    <p className="font-bold text-foreground">{docente.nombre}</p>
+                                                    <p className="text-xs text-muted-foreground">{docente.email || 'Sin correo'}</p>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="text-foreground">{docente.email}</p>
-                                            <p className="text-xs text-muted-foreground">{docente.telefono || '—'}</p>
+                                            <div className="space-y-1">
+                                                <p className="text-xs font-medium text-foreground">
+                                                    {docente.titulo_posgrado || docente.titulo_pregrado || 'Sin título registrado'}
+                                                </p>
+                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase ${docente.tipo?.includes('Completo') ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                                    }`}>
+                                                    {docente.tipo}
+                                                </span>
+                                            </div>
                                         </td>
 
                                         <td className="px-6 py-4 text-center">
-                                            {(() => {
-                                                const carga = getCargaDocente(docente);
-                                                if (!carga) return <span className="text-xs text-muted-foreground">—</span>;
-                                                return (
-                                                    <div className="flex flex-col items-center gap-0.5">
-                                                        <span className="text-sm font-bold text-foreground">{carga.horas_totales}h</span>
-                                                        <span className="text-[10px] text-muted-foreground">{carga.total_clases} clases</span>
-                                                    </div>
-                                                );
-                                            })()}
+                                            <div className="flex flex-col items-center gap-0.5">
+                                                <span className="text-sm font-bold text-foreground">{docente.carga?.total_horas || 0}h</span>
+                                                <span className="text-[10px] text-muted-foreground">{docente.carga?.total_clases || 0} clases</span>
+                                            </div>
                                         </td>
 
-                                        <td className="px-6 py-4 text-center">
-                                            {(() => {
-                                                const carga = getCargaDocente(docente);
-                                                if (!carga) return <span className="text-xs text-muted-foreground">—</span>;
-                                                if (carga.conflictos === 0) {
-                                                    return (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-                                                            <span className="material-symbols-outlined text-sm">check_circle</span>
-                                                            Sin conflictos
-                                                        </span>
-                                                    );
-                                                }
-                                                return (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                                                        <span className="material-symbols-outlined text-sm">warning</span>
-                                                        {carga.conflictos} conflicto{carga.conflictos > 1 ? 's' : ''}
-                                                    </span>
-                                                );
-                                            })()}
+                                        <td className="px-6 py-4 max-w-xs">
+                                            <p className="text-xs text-muted-foreground line-clamp-2" title={docente.carga?.materias}>
+                                                {docente.carga?.materias || '—'}
+                                            </p>
                                         </td>
 
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${docente.estado === 'activo' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                                                }`}>
-                                                {docente.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                                            </span>
-                                        </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={async () => {
-                                                        if (!confirm(`¿Resetear contraseña de ${docente.nombre} ${docente.apellido}? Se establecerá como su cédula o 'uide123'.`)) return;
-                                                        try {
-                                                            const res = await usuarioService.resetPassword(docente.id);
-                                                            alert(res.mensaje || 'Contraseña reseteada');
-                                                        } catch (err: any) {
-                                                            alert(err.response?.data?.error || 'Error al resetear contraseña');
-                                                        }
-                                                    }}
-                                                    className="p-2 text-muted-foreground hover:text-orange-500 transition-colors"
-                                                    title="Resetear Contraseña"
-                                                >
-                                                    <span className="material-symbols-outlined text-lg">lock_reset</span>
-                                                </button>
                                                 <button
                                                     onClick={() => handleOpenMessageModal(docente)}
                                                     className="p-2 text-muted-foreground hover:text-blue-500 transition-colors"
@@ -317,9 +223,6 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                                                 </button>
                                                 <button onClick={() => handleOpenModal(docente)} className="p-2 text-muted-foreground hover:text-primary transition-colors" title="Editar">
                                                     <FaEdit />
-                                                </button>
-                                                <button onClick={() => handleDelete(docente.id)} className="p-2 text-muted-foreground hover:text-red-500 transition-colors">
-                                                    <FaTrash />
                                                 </button>
                                             </div>
                                         </td>
@@ -331,39 +234,27 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                 )}
             </div>
 
-            {/* Modal Crear/Editar */}
+            {/* Modal Editar */}
             <Modal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                title={editingDocente ? 'Editar Docente' : 'Nuevo Docente'}
+                title="Editar Información de Docente"
                 size="lg"
             >
                 <form onSubmit={handleSave} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Nombres</label>
-                            <input
-                                required
-                                className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
-                                value={formData.nombre}
-                                onChange={e => setFormData({ ...formData, nombre: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Apellidos</label>
-                            <input
-                                required
-                                className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
-                                value={formData.apellido}
-                                onChange={e => setFormData({ ...formData, apellido: e.target.value })}
-                            />
-                        </div>
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Nombre Completo</label>
+                        <input
+                            required
+                            className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
+                            value={formData.nombre}
+                            onChange={e => setFormData({ ...formData, nombre: e.target.value })}
+                        />
                     </div>
 
                     <div>
                         <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Email Institucional</label>
                         <input
-                            required
                             type="email"
                             className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
                             value={formData.email}
@@ -373,35 +264,40 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Cédula</label>
+                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Título Pregrado</label>
                             <input
-                                required
-                                maxLength={10}
                                 className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
-                                value={formData.cedula}
-                                onChange={e => setFormData({ ...formData, cedula: e.target.value })}
+                                value={formData.titulo_pregrado}
+                                onChange={e => setFormData({ ...formData, titulo_pregrado: e.target.value })}
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Teléfono</label>
+                            <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Título Posgrado</label>
                             <input
                                 className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
-                                value={formData.telefono}
-                                onChange={e => setFormData({ ...formData, telefono: e.target.value })}
+                                value={formData.titulo_posgrado}
+                                onChange={e => setFormData({ ...formData, titulo_posgrado: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    {!editingDocente && (
-                        <div className="p-3 bg-yellow-50 text-yellow-700 text-xs rounded-lg border border-yellow-200">
-                            <p>La contraseña predeterminada será el número de cédula o <span className="font-mono bg-yellow-100 px-1 rounded">uide123</span> si no se especifica.</p>
-                        </div>
-                    )}
+                    <div>
+                        <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Tipo de Dedicación</label>
+                        <select
+                            className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm"
+                            value={formData.tipo}
+                            onChange={e => setFormData({ ...formData, tipo: e.target.value })}
+                        >
+                            <option value="Tiempo Completo">Tiempo Completo</option>
+                            <option value="Tiempo Parcial">Tiempo Parcial</option>
+                            <option value="Medio Tiempo">Medio Tiempo</option>
+                        </select>
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
                         <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
                         <Button type="submit" variant="primary" loading={saving}>
-                            {editingDocente ? 'Guardar Cambios' : 'Crear Docente'}
+                            Guardar Cambios
                         </Button>
                     </div>
                 </form>
@@ -411,12 +307,12 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
             <Modal
                 isOpen={isMessageModalOpen}
                 onClose={() => setIsMessageModalOpen(false)}
-                title={`Enviar Mensaje a ${selectedDocenteForMessage?.nombre} ${selectedDocenteForMessage?.apellido}`}
+                title={`Enviar Notificación a ${selectedDocenteForMessage?.nombre}`}
             >
                 <form onSubmit={handleSendMessage} className="space-y-4">
                     <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4 flex items-start gap-3">
                         <span className="material-symbols-outlined text-blue-500 text-xl">info</span>
-                        <p className="text-xs text-blue-700">Este mensaje se enviará como una notificación interna al panel del docente.</p>
+                        <p className="text-xs text-blue-700">Esta notificación aparecerá en el panel del docente si tiene una cuenta asociada.</p>
                     </div>
 
                     <div>
@@ -424,7 +320,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                         <input
                             required
                             className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                            placeholder="Ej: Reunión de Carrera"
+                            placeholder="Ej: Revisión de Silabo"
                             value={messageData.subject}
                             onChange={e => setMessageData({ ...messageData, subject: e.target.value })}
                         />
@@ -446,7 +342,7 @@ export default function DocenteTable({ carreraId, carreraNombre }: DocenteTableP
                         <Button type="button" variant="ghost" onClick={() => setIsMessageModalOpen(false)}>Cancelar</Button>
                         <Button type="submit" variant="primary" loading={sendingMessage}>
                             <span className="material-symbols-outlined text-lg mr-2">send</span>
-                            Enviar Notificación
+                            Enviar Mensaje
                         </Button>
                     </div>
                 </form>

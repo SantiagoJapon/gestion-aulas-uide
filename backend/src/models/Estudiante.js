@@ -32,8 +32,8 @@ const Estudiante = sequelize.define('Estudiante', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
-  telegram_id: {
-    type: DataTypes.BIGINT,
+  telefono: {
+    type: DataTypes.STRING(20),
     allowNull: true
   },
   fecha_registro: {
