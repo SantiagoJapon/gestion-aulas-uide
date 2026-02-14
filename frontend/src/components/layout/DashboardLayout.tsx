@@ -80,7 +80,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             {/* Sidebar Navigation */}
             <aside className={`glass-sidebar w-64 flex flex-col fixed lg:sticky top-0 left-0 bottom-[88px] lg:bottom-0 lg:h-full z-30 lg:z-40 transition-transform duration-300 ease-in-out transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} shadow-2xl lg:shadow-none`}>
                 <div className="p-6">
-                    <div className="flex items-center justify-between lg:justify-start gap-3 mb-8">
+                    <div id="tour-logo" className="flex items-center justify-between lg:justify-start gap-3 mb-8">
                         <div className="flex items-center gap-3">
                             <div className="size-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
                                 <img src="/logo-uide.webp" alt="UIDE Logo" className="w-full h-full object-contain p-1" />
@@ -99,7 +99,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     </div>
 
                     {/* Buscador Global (Reemplaza Spotlight Trigger) */}
-                    <div className="mb-6 px-1">
+                    <div id="tour-search" className="mb-6 px-1">
                         <QuickSearch />
                     </div>
 
@@ -107,6 +107,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         {filteredItems.map((item) => (
                             <button
                                 key={item.tab}
+                                id={`tour-nav-${item.tab}`}
                                 onClick={() => {
                                     setActiveTab(item.tab);
                                     setIsSidebarOpen(false);
@@ -184,6 +185,16 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     </div>
                 </div>
             </aside>
+
+            {/* Tour Global Trigger */}
+            <button
+                id="tour-help-button"
+                onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
+                className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 size-12 bg-uide-gold text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-[60] group"
+                title="Ayuda / Tour Guiado"
+            >
+                <span className="material-symbols-outlined text-2xl font-variation-fill group-hover:rotate-12 transition-transform">help</span>
+            </button>
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">

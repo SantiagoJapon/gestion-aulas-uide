@@ -6,6 +6,8 @@ import { distribucionService, reservaService, notificacionService, Notificacion 
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
+import GuidedTour from '../components/common/GuidedTour';
+import { Step } from 'react-joyride';
 
 
 // --- Utility Functions ---
@@ -239,13 +241,71 @@ export default function EstudianteDashboard() {
 
   const nextClass = clasesHoy.find(c => getStatusClass(c.hora_inicio, c.hora_fin) !== 'pasada');
 
+  // --- Tour Logic ---
+  const [runTour, setRunTour] = useState(false);
+  const tourSteps: Step[] = [
+    {
+      target: '#tour-logo',
+      content: '¡Bienvenido a tu nuevo Portal UIDE Alumno! Aquí podrás gestionar todo tu día académico.',
+      placement: 'right' as const,
+      disableBeacon: true,
+    },
+    {
+      target: '#tour-search',
+      content: 'Usa el Buscador Global para encontrar rápidamente a un docente o consultar el estado de un aula en tiempo real.',
+    },
+    {
+      target: '#tour-header-card',
+      content: 'Este es tu resumen diario. Aquí verás tu próxima clase y recordatorios importantes.',
+    },
+    {
+      target: '#tour-timeline',
+      content: 'En tu jornada verás las materias de hoy. Las clases activas se resaltan automáticamente.',
+    },
+    {
+      target: '#tour-reservas',
+      content: '¿Necesitas un lugar para estudiar? Usa el widget de reserva rápida para asegurar un espacio.',
+    },
+    {
+      target: '#tour-nav-horario',
+      content: 'En la pestaña "Mis Clases" encontrarás tu horario visual completo por semana.',
+    },
+    {
+      target: '#tour-help-button',
+      content: 'Si alguna vez necesitas repetir este tour, solo haz clic aquí.',
+    }
+  ];
+
+  useEffect(() => {
+    // Auto-ejecución solo la primera vez para estudiantes
+    const hasSeenTour = localStorage.getItem('uide_tour_estudiante_v1');
+    if (!hasSeenTour) {
+      setRunTour(true);
+    }
+
+    // Escuchar reinicio manual
+    const handleRestart = () => {
+      setRunTour(false);
+      setTimeout(() => setRunTour(true), 100);
+    };
+
+    window.addEventListener('restart-uide-tour', handleRestart);
+    return () => window.removeEventListener('restart-uide-tour', handleRestart);
+  }, []);
+
+  const handleTourFinish = () => {
+    localStorage.setItem('uide_tour_estudiante_v1', 'true');
+    setRunTour(false);
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'general':
         return (
           <div className="space-y-6 animate-fade-in">
+            <GuidedTour steps={tourSteps} run={runTour} onFinish={handleTourFinish} />
             {/* Header Card */}
-            <div className="bg-gradient-to-br from-uide-blue/90 to-uide-blue rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/20">
+            <div id="tour-header-card" className="bg-gradient-to-br from-uide-blue/90 to-uide-blue rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/20">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
 
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -294,34 +354,36 @@ export default function EstudianteDashboard() {
                 </DashboardWidget>
 
                 {/* Widget Timeline */}
-                <DashboardWidget
-                  title="Tu Jornada"
-                  subtitle="Clases de Hoy"
-                  icon="timeline"
-                  iconColor="text-uide-blue"
-                  action={
-                    <div className="relative group">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-uide-blue transition-colors">search</span>
-                      <input
-                        type="text"
-                        placeholder="Filtrar materia..."
-                        value={subjectFilter}
-                        onChange={(e) => setSubjectFilter(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none w-32 sm:w-48 transition-all"
-                      />
-                    </div>
-                  }
-                >
-                  {loading ? (
-                    <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
-                  ) : (
-                    <TimelineClases clases={clasesHoy} filter={subjectFilter} />
-                  )}
-                </DashboardWidget>
+                <div id="tour-timeline">
+                  <DashboardWidget
+                    title="Tu Jornada"
+                    subtitle="Clases de Hoy"
+                    icon="timeline"
+                    iconColor="text-uide-blue"
+                    action={
+                      <div className="relative group">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-uide-blue transition-colors">search</span>
+                        <input
+                          type="text"
+                          placeholder="Filtrar materia..."
+                          value={subjectFilter}
+                          onChange={(e) => setSubjectFilter(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none w-32 sm:w-48 transition-all"
+                        />
+                      </div>
+                    }
+                  >
+                    {loading ? (
+                      <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
+                    ) : (
+                      <TimelineClases clases={clasesHoy} filter={subjectFilter} />
+                    )}
+                  </DashboardWidget>
+                </div>
               </div>
 
               {/* Right Column (Widgets) */}
-              <div className="space-y-6">
+              <div id="tour-reservas" className="space-y-6">
                 <ReservaWidget />
               </div>
             </div>

@@ -5,6 +5,9 @@ import { distribucionService, notificacionService, incidenciaService } from '../
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
+import GuidedTour from '../components/common/GuidedTour';
+import { Step } from 'react-joyride';
+import { NavLink } from 'react-router-dom';
 
 
 // --- Utility Functions ---
@@ -377,13 +380,71 @@ export default function ProfesorDashboard() {
   // Next class logic
   const nextClass = clasesHoy.find(c => getStatusClass(c.hora_inicio, c.hora_fin) !== 'pasada');
 
+  // --- Tour Logic ---
+  const [runTour, setRunTour] = useState(false);
+  const tourSteps: Step[] = [
+    {
+      target: '#tour-logo',
+      content: '¡Bienvenido a su Panel Docente! Aquí podrá gestionar sus clases y comunicarse con sus estudiantes.',
+      placement: 'right' as const,
+      disableBeacon: true,
+    },
+    {
+      target: '#tour-search',
+      content: 'El Buscador Global le permite verificar el estado de cualquier aula o docente de la facultad al instante.',
+    },
+    {
+      target: '#tour-header-profe',
+      content: 'Este es su resumen de hoy. Verá rápidamente su próxima actividad y el lugar asignado.',
+    },
+    {
+      target: '#tour-clases-profe',
+      content: 'Aquí tiene su lista de clases de hoy. Al hacer clic en una, podrá enviar avisos a sus alumnos o reportar problemas técnicos en el aula.',
+    },
+    {
+      target: '#tour-reservas-profe',
+      content: 'Como docente, también puede reservar espacios especiales para tutorías o reuniones.',
+    },
+    {
+      target: '#tour-nav-horario',
+      content: 'Acceda a su horario completo semanal desde aquí para una mejor planificación.',
+    },
+    {
+      target: '#tour-help-button',
+      content: 'Si tiene dudas sobre las nuevas funciones, puede reiniciar esta guía aquí.',
+    }
+  ];
+
+  useEffect(() => {
+    // Auto-ejecución solo la primera vez para profesores
+    const hasSeenTour = localStorage.getItem('uide_tour_profesor_v1');
+    if (!hasSeenTour) {
+      setRunTour(true);
+    }
+
+    // Escuchar reinicio manual
+    const handleRestart = () => {
+      setRunTour(false);
+      setTimeout(() => setRunTour(true), 100);
+    };
+
+    window.addEventListener('restart-uide-tour', handleRestart);
+    return () => window.removeEventListener('restart-uide-tour', handleRestart);
+  }, []);
+
+  const handleTourFinish = () => {
+    localStorage.setItem('uide_tour_profesor_v1', 'true');
+    setRunTour(false);
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'general':
         return (
           <div className="space-y-6 animate-fade-in">
+            <GuidedTour steps={tourSteps} run={runTour} onFinish={handleTourFinish} />
             {/* Header */}
-            <div className="bg-card border border-border rounded-[2rem] p-6 md:p-8 relative overflow-hidden shadow-sm">
+            <div id="tour-header-profe" className="bg-card border border-border rounded-[2rem] p-6 md:p-8 relative overflow-hidden shadow-sm">
               <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
                 <div className="flex items-center gap-5">
                   <div className="size-20 bg-brand-navy text-white rounded-full flex items-center justify-center text-3xl font-black border-4 border-white dark:border-slate-800 shadow-xl">
@@ -412,7 +473,7 @@ export default function ProfesorDashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Main Column */}
-              <div className="lg:col-span-2 space-y-6">
+              <div id="tour-clases-profe" className="lg:col-span-2 space-y-6">
                 <div className="flex items-center justify-between px-2">
                   <h3 className="text-lg font-black text-foreground uppercase tracking-tight">Agenda de Hoy</h3>
                   <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-1 rounded">{new Date().toLocaleDateString()}</span>
@@ -426,7 +487,7 @@ export default function ProfesorDashboard() {
               </div>
 
               {/* Sidebar Column */}
-              <div className="space-y-6">
+              <div id="tour-reservas-profe" className="space-y-6">
                 <ReservaWidget />
 
                 <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-6 text-white shadow-lg">
