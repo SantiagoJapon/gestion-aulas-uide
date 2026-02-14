@@ -89,7 +89,14 @@ const Clase = sequelize.define('Clase', {
   }
 }, {
   tableName: 'clases',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    { fields: ['dia'] },
+    { fields: ['hora_inicio'] },
+    { fields: ['hora_fin'] },
+    { fields: ['aula_asignada'] },
+    { fields: ['docente_id'] }
+  ]
 });
 
 module.exports = Clase;

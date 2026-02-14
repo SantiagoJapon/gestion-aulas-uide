@@ -1,10 +1,10 @@
 import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
-import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { distribucionService, notificacionService, incidenciaService } from '../services/api';
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
+import ReservaWidget from '../components/reservas/ReservaWidget';
 
 
 // --- Utility Functions ---
@@ -427,18 +427,7 @@ export default function ProfesorDashboard() {
 
               {/* Sidebar Column */}
               <div className="space-y-6">
-                <DashboardWidget title="Accesos Rápidos" icon="bolt" iconColor="text-amber-500">
-                  <div className="grid grid-cols-2 gap-3">
-                    <button className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 border border-border flex flex-col items-center gap-2 transition-colors">
-                      <span className="material-symbols-outlined text-slate-600 text-2xl">event_note</span>
-                      <span className="text-[10px] font-black uppercase text-center">Justificar Faltas</span>
-                    </button>
-                    <button className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 border border-border flex flex-col items-center gap-2 transition-colors">
-                      <span className="material-symbols-outlined text-slate-600 text-2xl">history_edu</span>
-                      <span className="text-[10px] font-black uppercase text-center">Historial Académico</span>
-                    </button>
-                  </div>
-                </DashboardWidget>
+                <ReservaWidget />
 
                 <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-6 text-white shadow-lg">
                   <h4 className="font-black text-lg mb-2">¿Necesitas Ayuda?</h4>

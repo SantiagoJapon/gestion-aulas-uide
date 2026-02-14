@@ -71,7 +71,15 @@ const Reserva = sequelize.define('Reserva', {
 }, {
     tableName: 'reservas',
     timestamps: true,
-    underscored: true
+    underscored: true,
+    indexes: [
+        { fields: ['aula_codigo'] },
+        { fields: ['dia'] },
+        { fields: ['fecha'] },
+        { fields: ['estado'] },
+        { fields: ['usuario_id'] },
+        { fields: ['estudiante_id'] }
+    ]
 });
 
 // Relaciones

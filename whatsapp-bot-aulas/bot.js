@@ -236,6 +236,28 @@ const TIME_SLOTS = [
 ];
 
 // ==========================================
+// OPTIMIZACION DE MEMORIA
+// ==========================================
+// Limpiar estados de usuario inactivos cada 30 minutos para evitar fugas de memoria
+setInterval(() => {
+  const now = Date.now();
+  const INACTIVE_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+
+  for (const [phone, state] of userState.entries()) {
+    if (state.lastActivity && (now - state.lastActivity > INACTIVE_TIMEOUT)) {
+      userState.delete(phone);
+    }
+  }
+}, 30 * 60 * 1000);
+
+// Helper para actualizar actividad
+function updateActivity(phone) {
+  const state = userState.get(phone) || {};
+  state.lastActivity = Date.now();
+  userState.set(phone, state);
+}
+
+// ==========================================
 // FUNCIONES DE BD
 // ==========================================
 
@@ -569,6 +591,7 @@ async function searchAndShowRooms(phone, dia, hora) {
 
 async function handleMessage(phone, text, messageData) {
   console.log(`Mensaje de ${phone}: "${text}"`);
+  updateActivity(phone);
 
   try {
     const stateObj = userState.get(phone);

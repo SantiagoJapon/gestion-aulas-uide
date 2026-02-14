@@ -2,11 +2,18 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const compression = require('compression');
 const { testConnection, syncDatabase } = require('./config/database');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ========================================
+// OPTIMIZACIONES DE RENDIMIENTO
+// ========================================
+// Comprimir todas las respuestas para ahorrar ancho de banda y CPU en I/O
+app.use(compression());
 
 // ========================================
 // CORS - DEBE IR PRIMERO
@@ -71,9 +78,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Logger - Solo en desarrollo
+// Logger - Configuración optimizada
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
+} else {
+  // En producción, solo loguear errores o accesos críticos para ahorrar recursos
+  app.use(morgan('tiny', {
+    skip: (req, res) => res.statusCode < 400
+  }));
 }
 
 app.use(express.static(path.join(__dirname, '../public')));
@@ -171,6 +183,7 @@ app.use('/api/reportes', reporteRoutes);
 // Rutas de Reservas
 const reservaRoutes = require('./routes/reservaRoutes');
 app.use('/api/reservas', reservaRoutes);
+app.use('/api/busqueda', require('./routes/busquedaRoutes'));
 
 // Rutas de Notificaciones
 const notificacionRoutes = require('./routes/notificacionRoutes');

@@ -2,6 +2,7 @@ import React, { useContext, useState } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import CommandKSearch from './CommandKSearch';
+import QuickSearch from '../QuickSearch';
 
 interface NavItem {
     label: string;
@@ -97,28 +98,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         </button>
                     </div>
 
-                    {/* Spotlight Trigger */}
+                    {/* Buscador Global (Reemplaza Spotlight Trigger) */}
                     <div className="mb-6 px-1">
-                        <button
-                            onClick={() => {
-                                const event = new KeyboardEvent('keydown', {
-                                    key: 'k',
-                                    ctrlKey: true,
-                                    bubbles: true
-                                });
-                                window.dispatchEvent(event);
-                            }}
-                            className="w-full h-11 flex items-center justify-between px-4 bg-muted/50 hover:bg-muted border border-border/50 rounded-xl text-muted-foreground hover:text-foreground transition-all group"
-                        >
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">search</span>
-                                <span className="text-xs font-bold">Buscar...</span>
-                            </div>
-                            <div className="flex items-center gap-0.5">
-                                <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-[9px] font-black border border-border/50 shadow-[0_1px_1px_rgba(0,0,0,0.1)]">⌘</kbd>
-                                <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-[9px] font-black border border-border/50 shadow-[0_1px_1px_rgba(0,0,0,0.1)]">K</kbd>
-                            </div>
-                        </button>
+                        <QuickSearch />
                     </div>
 
                     <nav className="space-y-1">

@@ -835,6 +835,26 @@ export const reservaService = {
   cancelar: async (id: number): Promise<{ success: boolean; message: string }> => {
     const response = await api.delete(`/reservas/${id}`);
     return response.data;
+  },
+
+  getDisponibles: async (params: { fecha: string; hora_inicio: string; hora_fin: string; tipo?: string }): Promise<{ success: boolean; aulas: Aula[] }> => {
+    const response = await api.get('/reservas/disponibles', { params });
+    return response.data;
+  }
+};
+
+// ============================================
+// BÚSQUEDA REAL-TIME (Reemplaza Bot)
+// ============================================
+
+export const busquedaService = {
+  buscarDocente: async (q: string) => {
+    const response = await api.get('/busqueda/docente', { params: { q } });
+    return response.data;
+  },
+  estadoAula: async (codigo: string) => {
+    const response = await api.get('/busqueda/aula', { params: { codigo } });
+    return response.data;
   }
 };
 

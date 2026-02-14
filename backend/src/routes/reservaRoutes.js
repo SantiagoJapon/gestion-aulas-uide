@@ -9,6 +9,9 @@ router.use(verificarAuth);
 // Crear una nueva reserva
 router.post('/', reservaController.crearReserva);
 
+// Consultar aulas disponibles
+router.get('/disponibles', reservaController.buscarDisponibilidad);
+
 // Listar mis reservas
 router.get('/mis-reservas', reservaController.misReservas);
 

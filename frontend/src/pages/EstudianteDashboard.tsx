@@ -5,6 +5,7 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { distribucionService, reservaService, notificacionService, Notificacion } from '../services/api';
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
+import ReservaWidget from '../components/reservas/ReservaWidget';
 
 
 // --- Utility Functions ---
@@ -96,145 +97,6 @@ const TimelineClases = ({ clases, filter }: { clases: any[], filter?: string }) 
           </div>
         );
       })}
-    </div>
-  );
-};
-
-const ReservaEspaciosWidget = () => {
-  const [loading, setLoading] = useState(false);
-  const [tipoEspacio, setTipoEspacio] = useState('CUBICULO'); // Ajustado a valores reales de BD si es posible, o mapear
-  const [horaInicio, setHoraInicio] = useState('10:00');
-  const [duracion, setDuracion] = useState('1'); // Horas
-
-  const handleReserva = async () => {
-    setLoading(true);
-    try {
-      const today = new Date();
-      const diaSemana = getNomalizedDay(); // LUNES, MARTES...
-      const fecha = today.toISOString().split('T')[0]; // YYYY-MM-DD
-
-      const [h, m] = horaInicio.split(':').map(Number);
-      const dur = parseInt(duracion);
-      const hFin = h + dur;
-      const horaFin = `${String(hFin).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-
-      // 1. Buscar disponibilidad
-      // Nota: getDisponibilidadAulas retorna aulas libres. Filtramos por tipo si la API lo soporta o en cliente.
-      // La API actual getDisponibilidadAulas recibe { dia, hora_inicio, hora_fin }
-      const resDisp = await distribucionService.getDisponibilidadAulas({
-        dia: diaSemana,
-        hora_inicio: horaInicio,
-        hora_fin: horaFin
-      });
-
-      if (!resDisp || !resDisp.rooms || resDisp.rooms.length === 0) {
-        alert("No hay espacios disponibles en ese horario.");
-        return;
-      }
-
-      // Filtrar por tipo (si la API devolviera el tipo, pero getAvailableRooms en bot retorna nombre/capacidad/codigo)
-      // Asumiremos que cualquier aula libre sirve si es 'LABORATORIO', o si es 'CUBICULO' (que quizás son 'SALA_ESTUDIO').
-      // Por ahora tomamos la primera disponible para probar el flujo.
-      const aula = resDisp.rooms[0];
-
-      // 2. Crear reserva
-      const resReserva = await reservaService.crear({
-        aula_codigo: aula.codigo,
-        dia: diaSemana,
-        fecha: fecha,
-        hora_inicio: horaInicio,
-        hora_fin: horaFin,
-        motivo: `Reserva rápida de ${tipoEspacio}`
-      });
-
-      if (resReserva.success || resReserva.reserva) {
-        alert(`¡Reserva exitosa! Espacio: ${aula.nombre} (${aula.codigo})`);
-      } else {
-        alert("No se pudo completar la reserva.");
-      }
-
-    } catch (error) {
-      console.error(error);
-      alert("Ocurrió un error al intentar reservar.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-4 rounded-xl flex items-start gap-3">
-        <span className="material-symbols-outlined text-amber-600 dark:text-amber-500">bookmark</span>
-        <div className="space-y-1">
-          <p className="text-xs font-bold text-amber-800 dark:text-amber-200 uppercase">Reserva Rápida</p>
-          <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-snug">
-            Asegura un espacio para HOY.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Tipo de Espacio</label>
-          <select
-            value={tipoEspacio}
-            onChange={(e) => setTipoEspacio(e.target.value)}
-            className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-          >
-            <option value="AULA">Aula de Estudio</option>
-            <option value="LABORATORIO">Laboratorio</option>
-            <option value="AUDITORIO">Auditorio</option>
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Horario Inicio</label>
-            <select
-              value={horaInicio}
-              onChange={(e) => setHoraInicio(e.target.value)}
-              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-            >
-              <option value="07:00">07:00</option>
-              <option value="08:00">08:00</option>
-              <option value="09:00">09:00</option>
-              <option value="10:00">10:00</option>
-              <option value="11:00">11:00</option>
-              <option value="12:00">12:00</option>
-              <option value="13:00">13:00</option>
-              <option value="14:00">14:00</option>
-              <option value="15:00">15:00</option>
-              <option value="16:00">16:00</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Duración</label>
-            <select
-              value={duracion}
-              onChange={(e) => setDuracion(e.target.value)}
-              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-            >
-              <option value="1">1 Hora</option>
-              <option value="2">2 Horas</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={handleReserva}
-        disabled={loading}
-        className="w-full py-3 bg-uide-blue text-white hover:bg-uide-blue/90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-uide-blue/20 active:scale-95 flex items-center justify-center gap-2"
-      >
-        {loading ? (
-          <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-        ) : (
-          <>
-            <span className="material-symbols-outlined text-sm">event_seat</span>
-            Reservar Ahora
-          </>
-        )}
-      </button>
     </div>
   );
 };
@@ -460,14 +322,7 @@ export default function EstudianteDashboard() {
 
               {/* Right Column (Widgets) */}
               <div className="space-y-6">
-                <DashboardWidget
-                  title="Reserva de Espacios"
-                  subtitle="Biblioteca y Aulas"
-                  icon="bookmark_add"
-                  iconColor="text-uide-gold"
-                >
-                  <ReservaEspaciosWidget />
-                </DashboardWidget>
+                <ReservaWidget />
               </div>
             </div>
           </div>

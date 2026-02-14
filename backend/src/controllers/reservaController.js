@@ -1,5 +1,12 @@
-const { Reserva, Aula, Clase } = require('../models');
-const { Op } = require('sequelize');
+const { Reserva, Aula, Clase, sequelize } = require('../models');
+const { Op, QueryTypes } = require('sequelize');
+
+// Helper para normalizar el día
+const normalizarDia = (fechaStr) => {
+    const dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+    const d = new Date(fechaStr + 'T00:00:00');
+    return dias[d.getDay()];
+};
 
 exports.crearReserva = async (req, res) => {
     try {
@@ -7,10 +14,7 @@ exports.crearReserva = async (req, res) => {
         const usuarioId = req.usuarioId;
         const usuarioRol = req.usuarioRol;
 
-        // 1. Validar que el aula existe y está disponible
-        // (Nota: Idealmente usaríamos distribucionService, pero aquí haremos chequeo directo por simplicidad y rapidez)
-
-        // Convertir horas a minutos para comparar rangos
+        // Validar rango horario
         const [hInicio, mInicio] = hora_inicio.split(':').map(Number);
         const [hFin, mFin] = hora_fin.split(':').map(Number);
         const minInicio = hInicio * 60 + mInicio;
@@ -20,11 +24,27 @@ exports.crearReserva = async (req, res) => {
             return res.status(400).json({ error: "La hora de fin debe ser posterior a la de inicio" });
         }
 
-        // Chequear conflicto con Clases regulares
-        // (Aquí asumimos que 'dia' viene como LUNES, MARTES...)
-        // TODO: Validar dia vs fecha real para consistencia
+        const diaSemana = dia || normalizarDia(fecha);
 
-        // Chequear conflicto con otras Reservas
+        // 1. Chequear conflicto con Clases regulares (Semestre)
+        const conflictoClase = await Clase.findOne({
+            where: {
+                aula_asignada: aula_codigo,
+                dia: diaSemana,
+                [Op.or]: [
+                    {
+                        hora_inicio: { [Op.lt]: hora_fin },
+                        hora_fin: { [Op.gt]: hora_inicio }
+                    }
+                ]
+            }
+        });
+
+        if (conflictoClase) {
+            return res.status(409).json({ error: `El aula ya está ocupada por la clase "${conflictoClase.materia}" en ese horario.` });
+        }
+
+        // 2. Chequear conflicto con otras Reservas
         const conflictoReservas = await Reserva.findOne({
             where: {
                 aula_codigo,
@@ -32,7 +52,6 @@ exports.crearReserva = async (req, res) => {
                 estado: { [Op.in]: ['activa', 'pendiente_aprobacion'] },
                 [Op.or]: [
                     {
-                        // Nueva inicia dento de existente
                         hora_inicio: { [Op.lt]: hora_fin },
                         hora_fin: { [Op.gt]: hora_inicio }
                     }
@@ -41,18 +60,18 @@ exports.crearReserva = async (req, res) => {
         });
 
         if (conflictoReservas) {
-            return res.status(409).json({ error: "El aula ya está reservada en ese horario." });
+            return res.status(409).json({ error: "El aula ya tiene una reserva activa en ese horario." });
         }
 
         // Crear la reserva
         const nuevaReserva = await Reserva.create({
             aula_codigo,
-            dia,
+            dia: diaSemana,
             fecha,
             hora_inicio,
             hora_fin,
             motivo,
-            estado: 'activa', // Por defecto activa, admin puede cambiar
+            estado: 'activa',
             usuario_id: usuarioRol !== 'estudiante' ? usuarioId : null,
             estudiante_id: usuarioRol === 'estudiante' ? usuarioId : null,
             solicitante_nombre: req.usuario.nombre + (req.usuario.apellido ? ' ' + req.usuario.apellido : ''),
@@ -64,6 +83,75 @@ exports.crearReserva = async (req, res) => {
     } catch (error) {
         console.error("Error al crear reserva:", error);
         res.status(500).json({ error: "Error interno al procesar la reserva" });
+    }
+};
+
+exports.buscarDisponibilidad = async (req, res) => {
+    try {
+        const { fecha, hora_inicio, hora_fin, tipo } = req.query;
+
+        if (!fecha || !hora_inicio || !hora_fin) {
+            return res.status(400).json({ error: "Faltan parámetros: fecha, hora_inicio, hora_fin son requeridos" });
+        }
+
+        const diaSemana = normalizarDia(fecha);
+
+        // Subquery para encontrar aulas OCUPADAS por clases
+        const ocupadasPorClase = await Clase.findAll({
+            attributes: ['aula_asignada'],
+            where: {
+                dia: diaSemana,
+                [Op.or]: [
+                    {
+                        hora_inicio: { [Op.lt]: hora_fin },
+                        hora_fin: { [Op.gt]: hora_inicio }
+                    }
+                ]
+            },
+            raw: true
+        });
+
+        const codigosOcupadosClase = ocupadasPorClase.map(c => c.aula_asignada);
+
+        // Subquery para encontrar aulas OCUPADAS por otras reservas
+        const ocupadasPorReserva = await Reserva.findAll({
+            attributes: ['aula_codigo'],
+            where: {
+                fecha,
+                estado: 'activa',
+                [Op.or]: [
+                    {
+                        hora_inicio: { [Op.lt]: hora_fin },
+                        hora_fin: { [Op.gt]: hora_inicio }
+                    }
+                ]
+            },
+            raw: true
+        });
+
+        const codigosOcupadosReserva = ocupadasPorReserva.map(r => r.aula_codigo);
+        const todosOcupados = [...new Set([...codigosOcupadosClase, ...codigosOcupadosReserva])];
+
+        // Buscar aulas disponibles que NO estén en la lista de ocupadas
+        const whereAula = {
+            codigo: { [Op.notIn]: todosOcupados.length > 0 ? todosOcupados : [''] },
+            estado: 'DISPONIBLE'
+        };
+
+        if (tipo && tipo !== 'TODO') {
+            whereAula.tipo = tipo;
+        }
+
+        const aulasLibres = await Aula.findAll({
+            where: whereAula,
+            order: [['nombre', 'ASC']]
+        });
+
+        res.json({ success: true, aulas: aulasLibres });
+
+    } catch (error) {
+        console.error("Error buscando disponibilidad:", error);
+        res.status(500).json({ error: "Error al buscar disponibilidad" });
     }
 };
 
@@ -79,9 +167,13 @@ exports.misReservas = async (req, res) => {
             whereClause.usuario_id = usuarioId;
         }
 
+        // Solo mostrar reservas futuras o actuales
+        whereClause.fecha = { [Op.gte]: new Date().toISOString().split('T')[0] };
+        whereClause.estado = { [Op.ne]: 'cancelada' };
+
         const reservas = await Reserva.findAll({
             where: whereClause,
-            order: [['fecha', 'DESC'], ['hora_inicio', 'ASC']]
+            order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']]
         });
 
         res.json({ success: true, reservas });
