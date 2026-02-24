@@ -169,15 +169,19 @@ services:
     restart: always
 
   # ==========================================
-  # Telegram Bot (Polling)
+  # WhatsApp Bot (Roomie)
   # ==========================================
-  telegram-bot:
+  whatsapp-bot:
     build:
-      context: ./telegram-bot-aulas
+      context: ./whatsapp-bot-aulas # LA CARPETA CORRECTA
       dockerfile: Dockerfile
-    container_name: gestion_aulas_bot
+    container_name: gestion_aulas_whatsapp_bot
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-roomie_instancia}
+      BOT_PORT: 3020
+      BACKEND_URL: http://gestion_aulas_backend:3000
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
@@ -185,15 +189,11 @@ services:
       DB_NAME: ${DB_NAME:-gestion_aulas}
       DB_SSL: "false"
       VOICE_API_KEY: ${VOICE_API_KEY:-}
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
-      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
     depends_on:
       postgres:
         condition: service_healthy
       evolution-api:
         condition: service_healthy
-    # NO necesita puerto - usa polling o webhook
     networks:
       - app_network
     restart: always
