@@ -50,7 +50,11 @@ const Docente = sequelize.define('Docente', {
   }
 }, {
   tableName: 'docentes',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    { fields: ['carrera_id'] },
+    { fields: ['usuario_id'] }
+  ]
 });
 
 module.exports = Docente;

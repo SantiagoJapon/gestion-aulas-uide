@@ -1,4 +1,4 @@
-const { Carrera, sequelize } = require('../models');
+const { Carrera, User, sequelize } = require('../models');
 
 // Función para limpiar y normalizar el nombre de la carrera (mantiene tildes y ñ)
 const normalizeCarrera = (value) => {
@@ -144,7 +144,10 @@ const updateCarrera = async (req, res) => {
       });
     }
 
+    const oldName = registro.carrera;
     const updates = {};
+    let nameChanged = false;
+
     if (typeof carrera === 'string' && carrera.trim()) {
       if (isInvalidCarrera(carrera)) {
         return res.status(400).json({
@@ -152,14 +155,35 @@ const updateCarrera = async (req, res) => {
           error: 'El nombre de la carrera no es válido'
         });
       }
-      updates.carrera = normalizeCarrera(carrera);
-      updates.carrera_normalizada = normalizeCarreraKey(carrera);
+      const newName = normalizeCarrera(carrera);
+      if (newName !== oldName) {
+        updates.carrera = newName;
+        updates.carrera_normalizada = normalizeCarreraKey(carrera);
+        nameChanged = true;
+      }
     }
+
     if (typeof activa === 'boolean') {
       updates.activa = activa;
     }
 
     await registro.update(updates);
+
+    // Sincronizar con Directores
+    if (updates.activa === false) {
+      // Si se desactiva, dejar a los directores sin carrera
+      await User.update(
+        { carrera_director: null },
+        { where: { carrera_director: oldName } }
+      );
+    } else if (nameChanged && registro.activa) {
+      // Si se renombra y sigue activa, actualizar a los directores
+      await User.update(
+        { carrera_director: updates.carrera },
+        { where: { carrera_director: oldName } }
+      );
+    }
+
     await updateCarreraCountConfig();
 
     res.json({
@@ -189,18 +213,28 @@ const deleteCarrera = async (req, res) => {
       });
     }
 
-    await registro.update({ activa: false });
+    const carreraNombre = registro.carrera;
+
+    // 1. Quitar vinculación de directores (importante hacerlo antes de eliminar la carrera)
+    await User.update(
+      { carrera_director: null },
+      { where: { carrera_director: carreraNombre } }
+    );
+
+    // 2. ELIMINACIÓN FÍSICA de la base de datos
+    await registro.destroy();
+
     await updateCarreraCountConfig();
 
     res.json({
       success: true,
-      message: 'Carrera desactivada'
+      message: 'Carrera eliminada permanentemente'
     });
   } catch (error) {
-    console.error('Error al desactivar carrera:', error);
+    console.error('Error al eliminar carrera:', error);
     res.status(500).json({
       success: false,
-      error: 'Error al desactivar carrera',
+      error: 'Error al eliminar carrera. Es posible que existan clases vinculadas a esta carrera.',
       message: error.message
     });
   }

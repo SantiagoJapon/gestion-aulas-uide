@@ -260,8 +260,28 @@ class DistribucionService {
     let menorScore = Infinity;
     let isOvercapacity = false;
 
+    // 0. Si la clase tiene aula_sugerida, filtrar solo aulas que coincidan con el tipo sugerido
+    const aulaSugerida = clase.aula_sugerida ? normalizarTexto(clase.aula_sugerida) : null;
+    const aulasFiltradas = aulaSugerida
+      ? aulas.filter(aula => {
+        const nombreAula = normalizarTexto(aula.nombre);
+        const codigoAula = normalizarTexto(aula.codigo);
+        // Verificar si el nombre o código del aula contiene las palabras clave de la sugerencia
+        return aulaSugerida.split(' ').some(palabra =>
+          palabra.length > 3 && (nombreAula.includes(palabra) || codigoAula.includes(palabra))
+        );
+      })
+      : aulas;
+
+    // Si hay aulas que coinciden con la sugerencia, usarlas; si no, usar todas
+    const aulasParaBuscar = aulasFiltradas.length > 0 ? aulasFiltradas : aulas;
+
+    if (aulaSugerida && aulasFiltradas.length > 0) {
+      console.log(`[Distribucion] Clase "${clase.materia}" tiene aula_sugerida: "${clase.aula_sugerida}" - buscando entre ${aulasFiltradas.length} aulas coincidentes`);
+    }
+
     // 1. Intentar encontrar aula con capacidad suficiente
-    for (const aula of aulas) {
+    for (const aula of aulasParaBuscar) {
       if (estrictoCapacidad && aula.capacidad < (clase.num_estudiantes || 1)) continue;
 
       const exclusividad = aulaEsExclusiva(aula, clase.carrera);
@@ -285,7 +305,13 @@ class DistribucionService {
       const isExclusiveMatch = Object.keys(REGLAS_AULAS.exclusivas).some(key => normalizarTexto(aula.nombre).includes(key));
       const hasBonus = isExclusiveMatch || esPrioritaria;
 
-      const score = diferenciaCapacidad - (hasBonus ? 1000 : 0);
+      // Bonus adicional si el aula coincide con la sugerencia del usuario
+      const matchesSugerencia = aulaSugerida && (
+        normalizarTexto(aula.nombre).includes(aulaSugerida) ||
+        normalizarTexto(aula.codigo).includes(aulaSugerida)
+      );
+
+      const score = diferenciaCapacidad - (hasBonus ? 1000 : 0) - (matchesSugerencia ? 2000 : 0);
 
       if (score < menorScore) {
         menorScore = score;

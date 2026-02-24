@@ -6,13 +6,16 @@ import {
     Armchair,
     CheckCircle2,
     AlertCircle,
-    X
+    X,
+    Calendar
 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function ReservaWidget() {
+    const today = new Date().toISOString().split('T')[0];
+    const [fecha, setFecha] = useState(today);
     const [tipo, setTipo] = useState('AULA');
     const [hora, setHora] = useState('10:00');
     const [duracion, setDuracion] = useState('1');
@@ -25,12 +28,11 @@ export default function ReservaWidget() {
     const buscarAulas = async () => {
         setLoading(true);
         try {
-            const fecha = new Date().toISOString().split('T')[0];
             const hFin = calcularHoraFin(hora, duracion);
 
             const res = await axios.get(`${API_URL}/reservas/disponibles`, {
                 params: { fecha, hora_inicio: hora, hora_fin: hFin, tipo },
-                headers: { Authorization: `Bearer ${localStorage.getItem('uide_token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
 
             if (res.data.success) {
@@ -54,24 +56,26 @@ export default function ReservaWidget() {
     const realizarReserva = async (aulaCodigo: string) => {
         setLoading(true);
         try {
-            const fecha = new Date().toISOString().split('T')[0];
             const hFin = calcularHoraFin(hora, duracion);
 
-            await axios.post(`${API_URL}/reservas`, {
+            const res = await axios.post(`${API_URL}/reservas`, {
                 aula_codigo: aulaCodigo,
                 fecha,
                 hora_inicio: hora,
                 hora_fin: hFin,
                 motivo: 'Reserva Rápida desde Web'
             }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('uide_token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
 
-            setShowStatus('success');
-            setTimeout(() => {
-                setShowStatus('idle');
-                setStep('form');
-            }, 3000);
+            if (res.data.success) {
+                setShowStatus('success');
+                setTimeout(() => {
+                    setShowStatus('idle');
+                    setStep('form');
+                    setAulasLibres([]);
+                }, 3000);
+            }
         } catch (err: any) {
             setErrorMsg(err.response?.data?.error || 'Error al procesar reserva');
             setShowStatus('error');
@@ -86,8 +90,8 @@ export default function ReservaWidget() {
                 <div className="size-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4 shadow-sm">
                     <CheckCircle2 className="size-8" />
                 </div>
-                <h3 className="text-xl font-black text-foreground">¡Reserva Exitosa!</h3>
-                <p className="text-sm text-muted-foreground mt-2">El espacio ha sido bloqueado para tu uso.</p>
+                <h3 className="text-xl font-black text-foreground">¡Operación Exitosa!</h3>
+                <p className="text-sm text-muted-foreground mt-2">Tu espacio ha sido gestionado correctamente.</p>
             </div>
         );
     }
@@ -107,14 +111,18 @@ export default function ReservaWidget() {
 
             {step === 'form' ? (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {/* Promo Card */}
-                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-4 rounded-2xl flex items-center gap-4">
-                        <div className="size-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
-                            <Bookmark className="size-5" />
-                        </div>
-                        <div>
-                            <h4 className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-400 uppercase tracking-tight">Reserva Rápida</h4>
-                            <p className="text-[10px] sm:text-xs text-amber-800/60 dark:text-amber-400/60 font-medium">Asegura un espacio para hoy mismo.</p>
+                    {/* Date Selector */}
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Fecha de Reserva</label>
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-indigo-500" />
+                            <input
+                                type="date"
+                                min={today}
+                                value={fecha}
+                                onChange={(e) => setFecha(e.target.value)}
+                                className="w-full h-12 pl-9 pr-4 bg-muted/30 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                            />
                         </div>
                     </div>
 
@@ -186,7 +194,7 @@ export default function ReservaWidget() {
                         ) : (
                             <>
                                 <Armchair className="size-5" />
-                                <span className="text-xs sm:text-sm font-black uppercase tracking-wider">Reservar Ahora</span>
+                                <span className="text-xs sm:text-sm font-black uppercase tracking-wider">Buscar Disponibilidad</span>
                             </>
                         )}
                     </button>
@@ -209,15 +217,17 @@ export default function ReservaWidget() {
                                 <button
                                     key={aula.id}
                                     onClick={() => realizarReserva(aula.codigo)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl border border-border hover:border-indigo-500 hover:bg-indigo-50/10 transition-all text-left"
+                                    className="w-full flex items-center justify-between p-4 rounded-2xl border border-border hover:border-indigo-500 hover:bg-indigo-50/10 transition-all text-left group"
                                 >
                                     <div>
-                                        <h4 className="text-sm font-black text-indigo-900 dark:text-indigo-400">{aula.nombre}</h4>
+                                        <h4 className="text-sm font-black text-indigo-900 dark:text-indigo-400 group-hover:text-indigo-600">{aula.nombre}</h4>
                                         <p className="text-[10px] font-bold text-muted-foreground uppercase">{aula.edificio || 'UIDE'} • Piso {aula.piso || '1'}</p>
                                     </div>
                                     <div className="flex flex-col items-end">
-                                        <span className="text-[9px] font-black uppercase bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded-lg mb-1">Libre</span>
-                                        <span className="text-[10px] font-bold text-muted-foreground">{aula.capacidad} est.</span>
+                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg mb-1 ${aula.tipo === 'AUDITORIO' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                            {aula.tipo === 'AUDITORIO' ? 'Solicitar' : 'Libre'}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-muted-foreground">{aula.capacidad} pers.</span>
                                     </div>
                                 </button>
                             ))

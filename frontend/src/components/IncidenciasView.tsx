@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { incidenciaService, Incidencia } from '../services/api';
+import { incidenciaService, incidenciaFotoUrl, TIPO_INCIDENCIA_LABELS, Incidencia } from '../services/api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -7,6 +7,7 @@ const IncidenciasView = () => {
     const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterEstado, setFilterEstado] = useState('');
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
     const fetchIncidencias = async () => {
         setLoading(true);
@@ -38,6 +39,15 @@ const IncidenciasView = () => {
 
     return (
         <div className="space-y-6">
+        {/* Lightbox para fotos */}
+        {lightboxUrl && (
+            <div
+                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={() => setLightboxUrl(null)}
+            >
+                <img src={lightboxUrl} alt="evidencia" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
+            </div>
+        )}
             {/* Filtros */}
             <div className="flex gap-4 overflow-x-auto pb-2">
                 {['', 'PENDIENTE', 'REVISANDO', 'RESUELTO', 'CERRADO'].map(est => (
@@ -90,17 +100,37 @@ const IncidenciasView = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 max-w-xs">
-                                            <div className="font-bold text-foreground text-xs mb-1">{inc.titulo}</div>
-                                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                                <span className="bg-muted px-1.5 rounded uppercase font-bold">{inc.tipo}</span>
-                                                <span>•</span>
-                                                <span className="font-bold text-primary">{inc.aula_codigo}</span>
-                                                <span>•</span>
-                                                <span>{format(new Date(inc.created_at), "d MMM, HH:mm", { locale: es })}</span>
+                                            <div className="flex items-start gap-3">
+                                                {(() => {
+                                                    const fUrl = incidenciaFotoUrl(inc.foto_path);
+                                                    return fUrl ? (
+                                                        <img
+                                                            src={fUrl}
+                                                            alt="evidencia"
+                                                            onClick={() => setLightboxUrl(fUrl)}
+                                                            className="size-12 rounded-xl object-cover flex-shrink-0 border border-border cursor-zoom-in hover:opacity-80 transition-opacity"
+                                                        />
+                                                    ) : null;
+                                                })()}
+                                                <div className="min-w-0">
+                                                    <div className="font-bold text-foreground text-xs mb-1">{inc.titulo}</div>
+                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
+                                                        <span className="bg-muted px-1.5 rounded uppercase font-bold">{TIPO_INCIDENCIA_LABELS[inc.tipo] || inc.tipo}</span>
+                                                        <span>•</span>
+                                                        <span className="font-bold text-primary">{inc.aula_codigo}</span>
+                                                        <span>•</span>
+                                                        <span>{format(new Date(inc.created_at), "d MMM, HH:mm", { locale: es })}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 italic">
+                                                        "{inc.descripcion}"
+                                                    </p>
+                                                    {inc.nota_director && (
+                                                        <p className="text-[9px] text-blue-600 mt-1 bg-blue-50 dark:bg-blue-950/20 rounded px-1.5 py-0.5">
+                                                            <span className="font-black">Dir: </span>{inc.nota_director}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2 italic">
-                                                "{inc.descripcion}"
-                                            </p>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">

@@ -31,6 +31,9 @@ const getEstadoDistribucion = async (req, res) => {
       whereClauseTotal = 'WHERE c.carrera_id = :carrera_id';
       whereClauseCarreras = 'WHERE ca.id = :carrera_id';
       replacements.carrera_id = parseInt(carrera_id);
+    } else {
+      // Filtrar por carreras activas por defecto
+      whereClauseTotal = 'INNER JOIN uploads_carreras ca_filter ON c.carrera_id = ca_filter.id WHERE ca_filter.activa = true';
     }
 
     // Obtener estadísticas de distribución
@@ -38,10 +41,11 @@ const getEstadoDistribucion = async (req, res) => {
       SELECT 
         COUNT(DISTINCT c.id) as total_clases,
         COUNT(DISTINCT d.clase_id) as clases_asignadas,
-        COUNT(DISTINCT c.carrera) as total_carreras
+        COUNT(DISTINCT ca_f.carrera) as total_carreras
       FROM clases c
       LEFT JOIN distribucion d ON d.clase_id = c.id
-      ${whereClauseTotal}
+      INNER JOIN uploads_carreras ca_f ON c.carrera_id = ca_f.id
+      WHERE ca_f.activa = true ${carrera_id && !isNaN(carrera_id) ? ' AND ca_f.id = :carrera_id' : ''}
     `, {
       replacements,
       type: QueryTypes.SELECT
@@ -70,7 +74,7 @@ const getEstadoDistribucion = async (req, res) => {
         WHERE u.carrera_director = ca.carrera AND u.rol = 'director'
         LIMIT 1
       ) dir ON true
-      ${whereClauseCarreras}
+      WHERE ca.activa = true ${carrera_id && !isNaN(carrera_id) ? ' AND ca.id = :carrera_id' : ''}
       GROUP BY ca.id, ca.carrera, dir.nombre, dir.email
       ORDER BY ca.carrera
     `, {

@@ -1,11 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
-import { FaSearch, FaEdit, FaWhatsapp, FaKey, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import { FaSearch, FaEdit, FaWhatsapp, FaKey, FaCheckCircle, FaExclamationCircle, FaCopy, FaCheck } from 'react-icons/fa';
 import { Button } from './common/Button';
 import { Modal } from './common/Modal';
 import { docenteService, Docente } from '../services/api';
 
 interface DocenteTableProps {
     carreraId: number;
+}
+
+interface Credenciales {
+    email: string;
+    password: string;
+    whatsapp_enviado: boolean;
+    nombre: string;
+    isReset?: boolean;
 }
 
 export default function DocenteTable({ carreraId }: DocenteTableProps) {
@@ -26,6 +34,10 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
         tipo: 'Tiempo Completo'
     });
     const [saving, setSaving] = useState(false);
+
+    // Panel de credenciales post-creación
+    const [credenciales, setCredenciales] = useState<Credenciales | null>(null);
+    const [copiedField, setCopiedField] = useState<'email' | 'password' | null>(null);
 
     // Credential Generation State
     const [generando, setGenerando] = useState(false);
@@ -50,10 +62,6 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
         }
     };
 
-    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setSearch(e.target.value);
-    };
-
     const filteredDocentes = useMemo(() => {
         return docentes.filter(d => {
             const matchesSearch = d.nombre.toLowerCase().includes(search.toLowerCase()) ||
@@ -71,6 +79,7 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
     }, [docentes, search, accFilter]);
 
     const handleOpenModal = (docente?: Docente) => {
+        setCredenciales(null);
         if (docente) {
             setEditingDocente(docente);
             setFormData({
@@ -83,14 +92,7 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
             });
         } else {
             setEditingDocente(null);
-            setFormData({
-                nombre: '',
-                email: '',
-                telefono: '',
-                titulo_pregrado: '',
-                titulo_posgrado: '',
-                tipo: 'Tiempo Completo'
-            });
+            setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo' });
         }
         setIsModalOpen(true);
     };
@@ -102,16 +104,34 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
             if (editingDocente) {
                 const res = await docenteService.updateDocente(editingDocente.id, formData);
                 if (res.success) {
-                    setIsModalOpen(false);
                     loadDocentes();
+                    if (res.credenciales) {
+                        // Nueva cuenta creada durante la edición → mostrar credenciales
+                        setCredenciales({
+                            email: res.credenciales.email,
+                            password: res.credenciales.password,
+                            whatsapp_enviado: res.credenciales.whatsapp_enviado,
+                            nombre: formData.nombre
+                        });
+                    } else {
+                        setIsModalOpen(false);
+                    }
                 }
             } else {
                 const res = await docenteService.createDocente({ ...formData, carrera_id: carreraId });
                 if (res.success) {
-                    setIsModalOpen(false);
                     loadDocentes();
-                    // Mostrar las credenciales al usuario como se pidió
-                    alert(`¡Docente Creado!\n\n📧 Email: ${res.docente?.email || 'El configurado'}\n🔑 Clave: uide2024\n\nEl docente ya puede acceder al sistema.`);
+                    // Mostrar credenciales en el mismo modal (sin cerrar)
+                    if (res.credenciales) {
+                        setCredenciales({
+                            email: res.credenciales.email,
+                            password: res.credenciales.password,
+                            whatsapp_enviado: res.credenciales.whatsapp_enviado,
+                            nombre: formData.nombre
+                        });
+                    } else {
+                        setIsModalOpen(false);
+                    }
                 }
             }
         } catch (err: any) {
@@ -123,21 +143,36 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
         }
     };
 
-    const handleGenerarCredenciales = async () => {
-        if (!confirm('¿Estás seguro de generar credenciales para todos los docentes de esta carrera que aún no tienen cuenta? Se les enviará un mensaje por WhatsApp si tienen teléfono registrado.')) return;
-
+    const handleCrearCuenta = async (docente: Docente) => {
         try {
             setGenerando(true);
-            const res = await docenteService.generarCredenciales(carreraId > 0 ? carreraId : undefined);
+            const res = await docenteService.crearCuenta(docente.id);
             if (res.success) {
-                alert(res.mensaje);
                 loadDocentes();
+                setCredenciales({
+                    email: res.credenciales.email,
+                    password: res.credenciales.password,
+                    whatsapp_enviado: res.credenciales.whatsapp_enviado,
+                    nombre: docente.nombre,
+                    isReset: res.mensaje?.includes('restablec')
+                });
+                setEditingDocente(null);
+                setIsModalOpen(true);
             }
-        } catch (error) {
-            console.error('Error generando credenciales:', error);
-            alert('Error al procesar la solicitud');
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Error al procesar la cuenta');
         } finally {
             setGenerando(false);
+        }
+    };
+
+    const copyToClipboard = async (text: string, field: 'email' | 'password') => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedField(field);
+            setTimeout(() => setCopiedField(null), 2000);
+        } catch {
+            // fallback
         }
     };
 
@@ -182,18 +217,6 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                         Nuevo Docente
                     </button>
                     <button
-                        onClick={handleGenerarCredenciales}
-                        disabled={generando}
-                        className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                        {generando ? (
-                            <div className="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        ) : (
-                            <FaKey />
-                        )}
-                        Generar Credenciales Masivo
-                    </button>
-                    <button
                         onClick={loadDocentes}
                         className="p-3 bg-muted rounded-2xl text-muted-foreground hover:text-primary transition-all active:rotate-180 duration-500"
                         title="Refrescar lista"
@@ -211,7 +234,7 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                         type="text"
                         placeholder="Buscar por nombre, materia o email..."
                         value={search}
-                        onChange={handleSearch}
+                        onChange={e => setSearch(e.target.value)}
                         className="w-full pl-12 pr-4 py-3.5 bg-card dark:bg-slate-900 border border-border rounded-2xl focus:ring-4 focus:ring-primary/10 outline-none transition-all font-medium text-sm"
                     />
                 </div>
@@ -231,7 +254,7 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
             <div className="bg-card dark:bg-slate-900 border border-border rounded-[2.5rem] overflow-hidden shadow-sm">
                 {loading ? (
                     <div className="py-24 flex flex-col items-center justify-center gap-4">
-                        <div className="size-10 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
+                        <div className="size-10 border-4 border-muted border-t-primary rounded-full animate-spin" />
                         <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Sincronizando plantilla...</p>
                     </div>
                 ) : filteredDocentes.length === 0 ? (
@@ -326,6 +349,16 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                                         <FaWhatsapp />
                                                     </button>
                                                 )}
+                                                {(!docente.usuario_id || docente.usuario?.requiere_cambio_password) && (
+                                                    <button
+                                                        onClick={() => handleCrearCuenta(docente)}
+                                                        disabled={generando}
+                                                        className="size-9 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all flex items-center justify-center shadow-sm border border-primary/20 disabled:opacity-50"
+                                                        title={docente.usuario_id ? 'Reenviar credenciales' : 'Crear cuenta de acceso'}
+                                                    >
+                                                        <FaKey />
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handleOpenModal(docente)}
                                                     className="size-9 rounded-xl bg-muted text-muted-foreground hover:bg-primary hover:text-white transition-all flex items-center justify-center shadow-sm border border-border"
@@ -343,93 +376,232 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                 )}
             </div>
 
-            {/* Modal Editar */}
+            {/* Modal Crear / Editar */}
             <Modal
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Perfil del Docente"
+                onClose={() => { setIsModalOpen(false); setCredenciales(null); }}
+                title={credenciales ? (credenciales.isReset ? '🔄 Credenciales Restablecidas' : '✅ Cuenta Creada') : editingDocente ? 'Editar Docente' : 'Nuevo Docente'}
                 size="lg"
             >
-                <form onSubmit={handleSave} className="space-y-6">
-                    <div className="flex items-center gap-6 p-4 bg-muted/30 rounded-3xl border border-border mb-6">
-                        <div className="size-16 rounded-3xl bg-primary text-white flex items-center justify-center font-black text-3xl shadow-xl">
-                            {formData.nombre[0] || '?'}
+                {/* ── Panel de credenciales post-creación ── */}
+                {credenciales ? (
+                    <div className="space-y-6">
+                        {/* Header de éxito */}
+                        <div className="flex items-center gap-4 p-5 bg-emerald-50 dark:bg-emerald-950/30 rounded-3xl border border-emerald-200 dark:border-emerald-800">
+                            <div className="size-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 flex-shrink-0">
+                                <span className="material-symbols-outlined text-3xl">how_to_reg</span>
+                            </div>
+                            <div>
+                                <h4 className="font-black text-lg text-emerald-800 dark:text-emerald-300">
+                                    {credenciales.isReset ? '¡Credenciales restablecidas!' : '¡Docente registrado!'}
+                                </h4>
+                                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                                    {credenciales.nombre} {credenciales.isReset ? 'puede ingresar con la contraseña temporal.' : 'ya puede acceder al sistema.'}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="font-black text-lg text-foreground">Edición de Datos</h4>
-                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Sincronización manual de identidad</p>
-                        </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Completo</label>
-                            <input
-                                required
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                value={formData.nombre}
-                                onChange={e => setFormData({ ...formData, nombre: e.target.value })}
-                            />
+                        {/* Credenciales */}
+                        <div className="space-y-3">
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Credenciales de acceso generadas</p>
+
+                            {/* Email */}
+                            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-2xl border border-border group">
+                                <span className="material-symbols-outlined text-xl text-primary">mail</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Correo institucional</p>
+                                    <p className="font-black text-foreground truncate">{credenciales.email}</p>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(credenciales.email, 'email')}
+                                    className="size-9 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all flex items-center justify-center flex-shrink-0"
+                                    title="Copiar email"
+                                >
+                                    {copiedField === 'email' ? <FaCheck size={12} /> : <FaCopy size={12} />}
+                                </button>
+                            </div>
+
+                            {/* Contraseña */}
+                            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-2xl border border-border group">
+                                <span className="material-symbols-outlined text-xl text-amber-500">key</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Contraseña temporal</p>
+                                    <p className="font-black text-foreground font-mono tracking-widest">{credenciales.password}</p>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(credenciales.password, 'password')}
+                                    className="size-9 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white transition-all flex items-center justify-center flex-shrink-0"
+                                    title="Copiar contraseña"
+                                >
+                                    {copiedField === 'password' ? <FaCheck size={12} /> : <FaCopy size={12} />}
+                                </button>
+                            </div>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Email Institucional</label>
-                            <input
-                                type="email"
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                value={formData.email}
-                                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                            />
+
+                        {/* Estado WhatsApp */}
+                        <div className={`flex items-center gap-3 p-4 rounded-2xl border ${credenciales.whatsapp_enviado
+                            ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400'
+                            : 'bg-muted/30 border-border text-muted-foreground'
+                            }`}>
+                            <FaWhatsapp className="text-xl flex-shrink-0" />
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest">
+                                    {credenciales.whatsapp_enviado ? 'Notificación enviada por WhatsApp' : 'Sin número de WhatsApp registrado'}
+                                </p>
+                                <p className="text-[10px] font-medium opacity-70 mt-0.5">
+                                    {credenciales.whatsapp_enviado
+                                        ? 'El docente recibió sus credenciales y el link del sistema.'
+                                        : 'Puedes compartir las credenciales manualmente.'}
+                                </p>
+                            </div>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Teléfono (WhatsApp)</label>
-                            <input
-                                placeholder="Ej: 593987654321"
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                value={formData.telefono}
-                                onChange={e => setFormData({ ...formData, telefono: e.target.value })}
-                            />
+
+                        {/* Nota informativa */}
+                        <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-2xl border border-blue-200 dark:border-blue-800">
+                            <span className="material-symbols-outlined text-blue-500 text-xl flex-shrink-0">info</span>
+                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                                Al ingresar por primera vez, el sistema le pedirá al docente que establezca una contraseña personal. La contraseña temporal expira en el primer uso.
+                            </p>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Tipo de Dedicación</label>
-                            <select
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer"
-                                value={formData.tipo}
-                                onChange={e => setFormData({ ...formData, tipo: e.target.value })}
+
+                        <div className="flex gap-3 pt-2">
+                            <Button
+                                variant="ghost"
+                                className="flex-1 rounded-2xl"
+                                onClick={() => { setIsModalOpen(false); setCredenciales(null); }}
                             >
-                                <option value="Tiempo Completo">Tiempo Completo</option>
-                                <option value="Tiempo Parcial">Tiempo Parcial</option>
-                                <option value="Medio Tiempo">Medio Tiempo</option>
-                            </select>
+                                Cerrar
+                            </Button>
+                            <Button
+                                variant="primary"
+                                className="flex-1 rounded-2xl"
+                                onClick={() => { setCredenciales(null); setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo' }); }}
+                            >
+                                <span className="material-symbols-outlined text-sm">person_add</span>
+                                Agregar otro
+                            </Button>
                         </div>
                     </div>
+                ) : (
+                    /* ── Formulario de creación / edición ── */
+                    <form onSubmit={handleSave} className="space-y-6">
+                        {/* Avatar preview */}
+                        <div className="flex items-center gap-6 p-4 bg-muted/30 rounded-3xl border border-border mb-6">
+                            <div className="size-16 rounded-3xl bg-primary text-white flex items-center justify-center font-black text-3xl shadow-xl">
+                                {formData.nombre[0] || '?'}
+                            </div>
+                            <div>
+                                <h4 className="font-black text-lg text-foreground">
+                                    {editingDocente ? 'Editar datos del docente' : 'Registrar nuevo docente'}
+                                </h4>
+                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                                    {editingDocente ? 'Actualización de identidad académica' : 'Se creará cuenta de acceso automáticamente'}
+                                </p>
+                            </div>
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-6">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Título Pregrado</label>
-                            <input
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                value={formData.titulo_pregrado}
-                                onChange={e => setFormData({ ...formData, titulo_pregrado: e.target.value })}
-                            />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Completo *</label>
+                                <input
+                                    required
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                    value={formData.nombre}
+                                    onChange={e => setFormData({ ...formData, nombre: e.target.value })}
+                                    placeholder="Ej: Ing. María García"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
+                                    Email Institucional
+                                    {!editingDocente && <span className="ml-1 text-muted-foreground/50">(opcional — se auto-genera)</span>}
+                                </label>
+                                <input
+                                    type="email"
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                    value={formData.email}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                    placeholder="nombre@uide.edu.ec"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
+                                    Teléfono WhatsApp
+                                    <span className="ml-1 text-green-600">(para notificación automática)</span>
+                                </label>
+                                <div className="relative">
+                                    <FaWhatsapp className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500" />
+                                    <input
+                                        placeholder="Ej: 593987654321"
+                                        className="w-full pl-10 pr-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                        value={formData.telefono}
+                                        onChange={e => setFormData({ ...formData, telefono: e.target.value })}
+                                    />
+                                </div>
+                                {!editingDocente && formData.telefono && (
+                                    <p className="text-[10px] text-green-600 font-bold ml-1 flex items-center gap-1">
+                                        <FaWhatsapp size={10} /> Las credenciales se enviarán automáticamente a este número
+                                    </p>
+                                )}
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Tipo de Dedicación</label>
+                                <select
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer"
+                                    value={formData.tipo}
+                                    onChange={e => setFormData({ ...formData, tipo: e.target.value })}
+                                >
+                                    <option value="Tiempo Completo">Tiempo Completo</option>
+                                    <option value="Tiempo Parcial">Tiempo Parcial</option>
+                                    <option value="Medio Tiempo">Medio Tiempo</option>
+                                </select>
+                            </div>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Títulos Posgrado</label>
-                            <textarea
-                                rows={2}
-                                className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none resize-none"
-                                value={formData.titulo_posgrado}
-                                onChange={e => setFormData({ ...formData, titulo_posgrado: e.target.value })}
-                            />
-                        </div>
-                    </div>
 
-                    <div className="flex justify-end gap-3 pt-6 border-t border-border">
-                        <Button type="button" variant="ghost" className="rounded-2xl" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button type="submit" variant="primary" className="rounded-2xl px-8" loading={saving}>
-                            Guardar Cambios
-                        </Button>
-                    </div>
-                </form>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-6">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Título Pregrado</label>
+                                <input
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                    value={formData.titulo_pregrado}
+                                    onChange={e => setFormData({ ...formData, titulo_pregrado: e.target.value })}
+                                    placeholder="Ej: Ingeniero en Sistemas"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Títulos Posgrado</label>
+                                <textarea
+                                    rows={2}
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none resize-none"
+                                    value={formData.titulo_posgrado}
+                                    onChange={e => setFormData({ ...formData, titulo_posgrado: e.target.value })}
+                                    placeholder="Ej: Magíster en Educación"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Info box para nuevos docentes */}
+                        {!editingDocente && (
+                            <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/20">
+                                <span className="material-symbols-outlined text-primary text-xl flex-shrink-0">auto_awesome</span>
+                                <div className="text-xs font-medium text-foreground/70">
+                                    <strong className="text-foreground">Acceso automático:</strong> Al guardar, se creará una cuenta con contraseña temporal <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary">uide2026</code>.
+                                    {formData.telefono
+                                        ? <span className="text-green-600"> Las credenciales se enviarán por WhatsApp al número ingresado.</span>
+                                        : <span> Si ingresas un teléfono, las credenciales se enviarán por WhatsApp.</span>
+                                    }
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-6 border-t border-border">
+                            <Button type="button" variant="ghost" className="rounded-2xl" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                            <Button type="submit" variant="primary" className="rounded-2xl px-8" loading={saving}>
+                                {editingDocente ? 'Guardar Cambios' : 'Crear Docente y Generar Acceso'}
+                            </Button>
+                        </div>
+                    </form>
+                )}
             </Modal>
         </div>
     );

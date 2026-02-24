@@ -211,39 +211,92 @@ const createUsuario = async (req, res) => {
       finalCarrera = req.usuario.carrera_director;
     }
 
-    // Guardar password original antes del hash para notificación
-    const passwordOriginal = password;
+    // Para directores: usar contraseña temporal estándar
+    const passwordFinal = (finalRol === 'director') ? 'uide2026' : (password || 'uide2026');
 
     // Crear el usuario (el password se hashea en el hook beforeCreate)
     const newUsuario = await User.create({
       nombre,
       apellido,
       email,
-      password,
+      password: passwordFinal,
       rol: finalRol,
       carrera_director: finalCarrera,
       cedula: cedula || null,
       telefono: telefono || null,
-      estado: 'activo'
+      estado: 'activo',
+      requiere_cambio_password: true
     });
 
-    // Si es director y tiene telefono, notificar via n8n (WhatsApp)
-    if (finalRol === 'director' && newUsuario.telefono) {
-      N8nService.notificarDirector({
-        nombre: `${nombre} ${apellido}`,
-        telefono: newUsuario.telefono,
-        password: passwordOriginal,
-        carrera: finalCarrera || ''
-      });
+    // Notificar al usuario si tiene telefono
+    let whatsapp_enviado = false;
+    if (newUsuario.telefono && (finalRol === 'director' || finalRol === 'docente')) {
+      try {
+        const whatsappService = require('../services/whatsappService');
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, bienvenido al sistema institucional.\n\n📧 *Correo:* ${email}\n🔑 *Contraseña temporal:* ${passwordFinal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá establecer tu contraseña personal._`;
+        whatsapp_enviado = await whatsappService.sendMessage(newUsuario.telefono, msg);
+      } catch (wErr) {
+        console.warn('⚠️ WhatsApp no disponible al crear usuario:', wErr.message);
+      }
     }
 
-    res.status(201).json({
+    // Respuesta con credenciales para directores
+    const responseData = {
       success: true,
       mensaje: 'Usuario creado exitosamente',
       usuario: newUsuario.toJSON()
-    });
+    };
+
+    if (finalRol === 'director') {
+      responseData.credenciales = {
+        email: newUsuario.email,
+        password: passwordFinal,
+        whatsapp_enviado
+      };
+    }
+
+    res.status(201).json(responseData);
   } catch (error) {
     handle500(res, error, 'createUsuario');
+  }
+};
+
+
+const generarCredencialesUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const whatsappService = require('../services/whatsappService');
+
+    const usuario = await User.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+    }
+
+    // Solo admin puede hacer esto para directores
+    if (req.usuario.rol !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Solo el administrador puede generar credenciales para directores' });
+    }
+
+    // Resetear contraseña temporal (en texto plano — el hook beforeUpdate la hasheará)
+    usuario.password = 'uide2026';
+    usuario.requiere_cambio_password = true;
+    await usuario.save();
+
+    let whatsapp_enviado = false;
+    if (usuario.telefono) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${usuario.nombre} ${usuario.apellido}*, tus credenciales de acceso han sido generadas.\n\n📧 *Correo:* ${usuario.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+      whatsapp_enviado = await whatsappService.sendMessage(usuario.telefono, msg);
+    }
+
+    res.json({
+      success: true,
+      credenciales: { email: usuario.email, password: 'uide2026', whatsapp_enviado },
+      mensaje: 'Credenciales generadas exitosamente'
+    });
+  } catch (error) {
+    handle500(res, error, 'generarCredencialesUsuario');
   }
 };
 
@@ -354,5 +407,6 @@ module.exports = {
   createUsuario,
   updateUsuario,
   deleteUsuario,
-  resetPasswordUsuario
+  resetPasswordUsuario,
+  generarCredencialesUsuario
 };

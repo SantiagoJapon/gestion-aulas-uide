@@ -106,7 +106,7 @@ export default function Register() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     setFormData({
       ...formData,
       [name]: value,
@@ -170,14 +170,14 @@ export default function Register() {
     } catch (err: any) {
       console.error('Error completo al registrar:', err);
       console.error('Response data:', err.response?.data);
-      
+
       // Extraer mensaje de error más detallado
       let errorMessage = 'Error al registrar usuario';
       let errorDetails: string[] = [];
-      
+
       if (err.response?.data) {
         const data = err.response.data;
-        
+
         // Si hay errores de validación detallados
         if (data.detalles && Array.isArray(data.detalles)) {
           errorDetails = data.detalles.map((d: any) => {
@@ -196,12 +196,12 @@ export default function Register() {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       // Si el error es de conexión, mostrar mensaje más específico
       if (!err.response) {
         errorMessage = 'No se pudo conectar con el servidor. Verifica que el backend esté corriendo en http://localhost:3000';
       }
-      
+
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -279,13 +279,12 @@ export default function Register() {
               onChange={handleChange}
               placeholder="usuario@uide.edu.ec"
               required
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${
-                emailError 
-                  ? 'border-red-500 focus:ring-red-500 bg-red-50' 
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${emailError
+                  ? 'border-red-500 focus:ring-red-500 bg-red-50'
                   : formData.email && validateEmail(formData.email)
-                  ? 'border-green-500 focus:ring-green-500 bg-green-50'
-                  : 'border-input focus:ring-ring bg-background'
-              }`}
+                    ? 'border-green-500 focus:ring-green-500 bg-green-50'
+                    : 'border-input focus:ring-ring bg-background'
+                }`}
             />
             {emailError && (
               <div className="mt-2 p-3 bg-destructive/10 border-l-4 border-destructive rounded">
@@ -314,13 +313,12 @@ export default function Register() {
             )}
             {lookupStatus.message && (
               <div
-                className={`mt-2 text-sm ${
-                  lookupStatus.loading
+                className={`mt-2 text-sm ${lookupStatus.loading
                     ? 'text-yellow-700'
                     : lookupStatus.found
-                    ? 'text-green-700'
-                    : 'text-gray-600'
-                }`}
+                      ? 'text-green-700'
+                      : 'text-gray-600'
+                  }`}
               >
                 {lookupStatus.loading ? 'Consultando base de estudiantes...' : lookupStatus.message}
               </div>

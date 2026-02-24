@@ -5,7 +5,14 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "jest --testPathPatterns=tests/",
+    "test:watch": "jest --testPathPatterns=tests/ --watch",
+    "test:coverage": "jest --testPathPatterns=tests/ --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
   },
   "dependencies": {
     "axios": "^1.6.0",
@@ -32,5 +39,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }

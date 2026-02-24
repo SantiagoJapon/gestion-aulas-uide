@@ -22,7 +22,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     # NO exponemos puerto al host en produccion
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-gestion_aulas}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-gestion_aulas}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,7 +39,7 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
     # NO exponemos puerto al host en produccion
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis123}", "ping"]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis123}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,10 +67,15 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET es requerido}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
       N8N_WEBHOOK_URL: http://n8n:5678/webhook
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      # Evolution API para WhatsApp
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -100,7 +105,7 @@ services:
       - app_network
     # Se detiene después de copiar, nginx sirve los archivos
     restart: "no"
-    command: ["sh", "-c", "echo 'Frontend build listo' && tail -f /dev/null"]
+    command: [ "sh", "-c", "echo 'Frontend build listo' && tail -f /dev/null" ]
 
   # ==========================================
   # Nginx (Reverse Proxy)
@@ -172,7 +177,7 @@ services:
       dockerfile: Dockerfile
     container_name: gestion_aulas_bot
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN es requerido}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
@@ -180,13 +185,50 @@ services:
       DB_NAME: ${DB_NAME:-gestion_aulas}
       DB_SSL: "false"
       VOICE_API_KEY: ${VOICE_API_KEY:-}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
     depends_on:
       postgres:
         condition: service_healthy
-    # NO necesita puerto - usa polling
+      evolution-api:
+        condition: service_healthy
+    # NO necesita puerto - usa polling o webhook
     networks:
       - app_network
     restart: always
+
+  # ==========================================
+  # Evolution API - WhatsApp Gateway
+  # ==========================================
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: gestion_aulas_evolution_api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/evolution_db
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - QRCODE_LIMIT=30
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
+    volumes:
+      - evolution_store:/evolution/store
+      - evolution_instances:/evolution/instances
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
 
   # ==========================================
   # Certbot (SSL - ejecutar manualmente)
@@ -219,6 +261,10 @@ volumes:
     name: gestion_aulas_certbot
   certbot_certs:
     name: gestion_aulas_certs
+  evolution_store:
+    name: gestion_aulas_evolution_store
+  evolution_instances:
+    name: gestion_aulas_evolution_instances
 
 # ==========================================
 # Red interna

@@ -5,14 +5,19 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: '0.0.0.0',
-    port: 5173,
+    port: 5175,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:3000',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
+        secure: false
       },
-    },
+      '/uploads': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   },
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx'],

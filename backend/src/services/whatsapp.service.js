@@ -7,6 +7,21 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
 /**
+ * Normaliza un número de teléfono al formato internacional para Ecuador (593XXXXXXXXX).
+ * Si el número ya tiene código de país, lo mantiene.
+ */
+function normalizarTelefono(phone) {
+    if (!phone) return null;
+    // Quitar todo lo que no sea dígito
+    let digits = String(phone).replace(/\D/g, '');
+    // Si empieza con 0 (formato local Ecuador), reemplazar con 593
+    if (digits.startsWith('0')) digits = '593' + digits.slice(1);
+    // Si no tiene prefijo de país, asumir Ecuador
+    if (!digits.startsWith('593') && digits.length === 9) digits = '593' + digits;
+    return digits;
+}
+
+/**
  * Servicio para emitir alertas en tiempo real via WhatsApp (Evolution API)
  * Mantiene la misma interfaz publica para no romper controllers existentes.
  */
@@ -20,10 +35,12 @@ const whatsappService = {
     async sendMessage(phone, text) {
         if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return false;
         if (!phone) return false;
+        const number = normalizarTelefono(phone);
+        if (!number) return false;
         try {
             await axios.post(
                 `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-                { number: String(phone), text },
+                { number, text },
                 {
                     headers: {
                         apikey: EVOLUTION_API_KEY,
@@ -34,7 +51,7 @@ const whatsappService = {
             );
             return true;
         } catch (error) {
-            console.error(`Error enviando WhatsApp a ${phone}:`, error.response?.data || error.message);
+            console.error(`Error enviando WhatsApp a ${number}:`, error.response?.data || error.message);
             return false;
         }
     },

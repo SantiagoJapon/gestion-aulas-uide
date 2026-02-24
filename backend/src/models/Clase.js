@@ -17,11 +17,11 @@ const Clase = sequelize.define('Clase', {
   },
   carrera: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
   materia: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
   ciclo: {
     type: DataTypes.STRING,
@@ -95,7 +95,12 @@ const Clase = sequelize.define('Clase', {
     { fields: ['hora_inicio'] },
     { fields: ['hora_fin'] },
     { fields: ['aula_asignada'] },
-    { fields: ['docente_id'] }
+    { fields: ['docente_id'] },
+    { fields: ['carrera_id'] },
+    { fields: ['ciclo'] },
+    { fields: ['paralelo'] },
+    { fields: ['nombre_archivo'] },
+    { fields: ['carrera_id', 'ciclo', 'paralelo'] }
   ]
 });
 

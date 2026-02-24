@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState, useEffect, useMemo } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { aulaService } from '../services/api';
 import AulaTable from '../components/AulaTable';
@@ -17,6 +17,8 @@ import DocenteTable from '../components/DocenteTable';
 import IncidenciasView from '../components/IncidenciasView';
 import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import GuidedTour from '../components/common/GuidedTour';
+import { Step } from 'react-joyride';
 
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
@@ -31,6 +33,71 @@ export default function AdminDashboard() {
   });
   const [horarioKey, setHorarioKey] = useState(0);
   const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'disponibilidad' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+
+  // --- Tour de Guia ---
+  const [runTour, setRunTour] = useState(false);
+
+  const tourSteps: Step[] = [
+    {
+      target: '#tour-logo',
+      content: 'Bienvenido al Sistema de Gestión de Aulas UIDE. Este tour te enseñará las principales funciones del panel de administrador.',
+      placement: 'right',
+      disableBeacon: true,
+    },
+    {
+      target: '#tour-nav-general',
+      content: 'En la sección INICIO encontrarás el panel de control con métricas en tiempo real: total de aulas, disponibilidad, capacidad y estado de mantenimiento.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-distribucion',
+      content: 'En DISTRIBUCIÓN puedes aprobar las planificaciones enviadas por los directores de carrera y distribuir automáticamente las clases en las aulas disponibles.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-docentes',
+      content: 'En DOCENTES puedes gestionar el registro de docentes, ver sus especialidades y asignaciones actuales.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-estudiantes',
+      content: 'En ESTUDIANTES puedes visualizar el listado completo de estudiantes y realizar cargas masivas desde Excel.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-incidencias',
+      content: 'En INCIDENCIAS gestionas los reportes de problemas enviados por docentes y estudiantes, como fallas de equipos o solicitud de mantenimiento.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-help-button',
+      content: 'Si necesitas ayuda en cualquier momento, haz clic en este botón dorado de ayuda para reiniciar el tour.',
+      placement: 'top-end',
+      disableScrolling: true,
+      spotlightPadding: 10,
+    },
+  ];
+
+  useEffect(() => {
+    const hasSeenTour = localStorage.getItem('uide_tour_admin_v1');
+    if (!hasSeenTour) {
+      setTimeout(() => setRunTour(true), 1000);
+    }
+
+    const handleRestart = () => {
+      localStorage.removeItem('uide_tour_admin_v1');
+      setRunTour(false);
+      setTimeout(() => setRunTour(true), 100);
+    };
+
+    window.addEventListener('restart-uide-tour', handleRestart);
+    return () => window.removeEventListener('restart-uide-tour', handleRestart);
+  }, []);
+
+  const handleTourFinish = () => {
+    localStorage.setItem('uide_tour_admin_v1', 'true');
+    setRunTour(false);
+  };
 
 
   useEffect(() => {
@@ -56,7 +123,7 @@ export default function AdminDashboard() {
         return (
           <div className="space-y-10 pb-20 animate-fade-in">
             {/* 1. KPIs PANORÁMICOS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div id="tour-kpis" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 { label: 'Aulas Totales', value: stats.total, icon: 'door_open', color: 'blue', desc: 'Espacios físicos' },
                 { label: 'Disponibles', value: stats.disponibles, icon: 'check_circle', color: 'emerald', desc: 'Listas para uso' },
@@ -78,7 +145,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
               {/* Listado de Aulas (8/12) */}
-              <div className="lg:col-span-8">
+              <div id="tour-inventario-aulas" className="lg:col-span-8">
                 <DashboardWidget
                   title="Control de Inventario"
                   subtitle="Gestión detallada de aulas y laboratorios"
@@ -92,15 +159,17 @@ export default function AdminDashboard() {
 
               {/* Barra Lateral (4/12) */}
               <div className="lg:col-span-4 space-y-8">
-                <DashboardWidget
-                  title="Planificaciones"
-                  subtitle="Cargas de archivos recientes"
-                  icon="history"
-                >
-                  <div className="max-h-[500px] overflow-y-auto pr-1">
-                    <PlanificacionesTable />
-                  </div>
-                </DashboardWidget>
+                <div id="tour-planificaciones">
+                  <DashboardWidget
+                    title="Planificaciones"
+                    subtitle="Cargas de archivos recientes"
+                    icon="history"
+                  >
+                    <div className="max-h-[500px] overflow-y-auto pr-1">
+                      <PlanificacionesTable />
+                    </div>
+                  </DashboardWidget>
+                </div>
 
                 {/* Info Card Quick Action */}
                 <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
@@ -153,7 +222,7 @@ export default function AdminDashboard() {
         return (
           <div className="space-y-12 animate-fade-in pb-20">
             {/* El Centro de Mando debe ser el protagonista absoluto */}
-            <div className="bg-slate-900 rounded-[3rem] p-4 shadow-2xl border border-white/5">
+            <div id="tour-centro-mando" className="bg-slate-900 rounded-[3rem] p-4 shadow-2xl border border-white/5">
               <CentroControlDistribucion onDistribucionCompletada={handleDistribucionCompletada} />
             </div>
 
@@ -196,7 +265,7 @@ export default function AdminDashboard() {
 
       case 'estudiantes':
         return (
-          <div className="space-y-10 animate-fade-in pb-20">
+          <div id="tour-seccion-estudiantes" className="space-y-10 animate-fade-in pb-20">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
               <div className="lg:col-span-8">
                 <DashboardWidget title="Listado General de Estudiantes" subtitle="Base de datos oficial" icon="group">
@@ -214,7 +283,7 @@ export default function AdminDashboard() {
 
       case 'docentes':
         return (
-          <div className="space-y-6 animate-fade-in pb-20">
+          <div id="tour-seccion-docentes" className="space-y-6 animate-fade-in pb-20">
             <DashboardWidget title="Plantilla Docente Institucional" icon="badge">
               <DocenteTable carreraId={0} />
             </DashboardWidget>
@@ -232,7 +301,7 @@ export default function AdminDashboard() {
 
       case 'incidencias':
         return (
-          <div className="space-y-6 animate-fade-in pb-20">
+          <div id="tour-seccion-incidencias" className="space-y-6 animate-fade-in pb-20">
             <div className="flex gap-4 mb-4">
               <div className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] flex-1">
                 <div className="flex items-center gap-4">
@@ -291,6 +360,12 @@ export default function AdminDashboard() {
       </div>
 
       {renderContent()}
+
+      <GuidedTour
+        steps={tourSteps}
+        run={runTour}
+        onFinish={handleTourFinish}
+      />
     </DashboardLayout>
   );
 }

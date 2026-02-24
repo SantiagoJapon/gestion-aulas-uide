@@ -62,25 +62,29 @@ export default function CentroControlDistribucion({ onDistribucionCompletada }: 
         <div className="space-y-8 animate-fade-in">
 
             {/* Header del Centro de Control */}
-            <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-8 shadow-2xl">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <span className="material-symbols-outlined text-9xl text-white">tower_control</span>
+            <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 p-8 shadow-2xl min-h-[200px] flex items-center">
+                {/* Imagen de Fondo (Campus Loja) */}
+                <div className="absolute inset-0 z-0">
+                    <img
+                        src="/campus-loja.avif"
+                        alt="Campus UIDE Loja"
+                        className="w-full h-full object-cover opacity-40"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent"></div>
                 </div>
+
                 <div className="relative z-10">
-                    <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-3 mb-4">
                         <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 animate-pulse">
                             Sistema Activo
                         </span>
-                        <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
-                            v2.4.0 Optimización
-                        </span>
                     </div>
-                    <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-2">
+                    <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-2">
                         Centro de Control de Distribución
                     </h2>
-                    <p className="text-slate-400 max-w-2xl text-sm md:text-base font-medium">
+                    <p className="text-slate-300 max-w-2xl text-sm md:text-lg font-medium">
                         Supervisa, simula y ejecuta la asignación de aulas para toda la universidad.
-                        Tienes <span className="text-white font-bold">{pendientes.length} planificaciones pendientes</span> de revisión.
+                        Tienes <span className="text-white font-black underline decoration-emerald-500 decoration-2 underline-offset-4">{pendientes.length} planificaciones</span> esperando aprobación institucional.
                     </p>
                 </div>
             </div>
@@ -91,7 +95,7 @@ export default function CentroControlDistribucion({ onDistribucionCompletada }: 
                 <div className="lg:col-span-2 space-y-6">
 
                     {/* Cola de Pendientes */}
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+                    <div id="tour-cola-aprobacion" className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
                                 <span className="material-symbols-outlined text-amber-500">pending_actions</span>
@@ -130,6 +134,7 @@ export default function CentroControlDistribucion({ onDistribucionCompletada }: 
 
                                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
                                     <button
+                                        id="tour-boton-simular"
                                         onClick={ejecutarSimulacion}
                                         disabled={simulando}
                                         className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
@@ -182,7 +187,7 @@ export default function CentroControlDistribucion({ onDistribucionCompletada }: 
                 </div>
 
                 {/* Columna Derecha: Panel de Ejecución */}
-                <div className="space-y-6">
+                <div id="tour-panel-ejecucion" className="space-y-6">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/20 sticky top-6">
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Acciones Maestras</h3>
 

@@ -2,6 +2,7 @@ const { Estudiante, sequelize } = require('../models');
 const { QueryTypes, Op } = require('sequelize');
 const XLSX = require('xlsx');
 const { generarToken } = require('../utils/jwt');
+const estudianteService = require('../services/estudiante.service');
 
 /**
  * @desc    Buscar estudiante por email institucional
@@ -26,9 +27,7 @@ const lookupEstudianteByEmail = async (req, res) => {
       });
     }
 
-    const estudiante = await Estudiante.findOne({
-      where: { email }
-    });
+    const estudiante = await estudianteService.lookupByEmail(email);
 
     if (!estudiante) {
       return res.json({
@@ -74,9 +73,7 @@ const loginEstudianteByCedula = async (req, res) => {
       });
     }
 
-    const estudiante = await Estudiante.findOne({
-      where: { cedula }
-    });
+    const estudiante = await estudianteService.findByCedula(cedula);
 
     if (!estudiante) {
       return res.status(404).json({
@@ -85,19 +82,8 @@ const loginEstudianteByCedula = async (req, res) => {
       });
     }
 
-    // Obtener materias inscritas
-    const materias = await sequelize.query(`
-      SELECT c.id, c.materia, c.dia, c.hora_inicio, c.hora_fin, 
-             COALESCE(a.nombre, c.aula_asignada, 'S/A') as aula,
-             c.docente
-      FROM clases c
-      INNER JOIN estudiantes_materias em ON em.clase_id = c.id
-      LEFT JOIN aulas a ON a.codigo = c.aula_asignada
-      WHERE em.estudiante_id = :id
-    `, {
-      replacements: { id: estudiante.id },
-      type: QueryTypes.SELECT
-    });
+    // Obtener materias inscritas via service
+    const materias = await estudianteService.getMateriasByEstudianteId(estudiante.id);
 
     // Generar JWT para el estudiante
     const token = generarToken({
@@ -124,7 +110,6 @@ const loginEstudianteByCedula = async (req, res) => {
       success: true,
       token,
       estudiante: estudianteData,
-      // Compatible con el formato de login de usuarios
       usuario: {
         id: estudiante.id,
         nombre: estudiante.nombre,
@@ -217,27 +202,10 @@ const listarEstudiantes = async (req, res) => {
 };
 
 /**
- * Validar cédula ecuatoriana con algoritmo oficial
+ * Validar cédula ecuatoriana con algoritmo oficial (vía service)
  */
 function validarCedulaEcuatoriana(cedula) {
-  if (!cedula || cedula.length !== 10) return false;
-
-  const digitos = cedula.split('').map(Number);
-  const provincia = parseInt(cedula.substring(0, 2));
-
-  if (provincia < 1 || provincia > 24) return false;
-
-  const coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-  let suma = 0;
-
-  for (let i = 0; i < 9; i++) {
-    let valor = digitos[i] * coeficientes[i];
-    if (valor >= 10) valor -= 9;
-    suma += valor;
-  }
-
-  const verificador = suma % 10 === 0 ? 0 : 10 - (suma % 10);
-  return verificador === digitos[9];
+  return estudianteService.validarCedulaEcuatoriana(cedula);
 }
 
 /**

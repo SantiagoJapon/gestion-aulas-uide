@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Search, MapPin, User, Clock, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function QuickSearch() {
     const [query, setQuery] = useState('');
@@ -38,7 +38,7 @@ export default function QuickSearch() {
 
             const res = await axios.get(`${API_URL}${endpoint}`, {
                 params,
-                headers: { Authorization: `Bearer ${localStorage.getItem('uide_token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             });
 
             if (searchType === 'docente') {

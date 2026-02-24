@@ -79,7 +79,12 @@ const Notificacion = sequelize.define('Notificacion', {
 }, {
     tableName: 'notificaciones',
     timestamps: true,
-    underscored: true
+    underscored: true,
+    indexes: [
+        { fields: ['leida'] },
+        { fields: ['tipo'] },
+        { fields: ['destinatario_id'] }
+    ]
 });
 
 // Relaciones

@@ -123,7 +123,7 @@ const authLimiter = rateLimit({
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // 100 requests por IP cada 15 minutos
+  max: process.env.NODE_ENV === 'production' ? 100 : 500, // más permisivo en desarrollo
   message: {
     error: 'Demasiadas peticiones desde esta IP. Por favor intenta de nuevo más tarde.'
   },

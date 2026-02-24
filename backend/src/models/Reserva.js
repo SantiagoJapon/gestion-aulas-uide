@@ -59,6 +59,25 @@ const Reserva = sequelize.define('Reserva', {
         type: DataTypes.STRING(20),
         allowNull: true
     },
+    tipo_espacio: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: 'aula'
+    },
+    es_grupal: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
+    num_personas: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1
+    },
+    rol_usuario: {
+        type: DataTypes.STRING(50),
+        allowNull: true
+    },
     // Datos redundantes para facilitar consultas rápidas sin joins complejos
     solicitante_nombre: {
         type: DataTypes.STRING(100),

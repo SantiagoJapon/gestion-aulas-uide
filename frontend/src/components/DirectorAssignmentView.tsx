@@ -33,6 +33,12 @@ export default function DirectorAssignmentView() {
         loadData();
     }, [isManagementModalOpen]); // Reload data when management modal closes/updates
 
+    useEffect(() => {
+        const handleRefresh = () => loadData();
+        window.addEventListener('carrera-modified', handleRefresh);
+        return () => window.removeEventListener('carrera-modified', handleRefresh);
+    }, []);
+
     const loadData = async () => {
         try {
             setLoading(true);

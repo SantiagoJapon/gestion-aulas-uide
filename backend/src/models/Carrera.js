@@ -44,7 +44,27 @@ const Carrera = sequelize.define('Carrera', {
   }
 }, {
   tableName: 'uploads_carreras',
-  timestamps: false
+  timestamps: false,
+  hooks: {
+    beforeCreate: (carrera) => {
+      if (carrera.carrera) {
+        carrera.carrera_normalizada = carrera.carrera
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    },
+    beforeUpdate: (carrera) => {
+      if (carrera.changed('carrera')) {
+        carrera.carrera_normalizada = carrera.carrera
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    }
+  }
 });
 
 module.exports = Carrera;

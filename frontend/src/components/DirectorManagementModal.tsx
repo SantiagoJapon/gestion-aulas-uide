@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { usuarioService, User } from '../services/api';
 import { DirectorModal } from './DirectorModal';
 
+interface Credenciales {
+    email: string;
+    password: string;
+    whatsapp_enviado: boolean;
+    nombre: string;
+}
+
 interface DirectorManagementModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -15,6 +22,10 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
     // CRUD Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [directorToEdit, setDirectorToEdit] = useState<User | null>(null);
+
+    // Credenciales State
+    const [credenciales, setCredenciales] = useState<Credenciales | null>(null);
+    const [generando, setGenerando] = useState<number | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -57,6 +68,25 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
 
     const handleSuccess = () => {
         loadDirectores();
+    };
+
+    const handleGenerarCredenciales = async (director: User) => {
+        try {
+            setGenerando(director.id);
+            const res = await usuarioService.generarCredenciales(director.id);
+            if (res.success) {
+                setCredenciales({
+                    email: res.credenciales.email,
+                    password: res.credenciales.password,
+                    whatsapp_enviado: res.credenciales.whatsapp_enviado,
+                    nombre: `${director.nombre} ${director.apellido}`
+                });
+            }
+        } catch (err: any) {
+            alert(err?.response?.data?.error || 'Error al generar credenciales');
+        } finally {
+            setGenerando(null);
+        }
     };
 
     const filteredDirectors = directores.filter(d =>
@@ -141,6 +171,14 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
 
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
+                                            onClick={() => handleGenerarCredenciales(director)}
+                                            disabled={generando === director.id}
+                                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-500/5 rounded-lg transition-colors disabled:opacity-50"
+                                            title={director.requiere_cambio_password ? 'Reenviar credenciales' : 'Generar credenciales'}
+                                        >
+                                            <span className="material-symbols-outlined">{generando === director.id ? 'sync' : 'key'}</span>
+                                        </button>
+                                        <button
                                             onClick={() => handleEdit(director)}
                                             className="p-2 text-slate-400 hover:text-uide-blue hover:bg-uide-blue/5 rounded-lg transition-colors"
                                             title="Editar"
@@ -174,6 +212,51 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
                 onSuccess={handleSuccess}
                 directorToEdit={directorToEdit}
             />
+
+            {/* Panel credenciales generadas */}
+            {credenciales && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 border border-slate-200 dark:border-slate-700 space-y-5">
+                        <div className="flex items-center gap-4 p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+                            <div className="size-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center flex-shrink-0">
+                                <span className="material-symbols-outlined text-2xl">how_to_reg</span>
+                            </div>
+                            <div>
+                                <h4 className="font-black text-base text-emerald-800 dark:text-emerald-300">Credenciales generadas</h4>
+                                <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{credenciales.nombre} puede ingresar al sistema.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <span className="material-symbols-outlined text-primary">mail</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Correo</p>
+                                    <p className="font-bold text-sm text-foreground truncate">{credenciales.email}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <span className="material-symbols-outlined text-primary">lock</span>
+                                <div className="flex-1">
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Contraseña temporal</p>
+                                    <p className="font-bold text-sm text-foreground font-mono">{credenciales.password}</p>
+                                </div>
+                            </div>
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold ${credenciales.whatsapp_enviado ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                <span className="material-symbols-outlined text-sm">{credenciales.whatsapp_enviado ? 'check_circle' : 'sms_failed'}</span>
+                                {credenciales.whatsapp_enviado ? 'Credenciales enviadas por WhatsApp' : 'WhatsApp no disponible — comparte manualmente'}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setCredenciales(null)}
+                            className="w-full py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -115,7 +115,8 @@ Notificacion.belongsTo(User, { foreignKey: 'remitente_id', as: 'remitenteInfo' }
 
 User.hasMany(Incidencia, { foreignKey: 'usuario_id', as: 'incidencias' });
 Incidencia.belongsTo(User, { foreignKey: 'usuario_id', as: 'reportadoPor' });
-Incidencia.belongsTo(Aula, { foreignKey: 'aula_codigo', targetKey: 'codigo', as: 'aula' });
+// aula_codigo es texto libre (puede ser un código de planificación no registrado en aulas)
+// Se eliminó la FK para permitir cualquier código de aula
 
 // Docente <-> User (Vincular perfil académico con cuenta de acceso)
 Docente.belongsTo(User, { foreignKey: 'usuario_id', as: 'usuario' });

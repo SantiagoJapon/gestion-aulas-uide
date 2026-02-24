@@ -188,6 +188,26 @@ export const authService = {
     });
     return response.data;
   },
+
+  changePasswordFirstLogin: async (passwordNuevo: string): Promise<{ mensaje: string }> => {
+    const response = await api.put<{ mensaje: string }>('/auth/primer-ingreso', { passwordNuevo });
+    return response.data;
+  },
+
+  crearDirector: async (data: {
+    nombre: string;
+    apellido: string;
+    email: string;
+    telefono?: string;
+    carrera_director: string;
+  }): Promise<{
+    success: boolean;
+    usuario: User;
+    credenciales: { email: string; password: string; whatsapp_enviado: boolean };
+  }> => {
+    const response = await api.post('/auth/crear-director', data);
+    return response.data;
+  },
 };
 
 
@@ -313,8 +333,14 @@ export const usuarioService = {
     return response.data;
   },
 
-  // Mantener alias por compatibilidad
-  createDirector: async (data: Partial<User>) => usuarioService.createUsuario({ ...data, rol: 'director' }),
+  // Mantener alias por compatibilidad — retorna credenciales al crear directores
+  createDirector: async (data: Partial<User>): Promise<{
+    success: boolean;
+    usuario: User;
+    mensaje?: string;
+    credenciales?: { email: string; password: string; whatsapp_enviado: boolean };
+  }> => usuarioService.createUsuario({ ...data, rol: 'director' }) as any,
+
 
   updateUsuario: async (id: number, data: Partial<User>): Promise<{ success: boolean; mensaje: string; usuario: User }> => {
     const response = await api.put(`/usuarios/${id}`, data);
@@ -331,6 +357,11 @@ export const usuarioService = {
 
   // Mantener alias por compatibilidad
   deleteDirector: async (id: number) => usuarioService.deleteUsuario(id),
+
+  generarCredenciales: async (id: number): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean }; mensaje: string }> => {
+    const response = await api.post(`/usuarios/${id}/generar-credenciales`);
+    return response.data;
+  },
 
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
     const response = await api.put(`/usuarios/${id}/carrera`, { carrera });
@@ -911,10 +942,13 @@ export interface Incidencia {
   id: number;
   titulo: string;
   descripcion: string;
-  tipo: 'HARDWARE' | 'SOFTWARE' | 'LIMPIEZA' | 'CLIMATIZACION' | 'MOBILIARIO' | 'OTRO';
+  tipo: 'EQUIPOS' | 'OBJETOS_OLVIDADOS' | 'LIMPIEZA' | 'ACCESO' | 'OTRO';
   prioridad: 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
   estado: 'PENDIENTE' | 'REVISANDO' | 'RESUELTO' | 'CERRADO';
   aula_codigo: string;
+  foto_path?: string;
+  nota_director?: string;
+  carrera_id?: number;
   fecha_resolucion?: string;
   respuesta_tecnica?: string;
   created_at: string;
@@ -930,9 +964,27 @@ export interface Incidencia {
   };
 }
 
+// URL base para servir archivos estáticos del backend
+const BACKEND_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '');
+
+export function incidenciaFotoUrl(foto_path?: string): string | null {
+  if (!foto_path) return null;
+  return `${BACKEND_BASE}/uploads/incidencias/${foto_path}`;
+}
+
+export const TIPO_INCIDENCIA_LABELS: Record<string, string> = {
+  EQUIPOS: 'Equipo dañado',
+  OBJETOS_OLVIDADOS: 'Obj. olvidado',
+  LIMPIEZA: 'Limpieza',
+  ACCESO: 'Problema acceso',
+  OTRO: 'Otro'
+};
+
 export const incidenciaService = {
-  crear: async (data: { titulo: string; descripcion: string; tipo: string; prioridad?: string; aula_codigo: string }): Promise<{ success: boolean; incidencia: Incidencia }> => {
-    const response = await api.post('/incidencias', data);
+  crear: async (formData: FormData): Promise<{ success: boolean; incidencia: Incidencia }> => {
+    const response = await api.post('/incidencias', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return response.data;
   },
 
@@ -945,7 +997,7 @@ export const incidenciaService = {
     return response.data;
   },
 
-  actualizarEstado: async (id: number, data: { estado: string; respuesta_tecnica?: string }): Promise<{ success: boolean; incidencia: Incidencia }> => {
+  actualizarEstado: async (id: number, data: { estado: string; respuesta_tecnica?: string; nota_director?: string }): Promise<{ success: boolean; incidencia: Incidencia }> => {
     const response = await api.put(`/incidencias/${id}/estado`, data);
     return response.data;
   }
@@ -994,18 +1046,28 @@ export const docenteService = {
     return response.data;
   },
 
-  createDocente: async (data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
-    const response = await api.post<{ success: boolean; docente: Docente; mensaje: string }>('/docentes', data);
+  createDocente: async (data: Partial<Docente>): Promise<{
+    success: boolean;
+    docente: Docente;
+    mensaje: string;
+    credenciales?: { email: string; password: string; whatsapp_enviado: boolean } | null;
+  }> => {
+    const response = await api.post('/docentes', data);
     return response.data;
   },
 
-  updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string }> => {
-    const response = await api.put<{ success: boolean; docente: Docente; mensaje: string }>(`/docentes/${id}`, data);
+  updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string; credenciales?: { email: string; password: string; whatsapp_enviado: boolean } }> => {
+    const response = await api.put(`/docentes/${id}`, data);
     return response.data;
   },
 
   updateTelefono: async (id: number, telefono: string): Promise<{ success: boolean; message: string }> => {
     const response = await api.put<{ success: boolean; message: string }>(`/docentes/${id}/telefono`, { telefono });
+    return response.data;
+  },
+
+  crearCuenta: async (id: number): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean }; mensaje: string }> => {
+    const response = await api.post(`/docentes/${id}/crear-cuenta`);
     return response.data;
   },
 

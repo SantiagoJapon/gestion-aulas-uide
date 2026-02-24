@@ -49,7 +49,11 @@ const MateriaCatalogo = sequelize.define('MateriaCatalogo', {
   }
 }, {
   tableName: 'materias_catalogo',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    { fields: ['carrera_id'] },
+    { fields: ['nombre'] }
+  ]
 });
 
 module.exports = MateriaCatalogo;

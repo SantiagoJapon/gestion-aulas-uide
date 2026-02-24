@@ -2,7 +2,7 @@ import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import DashboardWidget from '../components/dashboard/DashboardWidget';
-import { distribucionService, reservaService, notificacionService, Notificacion } from '../services/api';
+import { distribucionService, notificacionService, Notificacion } from '../services/api';
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
@@ -273,6 +273,9 @@ export default function EstudianteDashboard() {
     {
       target: '#tour-help-button',
       content: 'Si alguna vez necesitas repetir este tour, solo haz clic aquí.',
+      placement: 'top-end',
+      disableScrolling: true,
+      spotlightPadding: 10,
     }
   ];
 

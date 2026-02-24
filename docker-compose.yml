@@ -191,13 +191,16 @@ services:
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - EVOLUTION_INSTANCE=bot
       - BOT_PORT=3020
-      - DB_HOST=postgres
+      - BACKEND_URL=http://gestion_aulas_backend:3000
+      - DB_HOST=gestion_aulas_db
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=gestion_aulas
       - DB_SSL=false
       - VOICE_API_KEY=${VOICE_API_KEY:-}
+    volumes:
+      - ./whatsapp-bot-aulas:/app
     ports:
       - "3020:3020"
     depends_on:

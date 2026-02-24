@@ -33,7 +33,12 @@ const HistorialCarga = sequelize.define('HistorialCarga', {
   },
   usuario_id: {
     type: DataTypes.INTEGER,
-    allowNull: true
+    allowNull: true,
+    references: {
+      model: 'usuarios',
+      key: 'id'
+    },
+    onDelete: 'SET NULL'
   }
 }, {
   tableName: 'historial_cargas',

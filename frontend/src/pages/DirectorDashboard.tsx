@@ -4,7 +4,7 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { AuthContext } from '../context/AuthContext';
 import MapaCalor from '../components/MapaCalor';
 import HorarioVisual from '../components/HorarioVisual';
-import { planificacionService, distribucionService, notificacionService } from '../services/api';
+import { planificacionService, distribucionService } from '../services/api';
 import { Button } from '../components/common/Button';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
@@ -13,12 +13,82 @@ import DocenteTable from '../components/DocenteTable';
 import EstudianteTable from '../components/EstudianteTable';
 import ClaseEditModal from '../components/ClaseEditModal';
 import DisponibilidadAulas from '../components/DisponibilidadAulas';
+import GuidedTour from '../components/common/GuidedTour';
+import { Step } from 'react-joyride';
+
+import { HealthReportModal } from '../components/director/HealthReportModal';
+import { ComunicadoModal } from '../components/director/ComunicadoModal';
 
 const DirectorDashboard = () => {
-
   const { user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // --- Tour de Guia ---
+  const [runTour, setRunTour] = useState(false);
+
+  const tourSteps: Step[] = [
+    {
+      target: '#tour-logo',
+      content: 'Bienvenido Director de Carrera. Este sistema te ayuda a gestionar la planificación académica de tu carrera.',
+      placement: 'right',
+      disableBeacon: true,
+    },
+    {
+      target: '#tour-nav-general',
+      content: 'En INICIO verás un resumen de tu carrera: clases programadas, docentes asignados, conflictos y el porcentaje de eficiencia de distribución.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-centro-datos',
+      content: 'En el CENTRO DE DATOS puedes subir la planificación académica desde Excel con el botón "Subir Planificación" y ejecutar la distribución automática de clases.',
+      placement: 'left',
+    },
+    {
+      target: '#tour-nav-docentes',
+      content: 'En DOCENTES gestionas la información de tus docentes: contacto, títulos y disponibilidad.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-estudiantes',
+      content: 'En ESTUDIANTES puedes subir el listado de estudiantes inscritos desde Excel.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-nav-incidencias',
+      content: 'En INCIDENCIAS puedes reportar problemas de aulas, equipos o solicitar mantenimiento.',
+      placement: 'right',
+    },
+    {
+      target: '#tour-help-button',
+      content: 'Si necesitas ayuda en cualquier momento, haz clic en este botón dorado de ayuda para reiniciar el tour.',
+      placement: 'top-end',
+      disableScrolling: true,
+      spotlightPadding: 10,
+    },
+  ];
+
+  useEffect(() => {
+    const hasSeenTour = localStorage.getItem('uide_tour_director_v1');
+    if (!hasSeenTour) {
+      setTimeout(() => setRunTour(true), 1000);
+    }
+
+    const handleRestart = () => {
+      localStorage.removeItem('uide_tour_director_v1');
+      setRunTour(false);
+      setTimeout(() => setRunTour(true), 100);
+    };
+
+    window.addEventListener('restart-uide-tour', handleRestart);
+    return () => window.removeEventListener('restart-uide-tour', handleRestart);
+  }, []);
+
+  const handleTourFinish = () => {
+    localStorage.setItem('uide_tour_director_v1', 'true');
+    setRunTour(false);
+  };
+
   const [uploading, setUploading] = useState(false);
   const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, porcentaje_completado: 0 });
   const [misClases, setMisClases] = useState<any[]>([]);
@@ -28,146 +98,6 @@ const DirectorDashboard = () => {
   const [isComunicadoOpen, setIsComunicadoOpen] = useState(false);
   const [healthReport, setHealthReport] = useState<any>(null);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
-
-  // Modal de Reporte de Salud (Feedback para el Director)
-  const HealthReportModal = () => {
-    if (!isHealthModalOpen || !healthReport) return null;
-
-    const { total_clases, clases_sin_horario, clases_sin_estudiantes, clases_sin_docente, estado_general, recomendacion } = healthReport;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
-        <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-border p-8 space-y-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className={`size-10 rounded-2xl flex items-center justify-center ${estado_general === 'bueno' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>
-                <span className="material-symbols-outlined">{estado_general === 'bueno' ? 'verified' : 'warning'}</span>
-              </div>
-              <h3 className="text-xl font-black text-foreground tracking-tight">Reporte de Salud de Datos</h3>
-            </div>
-            <button onClick={() => setIsHealthModalOpen(false)} className="text-muted-foreground hover:text-foreground">
-              <span className="material-symbols-outlined">close</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-border/50">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Total Procesado</p>
-              <p className="text-2xl font-black text-foreground">{total_clases}</p>
-            </div>
-            <div className={`p-4 rounded-3xl border border-border/50 ${clases_sin_horario > 0 ? 'bg-red-500/5' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Horario</p>
-              <p className={`text-2xl font-black ${clases_sin_horario > 0 ? 'text-red-500' : 'text-foreground'}`}>{clases_sin_horario}</p>
-            </div>
-            <div className={`p-4 rounded-3xl border border-border/50 ${clases_sin_estudiantes > 0 ? 'bg-amber-500/5' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Estudiantes</p>
-              <p className={`text-2xl font-black ${clases_sin_estudiantes > 0 ? 'text-amber-500' : 'text-foreground'}`}>{clases_sin_estudiantes}</p>
-            </div>
-            <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-border/50">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Sin Docente</p>
-              <p className="text-2xl font-black text-foreground">{clases_sin_docente}</p>
-            </div>
-          </div>
-
-          <div className="p-5 rounded-3xl bg-primary/5 border border-primary/10">
-            <h4 className="text-xs font-black text-primary uppercase tracking-widest mb-2">Recomendación</h4>
-            <p className="text-sm font-medium text-foreground/80 leading-relaxed italic">
-              "{recomendacion}"
-            </p>
-          </div>
-
-          <div className="pt-4 flex gap-3">
-            <Button variant="primary" fullWidth onClick={() => setIsHealthModalOpen(false)}>
-              Entendido
-            </Button>
-            {estado_general !== 'bueno' && (
-              <Button variant="secondary" fullWidth onClick={() => { setIsHealthModalOpen(false); }}>
-                Corregir Excel
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const ComunicadoModal = () => {
-    const [titulo, setTitulo] = useState('');
-    const [mensaje, setMensaje] = useState('');
-    const [prioridad, setPrioridad] = useState('MEDIA');
-    const [sending, setSending] = useState(false);
-
-    if (!isComunicadoOpen) return null;
-
-    const handleEnviar = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setSending(true);
-      try {
-        const carreraId = user?.carrera?.id;
-        await notificacionService.crear({
-          titulo,
-          mensaje,
-          tipo: 'CARRERA',
-          prioridad,
-          carrera_id: carreraId
-        });
-        alert("Comunicado enviado exitosamente.");
-        setIsComunicadoOpen(false);
-        setTitulo('');
-        setMensaje('');
-      } catch (error) {
-        console.error(error);
-        alert("Error al enviar comunicado.");
-      } finally {
-        setSending(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
-        <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl border border-border p-6 space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-black text-foreground tracking-tight">Nuevo Comunicado</h3>
-            <button onClick={() => setIsComunicadoOpen(false)} className="text-muted-foreground hover:text-foreground">
-              <span className="material-symbols-outlined">close</span>
-            </button>
-          </div>
-          <form onSubmit={handleEnviar} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Título</label>
-              <input required value={titulo} onChange={e => setTitulo(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-border rounded-xl px-4 py-2.5 text-sm font-medium" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Mensaje</label>
-              <textarea required value={mensaje} onChange={e => setMensaje(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-border rounded-xl px-4 py-3 text-sm h-32 font-medium" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase text-slate-500">Prioridad</label>
-              <div className="flex gap-2">
-                {['BAJA', 'MEDIA', 'ALTA'].map(p => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPrioridad(p)}
-                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${prioridad === p
-                      ? (p === 'ALTA' ? 'bg-red-500 text-white border-red-600' : p === 'MEDIA' ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-500 text-white border-slate-600')
-                      : 'bg-muted/20 text-muted-foreground hover:bg-muted/40 border-transparent'
-                      }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Button variant="primary" fullWidth loading={sending} type="submit">
-              <span className="material-symbols-outlined text-lg mr-2">send</span>
-              Enviar Ahora
-            </Button>
-          </form>
-        </div>
-      </div>
-    );
-  };
 
   useEffect(() => {
     if (user) {
@@ -244,7 +174,7 @@ const DirectorDashboard = () => {
           <div className="space-y-10 pb-20 animate-fade-in px-1">
 
             {/* 1. KPIs SUPERIORES - Vista Panorámica */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div id="tour-kpis-director" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               {[
                 { label: 'Clases Totales', value: stats.total_clases, icon: 'analytics', color: 'blue', desc: 'Carga académica' },
                 { label: 'Asignadas', value: stats.clases_asignadas, icon: 'verified', color: 'emerald', desc: 'Con aula física' },
@@ -268,7 +198,7 @@ const DirectorDashboard = () => {
             </div>
 
             {/* 2. AREA DE HORARIO (FULL WIDTH) - Fundamental para legibilidad */}
-            <div className="w-full">
+            <div id="tour-horario-carrera" className="w-full">
               <DashboardWidget
                 title="Horario de Carrera"
                 subtitle="Mapa cronológico de clases distribuidas"
@@ -375,79 +305,81 @@ const DirectorDashboard = () => {
               <div className="lg:col-span-4 space-y-10">
 
                 {/* Herramientas de Carga */}
-                <DashboardWidget title="Centro de Datos" icon="database">
-                  <div className="space-y-8">
-                    {/* Horarios */}
-                    <div className="p-6 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
-                      <div className="relative z-10">
-                        <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
-                          <span className="material-symbols-outlined text-sm">backup</span>
-                          Subir Planificación
+                <div id="tour-centro-datos">
+                  <DashboardWidget title="Centro de Datos" icon="database">
+                    <div className="space-y-8">
+                      {/* Horarios */}
+                      <div className="p-6 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
+                        <div className="relative z-10">
+                          <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm">backup</span>
+                            Subir Planificación
+                          </h4>
+                          <form onSubmit={handleUpload} className="space-y-4">
+                            <label className="relative flex flex-col items-center justify-center p-8 border-2 border-dashed border-primary/20 rounded-3xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
+                              <input type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                              <span className="material-symbols-outlined text-4xl text-primary/30 group-hover/label:text-primary transition-colors">upload_file</span>
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase mt-3 text-center truncate w-full">
+                                {selectedFile ? selectedFile.name : 'Seleccionar Excel'}
+                              </span>
+                            </label>
+                            <Button variant="primary" fullWidth loading={uploading} size="sm" disabled={!selectedFile}>
+                              Procesar Ahora
+                            </Button>
+                          </form>
+                        </div>
+                      </div>
+
+                      {/* Acciones de Distribución */}
+                      <div className="pt-6 border-t border-border">
+                        <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">settings_motion_mode</span>
+                          Distribución Automática
                         </h4>
-                        <form onSubmit={handleUpload} className="space-y-4">
-                          <label className="relative flex flex-col items-center justify-center p-8 border-2 border-dashed border-primary/20 rounded-3xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
-                            <input type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-                            <span className="material-symbols-outlined text-4xl text-primary/30 group-hover/label:text-primary transition-colors">upload_file</span>
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase mt-3 text-center truncate w-full">
-                              {selectedFile ? selectedFile.name : 'Seleccionar Excel'}
-                            </span>
-                          </label>
-                          <Button variant="primary" fullWidth loading={uploading} size="sm" disabled={!selectedFile}>
-                            Procesar Ahora
-                          </Button>
-                        </form>
-                      </div>
-                    </div>
-
-                    {/* Acciones de Distribución */}
-                    <div className="pt-6 border-t border-border">
-                      <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">settings_motion_mode</span>
-                        Distribución Automática
-                      </h4>
-                      <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                        <p className="text-[10px] text-muted-foreground mb-4 leading-relaxed">
-                          Si ha subido una nueva planificación, ejecute el algoritmo para asignar aulas automáticamente a su carrera.
-                        </p>
-                        <Button
-                          variant="secondary"
-                          fullWidth
-                          size="sm"
-                          onClick={async () => {
-                            if (!confirm('¿Iniciar distribución para ' + (user?.carrera?.carrera || 'su carrera') + '?')) return;
-                            try {
-                              const res = await distribucionService.ejecutarDistribucion(user?.carrera?.id);
-                              if (res.success) {
-                                alert('Distribución completada: ' + res.estadisticas.exitosas + ' clases asignadas.');
-                                loadStats();
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                          <p className="text-[10px] text-muted-foreground mb-4 leading-relaxed">
+                            Si ha subido una nueva planificación, ejecute el algoritmo para asignar aulas automáticamente a su carrera.
+                          </p>
+                          <Button
+                            variant="secondary"
+                            fullWidth
+                            size="sm"
+                            onClick={async () => {
+                              if (!confirm('¿Iniciar distribución para ' + (user?.carrera?.carrera || 'su carrera') + '?')) return;
+                              try {
+                                const res = await distribucionService.ejecutarDistribucion(user?.carrera?.id);
+                                if (res.success) {
+                                  alert('Distribución completada: ' + res.estadisticas.exitosas + ' clases asignadas.');
+                                  loadStats();
+                                }
+                              } catch (e: any) {
+                                alert(e.response?.data?.mensaje || 'Error al ejecutar distribución');
                               }
-                            } catch (e: any) {
-                              alert(e.response?.data?.mensaje || 'Error al ejecutar distribución');
-                            }
-                          }}
-                        >
-                          <span className="material-symbols-outlined text-base mr-2">auto_fix_high</span>
-                          Ejecutar Distribución
-                        </Button>
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-base mr-2">auto_fix_high</span>
+                            Ejecutar Distribución
+                          </Button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Estudiantes */}
-                    <div className="pt-6 border-t border-border">
-                      <div className="text-[10px] font-black text-foreground uppercase mb-2 flex items-center gap-2">
-                        <div className="w-1.5 h-4 bg-primary rounded-full"></div> Sheet 1: Estudiantes
+                      {/* Estudiantes */}
+                      <div className="pt-6 border-t border-border">
+                        <div className="text-[10px] font-black text-foreground uppercase mb-2 flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div> Sheet 1: Estudiantes
+                        </div>
+                        <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">group_add</span>
+                          Carga de Estudiantes
+                        </h4>
+                        <SubirEstudiantes isCompact />
                       </div>
-                      <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">group_add</span>
-                        Carga de Estudiantes
-                      </h4>
-                      <SubirEstudiantes isCompact />
                     </div>
-                  </div>
-                </DashboardWidget>
+                  </DashboardWidget>
+                </div>
 
                 {/* Perfil del Director */}
-                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                <div id="tour-perfil-director" className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-all duration-700">
                     <span className="material-symbols-outlined text-[12rem]">verified_user</span>
                   </div>
@@ -492,7 +424,6 @@ const DirectorDashboard = () => {
       case 'disponibilidad':
         return <DisponibilidadAulas />;
       case 'estudiantes':
-
         const nombreCarrera = user?.carrera?.carrera || user?.carrera_director || '';
         return (
           <div className="space-y-12 animate-fade-in pb-20">
@@ -570,8 +501,23 @@ const DirectorDashboard = () => {
         onUpdate={handleClaseUpdate}
       />
 
-      <HealthReportModal />
-      <ComunicadoModal />
+      <HealthReportModal
+        isOpen={isHealthModalOpen}
+        onClose={() => setIsHealthModalOpen(false)}
+        report={healthReport}
+      />
+
+      <ComunicadoModal
+        isOpen={isComunicadoOpen}
+        onClose={() => setIsComunicadoOpen(false)}
+        user={user}
+      />
+
+      <GuidedTour
+        steps={tourSteps}
+        run={runTour}
+        onFinish={handleTourFinish}
+      />
     </DashboardLayout>
   );
 };

@@ -46,7 +46,7 @@ const crearUsuarioParaDocente = async (docente, transaction = null) => {
         nombre,
         apellido,
         email,
-        password: 'uide2024', // Password por defecto solicitado
+        password: 'uide2026', // Password temporal por defecto
         rol: 'docente',
         estado: 'activo',
         requiere_cambio_password: true,
@@ -209,15 +209,23 @@ exports.createDocente = async (req, res) => {
 
         await transaction.commit();
 
-        // Enviar notificación si tiene teléfono
+        const passwordTemporal = 'uide2026';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+        // Enviar notificación WhatsApp si tiene teléfono
         if (telefono && user) {
-            const mensaje = `*UIDE Gestión de Aulas*\n\nHola ${nombre}, se te ha registrado como docente. Tus credenciales son:\n\n📧 *Email:* ${user.email}\n🔑 *Clave:* uide2024\n\n🌐 Accede aquí: ${process.env.FRONTEND_URL || 'http://uide.edu.ec'}`;
-            await whatsappService.sendMessage(telefono, mensaje).catch(e => console.error('Error enviando WA:', e));
+            const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre}*, tu cuenta ha sido creada exitosamente.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña por una personal._\n\n¿Necesitas ayuda? Responde este mensaje.`;
+            whatsappService.sendMessage(telefono, mensaje).catch(e => console.warn('⚠️ WhatsApp no disponible:', e.message));
         }
 
         res.json({
             success: true,
             docente,
+            credenciales: user ? {
+                email: user.email,
+                password: passwordTemporal,
+                whatsapp_enviado: !!(telefono && user)
+            } : null,
             mensaje: 'Docente creado exitosamente con credenciales de acceso.'
         });
     } catch (error) {
@@ -255,6 +263,7 @@ exports.getDocenteById = async (req, res) => {
 
 /**
  * Actualizar datos de un docente
+ * Si el docente no tenía cuenta y se añade email/teléfono, se crea la cuenta y se envía WhatsApp.
  */
 exports.updateDocente = async (req, res) => {
     try {
@@ -275,22 +284,114 @@ exports.updateDocente = async (req, res) => {
             }
         }
 
-        await docente.update({
-            nombre,
-            email,
-            titulo_pregrado,
-            titulo_posgrado,
-            tipo,
-            telefono
-        });
+        const tenia_cuenta = !!docente.usuario_id;
+        const tenia_telefono = !!docente.telefono;
+
+        await docente.update({ nombre, email, titulo_pregrado, titulo_posgrado, tipo, telefono });
+
+        let credenciales = null;
+
+        // Si el docente no tenía cuenta y ahora tiene email o teléfono → crear cuenta
+        if (!tenia_cuenta && (email || telefono)) {
+            const user = await crearUsuarioParaDocente(docente);
+            if (user) {
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                let whatsapp_enviado = false;
+                if (telefono) {
+                    const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ha sido creada.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+                    whatsapp_enviado = await whatsappService.sendMessage(telefono, msg);
+                }
+                credenciales = { email: user.email, password: 'uide2026', whatsapp_enviado };
+            }
+        } else if (tenia_cuenta && telefono && !tenia_telefono) {
+            // Tenía cuenta pero acaba de recibir teléfono → recordatorio de acceso
+            const user = await User.findByPk(docente.usuario_id, { attributes: ['email'] });
+            if (user) {
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, recuerda que ya tienes acceso al sistema.\n\n📧 *Correo:* ${user.email}\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Si olvidaste tu contraseña, solicita ayuda al administrador._`;
+                whatsappService.sendMessage(telefono, msg).catch(e => console.warn('WA error:', e.message));
+            }
+        }
 
         res.json({
             success: true,
             docente,
-            mensaje: 'Docente actualizado correctamente'
+            credenciales,
+            mensaje: credenciales ? 'Docente actualizado y cuenta creada exitosamente.' : 'Docente actualizado correctamente'
         });
     } catch (error) {
         handle500(res, error, 'updateDocente');
+    }
+};
+
+/**
+ * Crear cuenta de acceso para un docente individual (sin cuenta previa)
+ */
+exports.crearCuentaDocente = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuario = req.usuario;
+
+        const docente = await Docente.findByPk(id, {
+            include: [{ model: Carrera, as: 'carrera', attributes: ['id', 'carrera'] }]
+        });
+        if (!docente) return res.status(404).json({ success: false, message: 'Docente no encontrado' });
+
+        // Seguridad: director solo puede gestionar su carrera
+        if (usuario.rol === 'director') {
+            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+            if (!carreraObj || docente.carrera_id !== carreraObj.id) {
+                return res.status(403).json({ success: false, message: 'No tienes permiso para gestionar este docente' });
+            }
+        }
+
+        let user;
+        let isNew = false;
+
+        if (docente.usuario_id) {
+            // Ya tiene cuenta — solo reenviar credenciales si aún no la ha activado
+            user = await User.findByPk(docente.usuario_id);
+            if (!user) {
+                return res.status(500).json({ success: false, message: 'Error: cuenta vinculada no encontrada' });
+            }
+            if (!user.requiere_cambio_password) {
+                return res.status(400).json({ success: false, message: 'Este docente ya activó su cuenta y no puede restablecerse desde aquí' });
+            }
+            // Resetear contraseña temporal (en texto plano — el hook beforeUpdate la hasheará)
+            user.password = 'uide2026';
+            user.requiere_cambio_password = true;
+            // Si el docente tiene un email real diferente al de la cuenta, actualizarlo
+            if (docente.email && docente.email !== user.email) {
+                const emailEnUso = await User.findOne({ where: { email: docente.email } });
+                if (!emailEnUso) {
+                    user.email = docente.email;
+                }
+            }
+            await user.save();
+        } else {
+            user = await crearUsuarioParaDocente(docente);
+            if (!user) {
+                return res.status(500).json({ success: false, message: 'No se pudo crear la cuenta' });
+            }
+            isNew = true;
+        }
+
+        let whatsapp_enviado = false;
+        if (docente.telefono) {
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const accion = isNew ? 'ha sido creada' : 'ha sido restablecida';
+            const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ${accion}.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+            whatsapp_enviado = await whatsappService.sendMessage(docente.telefono, msg);
+        }
+
+        const statusCode = isNew ? 201 : 200;
+        res.status(statusCode).json({
+            success: true,
+            credenciales: { email: user.email, password: 'uide2026', whatsapp_enviado },
+            mensaje: isNew ? 'Cuenta creada exitosamente' : 'Credenciales restablecidas exitosamente'
+        });
+    } catch (error) {
+        handle500(res, error, 'crearCuentaDocente');
     }
 };
 
@@ -349,8 +450,9 @@ exports.generarCredencialesMasivo = async (req, res) => {
                 creados++;
                 // Enviar WhatsApp si tiene teléfono
                 if (docente.telefono) {
-                    const mensaje = `*UIDE Gestión de Aulas*\n\nHola ${docente.nombre}, se han generado tus credenciales de acceso:\n\n📧 *Email:* ${user.email}\n🔑 *Clave temporal:* uide2024\n\n_Por seguridad, el sistema te pedirá cambiar tu clave al ingresar._\n\n🌐 Accede aquí: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`;
-                    await whatsappService.sendMessage(docente.telefono, mensaje);
+                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                    const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ha sido creada.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar, el sistema te pedirá cambiar tu contraseña._`;
+                    whatsappService.sendMessage(docente.telefono, mensaje).catch(e => console.warn('WA error:', e.message));
                     conTelefono++;
                 }
             }

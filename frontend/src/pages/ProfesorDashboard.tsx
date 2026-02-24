@@ -7,7 +7,6 @@ import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
-import { NavLink } from 'react-router-dom';
 
 
 // --- Utility Functions ---
@@ -86,13 +85,14 @@ const ClassActionModal = ({ isOpen, onClose, clase }: { isOpen: boolean; onClose
       if (problema.includes('Limpieza')) tipo = 'LIMPIEZA';
       if (problema.includes('Aire')) tipo = 'CLIMATIZACION';
 
-      await incidenciaService.crear({
-        titulo: problema,
-        descripcion: detalles || 'Sin detalles adicionales',
-        tipo,
-        prioridad: 'MEDIA',
-        aula_codigo: clase.codigo || clase.aula || 'S/A' // Asegurar código de aula
-      });
+      const formDataIncidencia = new FormData();
+      formDataIncidencia.append('titulo', problema);
+      formDataIncidencia.append('descripcion', detalles || 'Sin detalles adicionales');
+      formDataIncidencia.append('tipo', tipo);
+      formDataIncidencia.append('prioridad', 'MEDIA');
+      formDataIncidencia.append('aula_codigo', clase.codigo || clase.aula || 'S/A');
+
+      await incidenciaService.crear(formDataIncidencia);
       alert("Reporte enviado a administración. Se generó un ticket de incidencia.");
       onClose();
     } catch (error) {
@@ -412,6 +412,9 @@ export default function ProfesorDashboard() {
     {
       target: '#tour-help-button',
       content: 'Si tiene dudas sobre las nuevas funciones, puede reiniciar esta guía aquí.',
+      placement: 'top-end',
+      disableScrolling: true,
+      spotlightPadding: 10,
     }
   ];
 

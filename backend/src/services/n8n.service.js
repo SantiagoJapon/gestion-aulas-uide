@@ -147,6 +147,39 @@ class N8nService {
   }
 
   /**
+   * Notificar a n8n que una distribución se completó.
+   * n8n usará GPT-4o para generar un reporte ejecutivo en lenguaje natural
+   * y lo enviará al director de la carrera por WhatsApp.
+   *
+   * Este método es FIRE-AND-FORGET: el caller no debe await-arlo
+   * y debe capturar el rechazo con .catch() para no propagar errores.
+   *
+   * @param {Object} datos
+   * @param {number|null} datos.carrera_id
+   * @param {number|null} datos.usuario_id
+   * @param {Object} datos.estadisticas - { total, exitosas, fallidas, sobrecupos, eficiencia }
+   * @param {string} datos.timestamp
+   */
+  static async notificarDistribucionCompletada(datos) {
+    const response = await axios.post(
+      `${N8N_WEBHOOK_URL}/maestro`,
+      {
+        accion: 'reporte_distribucion',
+        carrera_id: datos.carrera_id || null,
+        usuario_id: datos.usuario_id || null,
+        estadisticas: datos.estadisticas,
+        timestamp: datos.timestamp || new Date().toISOString()
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000   // 15 s — si n8n no responde, el .catch() del caller lo absorbe
+      }
+    );
+    console.log('✅ n8n notificado de distribución completada');
+    return response.data;
+  }
+
+  /**
    * Verificar salud de n8n
    */
   static async healthCheck() {

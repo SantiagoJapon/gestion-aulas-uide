@@ -10,6 +10,7 @@ export default {
       colors: {
         'uide-blue': '#002D72',
         'uide-orange': '#EAAA00',
+        'uide-gold': '#c5a059',
         'brand-primary': '#910048',
         'brand-secondary': '#EAAA00',
         'brand-text': '#333333',

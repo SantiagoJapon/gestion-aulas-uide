@@ -27,7 +27,10 @@ const EstudianteMateria = sequelize.define('EstudianteMateria', {
     tableName: 'estudiantes_materias',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    indexes: [
+        { unique: true, fields: ['estudiante_id', 'clase_id'] }
+    ]
 });
 
 module.exports = EstudianteMateria;

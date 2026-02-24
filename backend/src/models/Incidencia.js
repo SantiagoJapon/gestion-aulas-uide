@@ -18,8 +18,9 @@ const Incidencia = sequelize.define('Incidencia', {
         allowNull: true
     },
     tipo: {
-        type: DataTypes.ENUM('HARDWARE', 'SOFTWARE', 'LIMPIEZA', 'CLIMATIZACION', 'MOBILIARIO', 'OTRO'),
+        type: DataTypes.STRING(50),
         defaultValue: 'OTRO'
+        // Valores válidos: EQUIPOS, OBJETOS_OLVIDADOS, LIMPIEZA, ACCESO, OTRO
     },
     prioridad: {
         type: DataTypes.ENUM('BAJA', 'MEDIA', 'ALTA', 'CRITICA'),
@@ -32,6 +33,22 @@ const Incidencia = sequelize.define('Incidencia', {
     aula_codigo: {
         type: DataTypes.STRING,
         allowNull: false
+    },
+    foto_path: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    nota_director: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    carrera_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'uploads_carreras',
+            key: 'id'
+        }
     },
     fecha_resolucion: {
         type: DataTypes.DATE,
@@ -52,7 +69,13 @@ const Incidencia = sequelize.define('Incidencia', {
 }, {
     tableName: 'incidencias',
     timestamps: true,
-    underscored: true
+    underscored: true,
+    indexes: [
+        { fields: ['estado'] },
+        { fields: ['tipo'] },
+        { fields: ['aula_codigo'] },
+        { fields: ['carrera_id'] }
+    ]
 });
 
 // Relaciones definidas en models/index.js para evitar duplicados

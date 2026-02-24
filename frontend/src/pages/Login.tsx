@@ -11,7 +11,7 @@ export default function Login() {
   const [email, setEmail] = useState(() => localStorage.getItem(REMEMBER_EMAIL_KEY) || '');
   const [password, setPassword] = useState('');
   const [cedula, setCedula] = useState('');
-  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(REMEMBER_EMAIL_KEY));
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,6 +37,13 @@ export default function Login() {
         await login(email, password, rememberMe);
         const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
         const user = JSON.parse(storedUser || '{}');
+
+        // Si el usuario tiene contraseña temporal, redirigir al cambio obligatorio
+        if (user.requiere_cambio_password) {
+          navigate('/cambiar-password');
+          return;
+        }
+
         const rolePath: Record<string, string> = {
           admin: '/admin',
           director: '/director',
@@ -65,20 +72,27 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6 transition-colors duration-300">
-      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-md overflow-hidden transition-colors duration-300">
-        <div className="p-8 sm:p-10">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 sm:p-6 transition-colors duration-300 relative overflow-hidden">
+      {/* Decoración de fondo sutil */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-secondary/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/3 rounded-full blur-3xl" />
+      </div>
+
+      <div className="bg-card rounded-2xl sm:rounded-3xl shadow-xl border border-border w-full max-w-sm sm:max-w-md transition-colors duration-300 relative z-10">
+        <div className="p-6 sm:p-8 lg:p-10">
           {/* Logo + Título */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground mb-5 shadow-lg shadow-primary/25">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary text-primary-foreground mb-4 shadow-lg shadow-primary/25">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground mb-1.5">
               {mode === 'estudiante' ? 'Portal Estudiante' : 'Panel de Administración'}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Acceso Institucional Seguro
             </p>
           </div>
@@ -89,11 +103,10 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => { setMode('docente'); setError(''); }}
-                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  mode === 'docente'
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${mode === 'docente'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 <span className="material-symbols-outlined text-base align-middle mr-1">badge</span>
                 Docente
@@ -101,11 +114,10 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => { setMode('estudiante'); setError(''); }}
-                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  mode === 'estudiante'
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`flex-1 py-2 px-3 text-sm font-semibold rounded-lg transition-all duration-200 ${mode === 'estudiante'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 <span className="material-symbols-outlined text-base align-middle mr-1">school</span>
                 Estudiante

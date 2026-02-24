@@ -7,7 +7,8 @@ const {
   createUsuario,
   updateUsuario,
   deleteUsuario,
-  resetPasswordUsuario
+  resetPasswordUsuario,
+  generarCredencialesUsuario
 } = require('../controllers/usuarioController');
 
 const { verificarAuth, verificarAdmin, verificarRol } = require('../middleware/auth');
@@ -26,6 +27,9 @@ router.delete('/:id', verificarAuth, verificarRol('admin', 'director'), deleteUs
 
 // Resetear contraseña de un usuario (admin/director)
 router.post('/:id/reset-password', verificarAuth, verificarRol('admin', 'director'), resetPasswordUsuario);
+
+// Generar/restablecer credenciales de acceso para un director (solo admin)
+router.post('/:id/generar-credenciales', verificarAuth, verificarRol('admin'), generarCredencialesUsuario);
 
 // Específico para Admin: asignar carreras a directores
 router.put('/:id/carrera', verificarAuth, verificarAdmin, updateDirectorCarrera);

@@ -156,6 +156,23 @@ class ReporteService {
                 type: QueryTypes.SELECT
             });
 
+            // 9. Estadísticas de Reservas (NUEVO)
+            const statsReservasQuery = `
+        SELECT 
+          tipo_espacio,
+          COUNT(*) as total,
+          SUM(CASE WHEN es_grupal THEN 1 ELSE 0 END) as grupales,
+          SUM(CASE WHEN NOT es_grupal THEN 1 ELSE 0 END) as individuales,
+          AVG(num_personas) as promedio_personas
+        FROM reservas
+        WHERE estado IN ('activa', 'finalizada')
+        GROUP BY tipo_espacio
+      `;
+
+            const statsReservas = await sequelize.query(statsReservasQuery, {
+                type: QueryTypes.SELECT
+            });
+
             return {
                 resumen: {
                     total_clases: totalClases,
@@ -170,6 +187,7 @@ class ReporteService {
                 huerfanos_detalle: huerfanosDetalle,
                 stats_espacios: statsEspacios,
                 carga_docentes: cargaDocentes,
+                stats_reservas: statsReservas,
                 timestamp: new Date().toISOString()
             };
 
@@ -339,6 +357,35 @@ class ReporteService {
                                 ]
                             },
                             layout: 'lightHorizontalLines',
+                            margin: [0, 5, 0, 20]
+                        },
+
+                        { text: '6. USO DINÁMICO DE ESPACIOS (BOT)', style: 'sectionTitle' },
+                        {
+                            text: `Este indicador mide el uso espontáneo de espacios reservables gestionados a través del Bot Roomie, diferenciando el uso individual del grupal:`,
+                            style: 'paragraph'
+                        },
+                        {
+                            table: {
+                                widths: ['*', 'auto', 'auto', 'auto', 'auto'],
+                                body: [
+                                    [
+                                        { text: 'Tipo de Espacio', style: 'tableHeader' },
+                                        { text: 'Total', style: 'tableHeader' },
+                                        { text: 'Individual', style: 'tableHeader' },
+                                        { text: 'Grupal', style: 'tableHeader' },
+                                        { text: 'Prom. Pers.', style: 'tableHeader' }
+                                    ],
+                                    ...metricas.stats_reservas.map(sr => [
+                                        { text: sr.tipo_espacio, style: 'tableCell' },
+                                        { text: sr.total.toString(), style: 'tableCell' },
+                                        { text: (sr.individuales || 0).toString(), style: 'tableCell' },
+                                        { text: (sr.grupales || 0).toString(), style: 'tableCell' },
+                                        { text: parseFloat(sr.promedio_personas || 1).toFixed(1), style: 'tableCell' }
+                                    ])
+                                ]
+                            },
+                            layout: 'headerLineOnly',
                             margin: [0, 5, 0, 20]
                         }
                     ],

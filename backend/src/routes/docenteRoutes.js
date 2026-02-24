@@ -18,7 +18,7 @@ router.put('/:id', verificarAuth, verificarRol('admin', 'director'), docenteCont
 // Actualizar teléfono de docente (para WhatsApp)
 router.put('/:id/telefono', verificarAuth, verificarRol('admin', 'director'), docenteController.updateTelefono);
 
-// Generar credenciales masivo
-router.post('/generar-credenciales', verificarAuth, verificarRol('admin', 'director'), docenteController.generarCredencialesMasivo);
+// Crear cuenta individual para un docente (sin cuenta previa)
+router.post('/:id/crear-cuenta', verificarAuth, verificarRol('admin', 'director'), docenteController.crearCuentaDocente);
 
 module.exports = router;

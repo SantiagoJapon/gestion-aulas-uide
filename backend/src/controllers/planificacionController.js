@@ -12,6 +12,7 @@ const path = require('path');
 const { processExcel } = require('../services/excel-parser.service');
 const { analizarExcelConIA, esOpenAIConfigurado } = require('../services/openai.service');
 const distribucionService = require('../services/distribucion.service');
+const N8nService = require('../services/n8n.service');
 
 const eventEmitter = new EventEmitter();
 
@@ -267,14 +268,41 @@ exports.subirPlanificacion = async (req, res) => {
         // Si el excel trae un aula, buscar su código en la BD
         let aulaCodigo = null;
         if (clase.aula && clase.aula.trim().length > 0) {
-          const aulaEncontrada = await Aula.findOne({
+          const aulaVal = clase.aula.toLowerCase().trim();
+
+          // Buscar primero por codigo exacto (ej: "C12", "Lab. 1")
+          let aulaEncontrada = await Aula.findOne({
             where: sequelize.where(
-              sequelize.fn('LOWER', sequelize.col('nombre')),
-              'LIKE',
-              `%${clase.aula.toLowerCase().trim()}%`
+              sequelize.fn('LOWER', sequelize.col('codigo')),
+              aulaVal
             ),
             transaction
           });
+
+          // Si no se encuentra por codigo, buscar por nombre parcial
+          if (!aulaEncontrada) {
+            aulaEncontrada = await Aula.findOne({
+              where: sequelize.where(
+                sequelize.fn('LOWER', sequelize.col('nombre')),
+                'LIKE',
+                `%${aulaVal}%`
+              ),
+              transaction
+            });
+          }
+
+          // Si aún no, buscar codigo parcial (ej: "Lab 1" match "LAB-1")
+          if (!aulaEncontrada) {
+            aulaEncontrada = await Aula.findOne({
+              where: sequelize.where(
+                sequelize.fn('LOWER', sequelize.col('codigo')),
+                'LIKE',
+                `%${aulaVal.replace(/[\s.]+/g, '%')}%`
+              ),
+              transaction
+            });
+          }
+
           if (aulaEncontrada) {
             aulaCodigo = aulaEncontrada.codigo;
           }
@@ -293,7 +321,8 @@ exports.subirPlanificacion = async (req, res) => {
           num_estudiantes: clase.num_estudiantes || 0,
           docente: clase.docente || '',
           docente_id: docenteId, // LINK RELACIONAL
-          aula_asignada: aulaCodigo
+          aula_asignada: aulaCodigo,
+          aula_sugerida: clase.aula_sugerida || null
         }, { transaction });
 
         clasesGuardadas++;
@@ -677,6 +706,23 @@ eventEmitter.on('nueva_planificacion', async (data) => {
     if (resultado.estadisticas) {
       console.log(`   📊 Exitosas: ${resultado.estadisticas.exitosas}, Fallidas: ${resultado.estadisticas.fallidas}`);
     }
+
+    // ============================================
+    // 🤖 NOTIFICAR A n8n (fire-and-forget)
+    // n8n genera reporte IA con GPT-4o y notifica
+    // al director por WhatsApp. Si n8n está caído,
+    // el flujo principal NO se ve afectado.
+    // ============================================
+    N8nService.notificarDistribucionCompletada({
+      carrera_id: data.carrera_id,
+      usuario_id: data.usuario_id,
+      estadisticas: resultado.estadisticas || {},
+      timestamp: new Date().toISOString()
+    }).catch(err => {
+      // Solo log — nunca propagar el error
+      console.warn('⚠️ n8n no disponible para reporte post-distribución:', err.message);
+    });
+
   } catch (error) {
     console.error('❌ Error en distribución automática post-upload:', error.message);
   }

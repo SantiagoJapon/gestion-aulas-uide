@@ -5,9 +5,11 @@ const {
   loginUsuario,
   obtenerPerfil,
   actualizarPerfil,
-  cambiarPassword
+  cambiarPassword,
+  cambiarPasswordPrimerIngreso,
+  crearDirector
 } = require('../controllers/authController');
-const { verificarAuth } = require('../middleware/auth');
+const { verificarAuth, verificarRol } = require('../middleware/auth');
 const {
   validarRegistro,
   validarLogin,
@@ -76,5 +78,19 @@ router.put('/perfil', verificarAuth, validarActualizarPerfil, actualizarPerfil);
  * @access  Private
  */
 router.put('/cambiar-password', verificarAuth, validarCambiarPassword, cambiarPassword);
+
+/**
+ * @route   PUT /api/auth/primer-ingreso
+ * @desc    Cambiar contraseña en el primer ingreso (sin necesitar la temporal)
+ * @access  Private (solo si requiere_cambio_password = true)
+ */
+router.put('/primer-ingreso', verificarAuth, cambiarPasswordPrimerIngreso);
+
+/**
+ * @route   POST /api/auth/crear-director
+ * @desc    Crear nuevo director con credenciales temporales (envía WhatsApp si tiene teléfono)
+ * @access  Private (solo admin)
+ */
+router.post('/crear-director', verificarAuth, verificarRol('admin'), crearDirector);
 
 module.exports = router;

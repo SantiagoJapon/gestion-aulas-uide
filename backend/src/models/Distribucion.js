@@ -28,7 +28,7 @@ const Distribucion = sequelize.define('Distribucion', {
     }
   },
   dia: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(50),
     allowNull: false
   },
   hora_inicio: {

@@ -20,10 +20,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Router principal - detecta la acción solicitada\nlet body;\nif ($input.item.json.body) {\n  body = $input.item.json.body;\n} else if ($input.item.json.data) {\n  body = $input.item.json.data;\n} else {\n  body = $input.item.json;\n}\n\nconst accion = body.accion || 'sin_accion';\n\nconsole.log('========== ROUTER MAESTRO ==========');\nconsole.log('Acción detectada:', accion);\nconsole.log('===================================');\n\nreturn {\n  accion: accion,\n  datos: body,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// Router principal - detecta la acciÃ³n solicitada\nlet body;\nif ($input.item.json.body) {\n  body = $input.item.json.body;\n} else if ($input.item.json.data) {\n  body = $input.item.json.data;\n} else {\n  body = $input.item.json;\n}\n\nconst accion = body.accion || 'sin_accion';\n\nconsole.log('========== ROUTER MAESTRO ==========');\nconsole.log('AcciÃ³n detectada:', accion);\nconsole.log('===================================');\n\nreturn {\n  accion: accion,\n  datos: body,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "07a484c7-db8a-486f-b038-956cc15ee908",
-      "name": "Router - Detectar Acción",
+      "name": "Router - Detectar AcciÃ³n",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -118,6 +118,27 @@
               },
               "renameOutput": true,
               "outputKey": "obtener_estado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "reporte_distribucion",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reporte_distribucion"
             }
           ]
         },
@@ -136,7 +157,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Validar carrera para planificación\n// Acepta carrera_id O carrera_nombre\nconst datos = $input.item.json.datos;\nconst carrera_id = datos.carrera_id || null;\nconst carrera_nombre = datos.carrera_nombre || null;\nconst archivo_url = datos.archivo_url || null;\nconst archivo_base64 = datos.archivo_base64 || null;\n\nif (!carrera_id && !carrera_nombre) {\n  throw new Error('Se requiere carrera_id o carrera_nombre');\n}\n\nif (!archivo_url && !archivo_base64) {\n  throw new Error('Se requiere archivo_url o archivo_base64');\n}\n\nreturn {\n  carrera_id: carrera_id,\n  carrera_nombre: carrera_nombre,\n  archivo_url: archivo_url,\n  archivo_base64: archivo_base64,\n  nombre_archivo: datos.nombre_archivo || 'planificacion.xlsx'\n};"
+        "jsCode": "// Validar carrera para planificaciÃ³n\n// Acepta carrera_id O carrera_nombre\nconst datos = $input.item.json.datos;\nconst carrera_id = datos.carrera_id || null;\nconst carrera_nombre = datos.carrera_nombre || null;\nconst archivo_url = datos.archivo_url || null;\nconst archivo_base64 = datos.archivo_base64 || null;\n\nif (!carrera_id && !carrera_nombre) {\n  throw new Error('Se requiere carrera_id o carrera_nombre');\n}\n\nif (!archivo_url && !archivo_base64) {\n  throw new Error('Se requiere archivo_url o archivo_base64');\n}\n\nreturn {\n  carrera_id: carrera_id,\n  carrera_nombre: carrera_nombre,\n  archivo_url: archivo_url,\n  archivo_base64: archivo_base64,\n  nombre_archivo: datos.nombre_archivo || 'planificacion.xlsx'\n};"
       },
       "id": "ee982b72-7c03-4fa6-97f0-d4a8e3851c9f",
       "name": "Validar Carrera",
@@ -190,7 +211,7 @@
         }
       },
       "id": "d01e3a95-ce70-47a1-9c67-46fb6990e73c",
-      "name": "¿Carrera Activa?",
+      "name": "Â¿Carrera Activa?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
@@ -200,7 +221,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extraer archivo Excel de planificación (URL o base64)\nconst validarNode = $('Validar Carrera').first().json;\nconst carreraDB = $('Verificar Carrera en BD').first().json;\nconst carrera_id = carreraDB.id;\nconst archivo_url = validarNode.archivo_url;\nconst base64Data = validarNode.archivo_base64;\n\nlet buffer;\nif (archivo_url) {\n  // Descargar archivo desde URL\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: archivo_url,\n    encoding: 'arraybuffer',\n    returnFullResponse: false,\n  });\n  buffer = Buffer.from(response);\n} else if (base64Data) {\n  buffer = Buffer.from(base64Data, 'base64');\n} else {\n  throw new Error('No se recibió archivo_url ni archivo_base64');\n}\n\nreturn {\n  json: {\n    carrera_id: carrera_id\n  },\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: validarNode.nombre_archivo || 'planificacion.xlsx'\n    }\n  }\n};"
+        "jsCode": "// Extraer archivo Excel de planificaciÃ³n (URL o base64)\nconst validarNode = $('Validar Carrera').first().json;\nconst carreraDB = $('Verificar Carrera en BD').first().json;\nconst carrera_id = carreraDB.id;\nconst archivo_url = validarNode.archivo_url;\nconst base64Data = validarNode.archivo_base64;\n\nlet buffer;\nif (archivo_url) {\n  // Descargar archivo desde URL\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: archivo_url,\n    encoding: 'arraybuffer',\n    returnFullResponse: false,\n  });\n  buffer = Buffer.from(response);\n} else if (base64Data) {\n  buffer = Buffer.from(base64Data, 'base64');\n} else {\n  throw new Error('No se recibiÃ³ archivo_url ni archivo_base64');\n}\n\nreturn {\n  json: {\n    carrera_id: carrera_id\n  },\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: validarNode.nombre_archivo || 'planificacion.xlsx'\n    }\n  }\n};"
       },
       "id": "ee40e928-91b1-427e-beba-ee75cf760f39",
       "name": "Extraer Archivo Excel",
@@ -219,7 +240,7 @@
         }
       },
       "id": "d22d1534-247e-4a95-9a76-c6fbe581eece",
-      "name": "Leer Excel Planificación",
+      "name": "Leer Excel PlanificaciÃ³n",
       "type": "n8n-nodes-base.spreadsheetFile",
       "typeVersion": 2,
       "position": [
@@ -229,7 +250,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// PROCESAR EXCEL ROBUSTO v2 - Sin GPT-4o\n// Soporta multi-sheet, horarios multi-linea, formatos variados\n// ============================================================\n\nconst items = $input.all();\nconst carreraData = $('Verificar Carrera en BD').first().json;\nconst validarData = $('Validar Carrera').first().json;\nconst carrera_id = carreraData.id || validarData.carrera_id;\nconst carreraNombre = carreraData.carrera || validarData.carrera_nombre || 'Carrera ' + carrera_id;\n\nconst allRows = items.map(item => item.json);\nconsole.log(`Total filas del Excel: ${allRows.length}`);\n\n// ── CONFIGURACION ──\nconst HEADER_KEYWORDS = {\n  numero_docente: ['n °', 'n°', 'nro.', 'nro', 'numero', '#'],\n  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor'],\n  titulo_pregrado: ['pregrado'],\n  titulo_posgrado: ['posgrado', 'postgrado'],\n  materia: ['materia', 'asignatura', 'curso', 'nombre materia', 'nombre de la materia'],\n  codigo_materia: ['codigo', 'codigo materia', 'cod'],\n  ciclo: ['ciclo', 'nivel', 'semestre'],\n  malla: ['malla'],\n  paralelo: ['paralelo', 'grupo', 'seccion'],\n  dia: ['dia de clase', 'dia clase', 'horario dia', 'dia', 'horario'],\n  hora: ['hora clase', 'hora'],\n  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],\n  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],\n  numero_alumnos: ['nro. alumnos', 'alumnos', 'estudiantes', 'numero alumnos', 'nro alumnos', 'nro. estudiantes', 'num estudiantes', 'num alumnos', '# estudiantes', '# alumnos'],\n  aula: ['aula', 'sala', 'lugar', 'aula/lab'],\n  numero_horas: ['nro. horas', 'numero horas', 'nro horas'],\n  total_horas: ['total horas', 'total horas clase'],\n};\n\nconst SECCION_KEYWORDS = [\n  'tiempo completo', 'tiempo parcial', 'docentes tiempo',\n  'profesores tiempo', 'catedraticos'\n];\n\nconst VALORES_NULOS = ['n/a', 'na', 'n.a', '-', '--', '---', '', 'sin dato', 'sd', 'nd'];\nconst MERGED_NIVEL_1 = ['numero_docente', 'docente', 'titulo_pregrado', 'titulo_posgrado'];\nconst MERGED_NIVEL_2 = ['materia', 'codigo_materia'];\n\n// ── FUNCION: normalizar texto para comparacion ──\nconst norm = (s) => {\n  if (!s) return '';\n  return String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n};\n\n// ── FUNCION: detectar header en una fila ──\nfunction detectHeader(row) {\n  const entries = Object.entries(row);\n  let matches = 0;\n  const tempMap = {};\n  for (const [key, val] of entries) {\n    if (!val || typeof val !== 'string') continue;\n    const clean = norm(val);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (tempMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          tempMap[campo] = key;\n          matches++;\n          break;\n        }\n      }\n    }\n  }\n  return { matches, tempMap };\n}\n\n// ── PASO 1: Buscar el mejor bloque de header en TODAS las filas ──\n// Con readAllSheets, las filas de multiples hojas se mezclan.\n// Buscamos la fila con MAS matches de keywords de header.\nlet columnMap = {};\nlet dataStartIndex = 0;\nlet bestMatches = 0;\n\n// Primero: verificar si los keys del JSON ya son headers reales\nconst allKeys = Object.keys(allRows[0] || {});\nconst hasRealHeaders = allKeys.some(k => {\n  const n = norm(k);\n  return !k.startsWith('__EMPTY') && !k.startsWith('__rowNum') && \n    (n.includes('docente') || n.includes('materia') || n.includes('hora') || n.includes('dia'));\n});\n\nif (hasRealHeaders) {\n  for (const key of allKeys) {\n    const clean = norm(key);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (columnMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          columnMap[campo] = key;\n          break;\n        }\n      }\n    }\n  }\n  dataStartIndex = 0;\n  bestMatches = Object.keys(columnMap).length;\n} else {\n  // Escanear TODAS las filas buscando el mejor header\n  for (let i = 0; i < allRows.length; i++) {\n    const row = allRows[i];\n    const { matches, tempMap } = detectHeader(row);\n    if (matches > bestMatches) {\n      bestMatches = matches;\n      columnMap = tempMap;\n      dataStartIndex = i + 1;\n    }\n    // Si encontramos 6+ matches es un header excelente, pero seguimos buscando uno mejor\n  }\n}\n\nconsole.log(`Header detectado con ${bestMatches} columnas en fila ${dataStartIndex - 1}`);\nconsole.log('Columnas mapeadas: ' + JSON.stringify(columnMap));\n\n// ── PASO 1b: Verificar sub-headers (fila siguiente al header) ──\n// Algunos Excels tienen 2 filas de header: fila 1 = 'HORARIO', fila 2 = 'DIA' + 'HORA'\nif (dataStartIndex < allRows.length) {\n  const subRow = allRows[dataStartIndex];\n  const { matches: subMatches, tempMap: subMap } = detectHeader(subRow);\n  // Si la sub-fila tiene campos que no teniamos, agregarlos\n  for (const [campo, key] of Object.entries(subMap)) {\n    if (!columnMap[campo]) {\n      columnMap[campo] = key;\n      console.log(`Sub-header: agregando ${campo} -> ${key}`);\n    }\n  }\n  // Si la sub-fila tenia matches, la data empieza despues\n  if (subMatches >= 2) {\n    dataStartIndex++;\n  }\n}\n\n// ── PASO 2: Extraer registros ──\n// Tomar filas desde dataStartIndex hasta encontrar un bloque con keys totalmente diferentes\n// (indicando que empezo otra hoja del Excel)\nconst dataRows = allRows.slice(dataStartIndex);\nconst registros = [];\nlet seccionActual = 'TIEMPO COMPLETO';\nlet consecutivasVacias = 0;\n\nfor (const row of dataRows) {\n  // Verificar si esta fila pertenece a otra hoja (keys diferentes)\n  const rowKeys = Object.keys(row);\n  const keysMatch = Object.values(columnMap).some(k => rowKeys.includes(k));\n  if (!keysMatch && rowKeys.length > 0) {\n    // Las keys no coinciden - probablemente cambio de hoja\n    consecutivasVacias++;\n    // if (consecutivasVacias > 3) break; // Disabled to support multi-sheet // Definitivamente otra hoja\n    continue;\n  }\n  consecutivasVacias = 0;\n\n  // Detectar si es fila de seccion\n  const allValues = Object.values(row).filter(Boolean).map(v => norm(String(v))).join(' ');\n  const esSeccion = SECCION_KEYWORDS.some(kw => allValues.includes(norm(kw)));\n  if (esSeccion) {\n    if (allValues.includes('parcial')) seccionActual = 'TIEMPO PARCIAL';\n    else if (allValues.includes('completo')) seccionActual = 'TIEMPO COMPLETO';\n    continue;\n  }\n\n  // Extraer campos usando columnMap\n  const registro = { _seccion: seccionActual };\n  let camposConValor = 0;\n\n  for (const [campo, key] of Object.entries(columnMap)) {\n    let val = row[key];\n    if (val !== null && val !== undefined && String(val).trim() !== '') {\n      val = String(val).trim();\n      if (VALORES_NULOS.includes(val.toLowerCase())) {\n        registro[campo] = null;\n      } else {\n        registro[campo] = val;\n        camposConValor++;\n      }\n    } else {\n      registro[campo] = null;\n    }\n  }\n\n  if (camposConValor >= 2) {\n    registros.push(registro);\n  }\n}\n\nconsole.log(`Registros extraidos (pre-propagacion): ${registros.length}`);\n\n// ── PASO 3: Propagacion inteligente de celdas merged ──\nconst lastDoc = {};\nconst lastMat = {};\n\nfor (const reg of registros) {\n  if (reg.numero_docente && String(reg.numero_docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else if (reg.docente && String(reg.docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else {\n    for (const campo of MERGED_NIVEL_1) {\n      if (!reg[campo]) reg[campo] = lastDoc[campo] || null;\n    }\n    if (reg.materia && String(reg.materia).trim() !== '') {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    } else {\n      for (const campo of MERGED_NIVEL_2) {\n        if (!reg[campo]) reg[campo] = lastMat[campo] || null;\n      }\n    }\n  }\n}\n\n// ── PASO 4: Parsear horarios y formatear clases ──\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\").replace(/\\s+/g, ' ').trim();\n};\n\nconst normalizeHora = (h) => {\n  if (!h) return '';\n  let s = String(h).trim();\n  // Normalizar H00 -> :00 (formato 08H00)\n  s = s.replace(/(\\d{1,2})[Hh](\\d{2})/, '$1:$2');\n  // Si no tiene ':', agregar :00\n  if (s && !s.includes(':') && /^\\d+$/.test(s)) s += ':00';\n  return s;\n};\n\nconst clases = [];\nfor (const reg of registros) {\n  if (!reg.materia && !reg.dia) continue;\n  if (reg.materia && /^\\d+\\s*horas?$/i.test(String(reg.materia))) continue;\n  if (reg.total_horas && !reg.dia && !reg.materia) continue;\n\n  const diaRaw = String(reg.dia || '').trim();\n  const horaRaw = String(reg.hora || '').trim();\n  const num_est = parseInt(reg.numero_alumnos) || 0;\n  const cicloVal = reg.ciclo || reg.codigo_materia || '';\n\n  // ── Manejar horarios multi-linea ──\n  // Formato 1: dia='Lunes\\r\\nMartes', hora='08:00 - 10:00\\r\\n08:00 - 10:00'\n  // Formato 2: dia='LUNES: 08H00 - 10H00\\r\\nMIERCOLES: 08H00 - 10H00' (dia+hora juntos)\n  \n  const diasList = diaRaw.split(/\\r?\\n/).map(d => d.trim()).filter(Boolean);\n  const horasList = horaRaw.split(/\\r?\\n/).map(h => h.trim()).filter(Boolean);\n\n  if (diasList.length === 0 && horasList.length === 0) {\n    // Sin dia ni hora, pero tiene materia - agregar con datos vacios\n    clases.push({\n      carrera: sanitize(carreraNombre),\n      materia: sanitize(reg.materia) || 'Sin nombre',\n      ciclo: sanitize(String(cicloVal)),\n      paralelo: sanitize(reg.paralelo) || 'A',\n      dia: '',\n      hora_inicio: '',\n      hora_fin: '',\n      num_estudiantes: num_est,\n      docente: sanitize(reg.docente) || '',\n      aula_sugerida: sanitize(reg.aula),\n      nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n    });\n    continue;\n  }\n\n  // Comprobar si el dia contiene hora embebida (ej: 'LUNES: 08H00 - 10H00')\n  const diaConHora = diasList.length > 0 && diasList[0].includes(':') && /\\d/.test(diasList[0]);\n  \n  if (diaConHora && horasList.length === 0) {\n    // Formato embebido: 'LUNES: 08H00 - 10H00'\n    for (const entry of diasList) {\n      const colonIdx = entry.indexOf(':');\n      if (colonIdx === -1) continue;\n      const dia = entry.substring(0, colonIdx).trim();\n      const horaStr = entry.substring(colonIdx + 1).trim();\n      let hi = '', hf = '';\n      if (horaStr.includes('-')) {\n        const parts = horaStr.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      }\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(dia) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  } else {\n    // Formato normal: dias y horas en columnas separadas\n    const maxEntries = Math.max(diasList.length, horasList.length, 1);\n    for (let i = 0; i < maxEntries; i++) {\n      const diaVal = diasList[i] || diasList[diasList.length - 1] || '';\n      const horaVal = horasList[i] || horasList[horasList.length - 1] || '';\n      \n      let hi = '', hf = '';\n      if (horaVal.includes('-')) {\n        const parts = horaVal.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      } else if (horaVal) {\n        hi = normalizeHora(horaVal);\n      }\n\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(diaVal) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  }\n}\n\nconsole.log(`${clases.length} clases extraidas (pre-deduplicacion)`);\n\n// ── PASO 5: Deduplicacion inteligente ──\n// Cuando multiples hojas tienen las mismas clases, eliminar duplicados\n// Clave: materia + docente + paralelo + ciclo (normalizado)\nconst uniqueMap = new Map();\nlet dupsRemoved = 0;\nfor (const c of clases) {\n  const key = [norm(c.materia || ''), norm(c.docente || ''), norm(c.paralelo || ''), norm(c.ciclo || '')].join('|');\n  if (!uniqueMap.has(key)) {\n    uniqueMap.set(key, c);\n  } else {\n    dupsRemoved++;\n    const existing = uniqueMap.get(key);\n    // Reemplazar si el nuevo tiene mas datos completos\n    const scoreNew = (c.dia ? 1 : 0) + (c.hora_inicio ? 1 : 0) + (c.num_estudiantes > 0 ? 1 : 0) + (c.docente ? 1 : 0);\n    const scoreOld = (existing.dia ? 1 : 0) + (existing.hora_inicio ? 1 : 0) + (existing.num_estudiantes > 0 ? 1 : 0) + (existing.docente ? 1 : 0);\n    if (scoreNew > scoreOld) uniqueMap.set(key, c);\n  }\n}\nconst clasesUnicas = Array.from(uniqueMap.values());\nif (dupsRemoved > 0) console.log(`Deduplicacion: ${clases.length} -> ${clasesUnicas.length} (${dupsRemoved} duplicados eliminados)`);\n\nreturn {\n  clases: clasesUnicas,\n  carrera_id: carrera_id,\n  carrera_nombre: sanitize(carreraNombre),\n  total: clasesUnicas.length,\n  total_filas_excel: allRows.length,\n  nombre_archivo: validarData.nombre_archivo || 'n8n-upload',\n  columnas_detectadas: columnMap\n};"
+        "jsCode": "// ============================================================\n// PROCESAR EXCEL ROBUSTO v2 - Sin GPT-4o\n// Soporta multi-sheet, horarios multi-linea, formatos variados\n// ============================================================\n\nconst items = $input.all();\nconst carreraData = $('Verificar Carrera en BD').first().json;\nconst validarData = $('Validar Carrera').first().json;\nconst carrera_id = carreraData.id || validarData.carrera_id;\nconst carreraNombre = carreraData.carrera || validarData.carrera_nombre || 'Carrera ' + carrera_id;\n\nconst allRows = items.map(item => item.json);\nconsole.log(`Total filas del Excel: ${allRows.length}`);\n\n// â”€â”€ CONFIGURACION â”€â”€\nconst HEADER_KEYWORDS = {\n  numero_docente: ['n Â°', 'nÂ°', 'nro.', 'nro', 'numero', '#'],\n  docente: ['docente', 'nombre docente', 'nombre del docente', 'profesor'],\n  titulo_pregrado: ['pregrado'],\n  titulo_posgrado: ['posgrado', 'postgrado'],\n  materia: ['materia', 'asignatura', 'curso', 'nombre materia', 'nombre de la materia'],\n  codigo_materia: ['codigo', 'codigo materia', 'cod'],\n  ciclo: ['ciclo', 'nivel', 'semestre'],\n  malla: ['malla'],\n  paralelo: ['paralelo', 'grupo', 'seccion'],\n  dia: ['dia de clase', 'dia clase', 'horario dia', 'dia', 'horario'],\n  hora: ['hora clase', 'hora'],\n  horas_teoricas: ['horas teoricas', 'teoricas', 'componente docente'],\n  horas_practicas: ['horas practicas', 'practicas', 'componente practico'],\n  numero_alumnos: ['nro. alumnos', 'alumnos', 'estudiantes', 'numero alumnos', 'nro alumnos', 'nro. estudiantes', 'num estudiantes', 'num alumnos', '# estudiantes', '# alumnos'],\n  aula: ['aula', 'sala', 'lugar', 'aula/lab'],\n  numero_horas: ['nro. horas', 'numero horas', 'nro horas'],\n  total_horas: ['total horas', 'total horas clase'],\n};\n\nconst SECCION_KEYWORDS = [\n  'tiempo completo', 'tiempo parcial', 'docentes tiempo',\n  'profesores tiempo', 'catedraticos'\n];\n\nconst VALORES_NULOS = ['n/a', 'na', 'n.a', '-', '--', '---', '', 'sin dato', 'sd', 'nd'];\nconst MERGED_NIVEL_1 = ['numero_docente', 'docente', 'titulo_pregrado', 'titulo_posgrado'];\nconst MERGED_NIVEL_2 = ['materia', 'codigo_materia'];\n\n// â”€â”€ FUNCION: normalizar texto para comparacion â”€â”€\nconst norm = (s) => {\n  if (!s) return '';\n  return String(s).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n};\n\n// â”€â”€ FUNCION: detectar header en una fila â”€â”€\nfunction detectHeader(row) {\n  const entries = Object.entries(row);\n  let matches = 0;\n  const tempMap = {};\n  for (const [key, val] of entries) {\n    if (!val || typeof val !== 'string') continue;\n    const clean = norm(val);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (tempMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          tempMap[campo] = key;\n          matches++;\n          break;\n        }\n      }\n    }\n  }\n  return { matches, tempMap };\n}\n\n// â”€â”€ PASO 1: Buscar el mejor bloque de header en TODAS las filas â”€â”€\n// Con readAllSheets, las filas de multiples hojas se mezclan.\n// Buscamos la fila con MAS matches de keywords de header.\nlet columnMap = {};\nlet dataStartIndex = 0;\nlet bestMatches = 0;\n\n// Primero: verificar si los keys del JSON ya son headers reales\nconst allKeys = Object.keys(allRows[0] || {});\nconst hasRealHeaders = allKeys.some(k => {\n  const n = norm(k);\n  return !k.startsWith('__EMPTY') && !k.startsWith('__rowNum') && \n    (n.includes('docente') || n.includes('materia') || n.includes('hora') || n.includes('dia'));\n});\n\nif (hasRealHeaders) {\n  for (const key of allKeys) {\n    const clean = norm(key);\n    for (const [campo, keywords] of Object.entries(HEADER_KEYWORDS)) {\n      if (columnMap[campo]) continue;\n      for (const kw of keywords) {\n        if (clean.includes(norm(kw))) {\n          columnMap[campo] = key;\n          break;\n        }\n      }\n    }\n  }\n  dataStartIndex = 0;\n  bestMatches = Object.keys(columnMap).length;\n} else {\n  // Escanear TODAS las filas buscando el mejor header\n  for (let i = 0; i < allRows.length; i++) {\n    const row = allRows[i];\n    const { matches, tempMap } = detectHeader(row);\n    if (matches > bestMatches) {\n      bestMatches = matches;\n      columnMap = tempMap;\n      dataStartIndex = i + 1;\n    }\n    // Si encontramos 6+ matches es un header excelente, pero seguimos buscando uno mejor\n  }\n}\n\nconsole.log(`Header detectado con ${bestMatches} columnas en fila ${dataStartIndex - 1}`);\nconsole.log('Columnas mapeadas: ' + JSON.stringify(columnMap));\n\n// â”€â”€ PASO 1b: Verificar sub-headers (fila siguiente al header) â”€â”€\n// Algunos Excels tienen 2 filas de header: fila 1 = 'HORARIO', fila 2 = 'DIA' + 'HORA'\nif (dataStartIndex < allRows.length) {\n  const subRow = allRows[dataStartIndex];\n  const { matches: subMatches, tempMap: subMap } = detectHeader(subRow);\n  // Si la sub-fila tiene campos que no teniamos, agregarlos\n  for (const [campo, key] of Object.entries(subMap)) {\n    if (!columnMap[campo]) {\n      columnMap[campo] = key;\n      console.log(`Sub-header: agregando ${campo} -> ${key}`);\n    }\n  }\n  // Si la sub-fila tenia matches, la data empieza despues\n  if (subMatches >= 2) {\n    dataStartIndex++;\n  }\n}\n\n// â”€â”€ PASO 2: Extraer registros â”€â”€\n// Tomar filas desde dataStartIndex hasta encontrar un bloque con keys totalmente diferentes\n// (indicando que empezo otra hoja del Excel)\nconst dataRows = allRows.slice(dataStartIndex);\nconst registros = [];\nlet seccionActual = 'TIEMPO COMPLETO';\nlet consecutivasVacias = 0;\n\nfor (const row of dataRows) {\n  // Verificar si esta fila pertenece a otra hoja (keys diferentes)\n  const rowKeys = Object.keys(row);\n  const keysMatch = Object.values(columnMap).some(k => rowKeys.includes(k));\n  if (!keysMatch && rowKeys.length > 0) {\n    // Las keys no coinciden - probablemente cambio de hoja\n    consecutivasVacias++;\n    // if (consecutivasVacias > 3) break; // Disabled to support multi-sheet // Definitivamente otra hoja\n    continue;\n  }\n  consecutivasVacias = 0;\n\n  // Detectar si es fila de seccion\n  const allValues = Object.values(row).filter(Boolean).map(v => norm(String(v))).join(' ');\n  const esSeccion = SECCION_KEYWORDS.some(kw => allValues.includes(norm(kw)));\n  if (esSeccion) {\n    if (allValues.includes('parcial')) seccionActual = 'TIEMPO PARCIAL';\n    else if (allValues.includes('completo')) seccionActual = 'TIEMPO COMPLETO';\n    continue;\n  }\n\n  // Extraer campos usando columnMap\n  const registro = { _seccion: seccionActual };\n  let camposConValor = 0;\n\n  for (const [campo, key] of Object.entries(columnMap)) {\n    let val = row[key];\n    if (val !== null && val !== undefined && String(val).trim() !== '') {\n      val = String(val).trim();\n      if (VALORES_NULOS.includes(val.toLowerCase())) {\n        registro[campo] = null;\n      } else {\n        registro[campo] = val;\n        camposConValor++;\n      }\n    } else {\n      registro[campo] = null;\n    }\n  }\n\n  if (camposConValor >= 2) {\n    registros.push(registro);\n  }\n}\n\nconsole.log(`Registros extraidos (pre-propagacion): ${registros.length}`);\n\n// â”€â”€ PASO 3: Propagacion inteligente de celdas merged â”€â”€\nconst lastDoc = {};\nconst lastMat = {};\n\nfor (const reg of registros) {\n  if (reg.numero_docente && String(reg.numero_docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else if (reg.docente && String(reg.docente).trim() !== '') {\n    for (const campo of MERGED_NIVEL_1) {\n      if (reg[campo]) lastDoc[campo] = reg[campo];\n    }\n    if (reg.materia) {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    }\n  } else {\n    for (const campo of MERGED_NIVEL_1) {\n      if (!reg[campo]) reg[campo] = lastDoc[campo] || null;\n    }\n    if (reg.materia && String(reg.materia).trim() !== '') {\n      for (const campo of MERGED_NIVEL_2) {\n        if (reg[campo]) lastMat[campo] = reg[campo];\n      }\n    } else {\n      for (const campo of MERGED_NIVEL_2) {\n        if (!reg[campo]) reg[campo] = lastMat[campo] || null;\n      }\n    }\n  }\n}\n\n// â”€â”€ PASO 4: Parsear horarios y formatear clases â”€â”€\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\").replace(/\\s+/g, ' ').trim();\n};\n\nconst normalizeHora = (h) => {\n  if (!h) return '';\n  let s = String(h).trim();\n  // Normalizar H00 -> :00 (formato 08H00)\n  s = s.replace(/(\\d{1,2})[Hh](\\d{2})/, '$1:$2');\n  // Si no tiene ':', agregar :00\n  if (s && !s.includes(':') && /^\\d+$/.test(s)) s += ':00';\n  return s;\n};\n\nconst clases = [];\nfor (const reg of registros) {\n  if (!reg.materia && !reg.dia) continue;\n  if (reg.materia && /^\\d+\\s*horas?$/i.test(String(reg.materia))) continue;\n  if (reg.total_horas && !reg.dia && !reg.materia) continue;\n\n  const diaRaw = String(reg.dia || '').trim();\n  const horaRaw = String(reg.hora || '').trim();\n  const num_est = parseInt(reg.numero_alumnos) || 0;\n  const cicloVal = reg.ciclo || reg.codigo_materia || '';\n\n  // â”€â”€ Manejar horarios multi-linea â”€â”€\n  // Formato 1: dia='Lunes\\r\\nMartes', hora='08:00 - 10:00\\r\\n08:00 - 10:00'\n  // Formato 2: dia='LUNES: 08H00 - 10H00\\r\\nMIERCOLES: 08H00 - 10H00' (dia+hora juntos)\n  \n  const diasList = diaRaw.split(/\\r?\\n/).map(d => d.trim()).filter(Boolean);\n  const horasList = horaRaw.split(/\\r?\\n/).map(h => h.trim()).filter(Boolean);\n\n  if (diasList.length === 0 && horasList.length === 0) {\n    // Sin dia ni hora, pero tiene materia - agregar con datos vacios\n    clases.push({\n      carrera: sanitize(carreraNombre),\n      materia: sanitize(reg.materia) || 'Sin nombre',\n      ciclo: sanitize(String(cicloVal)),\n      paralelo: sanitize(reg.paralelo) || 'A',\n      dia: '',\n      hora_inicio: '',\n      hora_fin: '',\n      num_estudiantes: num_est,\n      docente: sanitize(reg.docente) || '',\n      aula_sugerida: sanitize(reg.aula),\n      nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n    });\n    continue;\n  }\n\n  // Comprobar si el dia contiene hora embebida (ej: 'LUNES: 08H00 - 10H00')\n  const diaConHora = diasList.length > 0 && diasList[0].includes(':') && /\\d/.test(diasList[0]);\n  \n  if (diaConHora && horasList.length === 0) {\n    // Formato embebido: 'LUNES: 08H00 - 10H00'\n    for (const entry of diasList) {\n      const colonIdx = entry.indexOf(':');\n      if (colonIdx === -1) continue;\n      const dia = entry.substring(0, colonIdx).trim();\n      const horaStr = entry.substring(colonIdx + 1).trim();\n      let hi = '', hf = '';\n      if (horaStr.includes('-')) {\n        const parts = horaStr.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      }\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(dia) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  } else {\n    // Formato normal: dias y horas en columnas separadas\n    const maxEntries = Math.max(diasList.length, horasList.length, 1);\n    for (let i = 0; i < maxEntries; i++) {\n      const diaVal = diasList[i] || diasList[diasList.length - 1] || '';\n      const horaVal = horasList[i] || horasList[horasList.length - 1] || '';\n      \n      let hi = '', hf = '';\n      if (horaVal.includes('-')) {\n        const parts = horaVal.split(/\\s*-\\s*/);\n        hi = normalizeHora(parts[0]);\n        hf = normalizeHora(parts[1]);\n      } else if (horaVal) {\n        hi = normalizeHora(horaVal);\n      }\n\n      clases.push({\n        carrera: sanitize(carreraNombre),\n        materia: sanitize(reg.materia) || 'Sin nombre',\n        ciclo: sanitize(String(cicloVal)),\n        paralelo: sanitize(reg.paralelo) || 'A',\n        dia: sanitize(diaVal) || '',\n        hora_inicio: hi,\n        hora_fin: hf,\n        num_estudiantes: num_est,\n        docente: sanitize(reg.docente) || '',\n        aula_sugerida: sanitize(reg.aula),\n        nombre_archivo: validarData.nombre_archivo || 'n8n-upload'\n      });\n    }\n  }\n}\n\nconsole.log(`${clases.length} clases extraidas (pre-deduplicacion)`);\n\n// â”€â”€ PASO 5: Deduplicacion inteligente â”€â”€\n// Cuando multiples hojas tienen las mismas clases, eliminar duplicados\n// Clave: materia + docente + paralelo + ciclo (normalizado)\nconst uniqueMap = new Map();\nlet dupsRemoved = 0;\nfor (const c of clases) {\n  const key = [norm(c.materia || ''), norm(c.docente || ''), norm(c.paralelo || ''), norm(c.ciclo || '')].join('|');\n  if (!uniqueMap.has(key)) {\n    uniqueMap.set(key, c);\n  } else {\n    dupsRemoved++;\n    const existing = uniqueMap.get(key);\n    // Reemplazar si el nuevo tiene mas datos completos\n    const scoreNew = (c.dia ? 1 : 0) + (c.hora_inicio ? 1 : 0) + (c.num_estudiantes > 0 ? 1 : 0) + (c.docente ? 1 : 0);\n    const scoreOld = (existing.dia ? 1 : 0) + (existing.hora_inicio ? 1 : 0) + (existing.num_estudiantes > 0 ? 1 : 0) + (existing.docente ? 1 : 0);\n    if (scoreNew > scoreOld) uniqueMap.set(key, c);\n  }\n}\nconst clasesUnicas = Array.from(uniqueMap.values());\nif (dupsRemoved > 0) console.log(`Deduplicacion: ${clases.length} -> ${clasesUnicas.length} (${dupsRemoved} duplicados eliminados)`);\n\nreturn {\n  clases: clasesUnicas,\n  carrera_id: carrera_id,\n  carrera_nombre: sanitize(carreraNombre),\n  total: clasesUnicas.length,\n  total_filas_excel: allRows.length,\n  nombre_archivo: validarData.nombre_archivo || 'n8n-upload',\n  columnas_detectadas: columnMap\n};"
       },
       "id": "a1b2c3d4-0001-4000-8000-000000000001",
       "name": "Procesar Excel Robusto",
@@ -289,7 +310,7 @@
         "options": {}
       },
       "id": "a866ecd5-2d5d-4f2a-85ea-b7cb8e92a233",
-      "name": "Registrar Planificación",
+      "name": "Registrar PlanificaciÃ³n",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
@@ -305,10 +326,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Procesar Excel Robusto').first().json;\n\nreturn {\n  success: true,\n  mensaje: 'Planificación procesada y guardada exitosamente',\n  metodo: 'extraccion-directa',\n  carrera_id: data.carrera_id,\n  carrera: data.carrera_nombre,\n  clases_guardadas: data.total,\n  total_filas_excel: data.total_filas_excel,\n  columnas_detectadas: data.columnas_detectadas,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "const data = $('Procesar Excel Robusto').first().json;\n\nreturn {\n  success: true,\n  mensaje: 'PlanificaciÃ³n procesada y guardada exitosamente',\n  metodo: 'extraccion-directa',\n  carrera_id: data.carrera_id,\n  carrera: data.carrera_nombre,\n  clases_guardadas: data.total,\n  total_filas_excel: data.total_filas_excel,\n  columnas_detectadas: data.columnas_detectadas,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "2967fb03-d9ae-4719-a264-f18ceb0a1984",
-      "name": "Respuesta Éxito",
+      "name": "Respuesta Ã‰xito",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -323,7 +344,7 @@
         "options": {}
       },
       "id": "4434bd53-0213-4139-a7dc-b203a4027317",
-      "name": "Respond - Planificación",
+      "name": "Respond - PlanificaciÃ³n",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
@@ -346,7 +367,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const base64Data = $input.item.json.archivo_base64;\n\nif (!base64Data) {\n  throw new Error('No se recibió archivo_base64');\n}\n\nconst buffer = Buffer.from(base64Data, 'base64');\n\nreturn {\n  json: {},\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: 'estudiantes.xlsx'\n    }\n  }\n};"
+        "jsCode": "const base64Data = $input.item.json.archivo_base64;\n\nif (!base64Data) {\n  throw new Error('No se recibiÃ³ archivo_base64');\n}\n\nconst buffer = Buffer.from(base64Data, 'base64');\n\nreturn {\n  json: {},\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: 'estudiantes.xlsx'\n    }\n  }\n};"
       },
       "id": "bcf97204-d46a-4c84-bda4-3130daedb0ef",
       "name": "Extraer Excel Estudiantes",
@@ -373,7 +394,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================\n// PREPARAR PROMPT IA PARA ESTUDIANTES\n// ============================================\n\nconst items = $input.all();\nconst rows = items.slice(0, 30).map(item => item.json);\nconst textoExcel = JSON.stringify(rows, null, 2);\n\nconsole.log(`📄 Enviando ${rows.length} filas de estudiantes a GPT-4o...`);\n\nconst prompt = `Eres un asistente experto en análisis de datos académicos universitarios. Te voy a dar las primeras filas de un archivo Excel con datos de estudiantes.\n\nTu tarea es:\n1. IGNORAR filas de título, encabezados decorativos, o celdas fusionadas\n2. DETECTAR las columnas: cédula/ID, nombre completo, escuela/carrera, nivel/semestre, email, edad\n3. EXTRAER todos los estudiantes (uno por fila de datos)\n\nDATOS DEL EXCEL:\n${textoExcel}\n\nIMPORTANTE:\n- Las columnas pueden tener CUALQUIER nombre\n- Si nombre y apellido están separados, concaténalos en un solo campo \"nombre\"\n- La cédula puede ser numérica o con guiones\n- Ignora filas vacías\n\nDevuelve SOLO un JSON válido:\n{\n  \"estudiantes\": [\n    {\n      \"cedula\": \"1234567890\",\n      \"nombre\": \"Juan Carlos Pérez López\",\n      \"escuela\": \"Ingeniería en Sistemas\",\n      \"nivel\": \"3\",\n      \"email\": \"juan.perez@uide.edu.ec\",\n      \"edad\": 21\n    }\n  ]\n}\n\nSi no puedes determinar algún campo, usa null. SOLO devuelve el JSON.`;\n\nconst openaiBody = JSON.stringify({\n  model: 'gpt-4o',\n  messages: [\n    {\n      role: 'system',\n      content: 'Eres un experto en análisis de datos académicos. Siempre devuelves JSON válido sin texto adicional.'\n    },\n    { role: 'user', content: prompt }\n  ],\n  temperature: 0.1,\n  max_tokens: 4000\n});\n\nreturn {\n  openaiBody: openaiBody,\n  total_filas_excel: items.length\n};"
+        "jsCode": "// ============================================\n// PREPARAR PROMPT IA PARA ESTUDIANTES\n// ============================================\n\nconst items = $input.all();\nconst rows = items.slice(0, 30).map(item => item.json);\nconst textoExcel = JSON.stringify(rows, null, 2);\n\nconsole.log(`ðŸ“„ Enviando ${rows.length} filas de estudiantes a GPT-4o...`);\n\nconst prompt = `Eres un asistente experto en anÃ¡lisis de datos acadÃ©micos universitarios. Te voy a dar las primeras filas de un archivo Excel con datos de estudiantes.\n\nTu tarea es:\n1. IGNORAR filas de tÃ­tulo, encabezados decorativos, o celdas fusionadas\n2. DETECTAR las columnas: cÃ©dula/ID, nombre completo, escuela/carrera, nivel/semestre, email, edad\n3. EXTRAER todos los estudiantes (uno por fila de datos)\n\nDATOS DEL EXCEL:\n${textoExcel}\n\nIMPORTANTE:\n- Las columnas pueden tener CUALQUIER nombre\n- Si nombre y apellido estÃ¡n separados, concatÃ©nalos en un solo campo \"nombre\"\n- La cÃ©dula puede ser numÃ©rica o con guiones\n- Ignora filas vacÃ­as\n\nDevuelve SOLO un JSON vÃ¡lido:\n{\n  \"estudiantes\": [\n    {\n      \"cedula\": \"1234567890\",\n      \"nombre\": \"Juan Carlos PÃ©rez LÃ³pez\",\n      \"escuela\": \"IngenierÃ­a en Sistemas\",\n      \"nivel\": \"3\",\n      \"email\": \"juan.perez@uide.edu.ec\",\n      \"edad\": 21\n    }\n  ]\n}\n\nSi no puedes determinar algÃºn campo, usa null. SOLO devuelve el JSON.`;\n\nconst openaiBody = JSON.stringify({\n  model: 'gpt-4o',\n  messages: [\n    {\n      role: 'system',\n      content: 'Eres un experto en anÃ¡lisis de datos acadÃ©micos. Siempre devuelves JSON vÃ¡lido sin texto adicional.'\n    },\n    { role: 'user', content: prompt }\n  ],\n  temperature: 0.1,\n  max_tokens: 4000\n});\n\nreturn {\n  openaiBody: openaiBody,\n  total_filas_excel: items.length\n};"
       },
       "id": "a1b2c3d4-0005-4000-8000-000000000005",
       "name": "Preparar Prompt IA Estudiantes",
@@ -415,7 +436,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================\n// PARSEAR RESPUESTA GPT-4o ESTUDIANTES\n// ============================================\n\nconst gptResponse = $input.item.json;\n\nlet contenido = gptResponse.choices[0].message.content;\nif (contenido.startsWith('```json')) {\n  contenido = contenido.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n} else if (contenido.startsWith('```')) {\n  contenido = contenido.replace(/```\\n?/g, '');\n}\n\nconst resultado = JSON.parse(contenido.trim());\nconsole.log(`✅ GPT-4o detectó ${resultado.estudiantes.length} estudiantes`);\n\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/'/g, \"''\").trim();\n};\n\nconst estudiantes = resultado.estudiantes.map(e => ({\n  cedula: sanitize(e.cedula) || '',\n  nombre: sanitize(e.nombre) || '',\n  escuela: sanitize(e.escuela),\n  nivel: sanitize(e.nivel),\n  email: sanitize(e.email),\n  edad: parseInt(e.edad) || null\n}));\n\nreturn {\n  estudiantes: estudiantes,\n  total: estudiantes.length\n};"
+        "jsCode": "// ============================================\n// PARSEAR RESPUESTA GPT-4o ESTUDIANTES\n// ============================================\n\nconst gptResponse = $input.item.json;\n\nlet contenido = gptResponse.choices[0].message.content;\nif (contenido.startsWith('```json')) {\n  contenido = contenido.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n} else if (contenido.startsWith('```')) {\n  contenido = contenido.replace(/```\\n?/g, '');\n}\n\nconst resultado = JSON.parse(contenido.trim());\nconsole.log(`âœ… GPT-4o detectÃ³ ${resultado.estudiantes.length} estudiantes`);\n\nconst sanitize = (str) => {\n  if (!str || str === 'null') return null;\n  return String(str).replace(/'/g, \"''\").trim();\n};\n\nconst estudiantes = resultado.estudiantes.map(e => ({\n  cedula: sanitize(e.cedula) || '',\n  nombre: sanitize(e.nombre) || '',\n  escuela: sanitize(e.escuela),\n  nivel: sanitize(e.nivel),\n  email: sanitize(e.email),\n  edad: parseInt(e.edad) || null\n}));\n\nreturn {\n  estudiantes: estudiantes,\n  total: estudiantes.length\n};"
       },
       "id": "a1b2c3d4-0007-4000-8000-000000000007",
       "name": "Parsear Respuesta Estudiantes",
@@ -452,7 +473,7 @@
         "jsCode": "const data = $('Parsear Respuesta Estudiantes').first().json;\n\nreturn {\n  success: true,\n  mensaje: 'Estudiantes analizados con IA y guardados exitosamente',\n  metodo: 'gpt-4o',\n  estudiantes_guardados: data.total,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "8863b4c5-76e5-4c74-8637-4d59e26f2458",
-      "name": "Respuesta Éxito Estudiantes",
+      "name": "Respuesta Ã‰xito Estudiantes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -519,10 +540,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// ALGORITMO OPTIMIZADO DE DISTRIBUCIÓN UIDE\nconst EXCLUIDAS = ['AUDITORIO'];\nconst EXCLUSIVAS = {'SALA DE AUDIENCIAS':['DERECHO'],'AUDIENCIAS':['DERECHO'],'AULA 20':['PSICOLOGIA','PSICOLOGÍA'],'AULA20':['PSICOLOGIA','PSICOLOGÍA'],'LABORATORIO DE PSICOLOGIA':['PSICOLOGIA','PSICOLOGÍA'],'C15':['ARQUITECTURA'],'C16':['ARQUITECTURA'],'C17':['ARQUITECTURA'],'C18':['ARQUITECTURA']};\nconst PRIORIDAD = {'LABORATORIO 1':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA'],'LABORATORIO 2':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA'],'LABORATORIO 3':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA'],'LAB1':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA'],'LAB2':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA'],'LAB3':['INFORMATICA','INFORMÁTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÍA']};\nconst norm = t => t ? t.toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim() : '';\n\nconst clasesRaw = $('Obtener Clases Pendientes').all().map(i => i.json);\nconst aulasRaw = $input.all().map(i => i.json);\nconst clases = Array.isArray(clasesRaw[0]) ? clasesRaw[0] : clasesRaw;\nconst todasAulas = Array.isArray(aulasRaw[0]) ? aulasRaw[0] : aulasRaw;\n\n// Pre-compute aula properties\nconst aulasInfo = todasAulas.map(a => {\n  const n = norm(a.nombre), c = norm(a.codigo), t = norm(a.tipo);\n  const bloqueada = EXCLUIDAS.some(b => n.includes(b) || c.includes(b) || t === b);\n  let exclKey = null;\n  for (const [key] of Object.entries(EXCLUSIVAS)) { if (n.includes(key) || c.includes(key)) { exclKey = key; break; } }\n  let prioKey = null;\n  for (const [key] of Object.entries(PRIORIDAD)) { if (n.includes(key) || c.includes(key)) { prioKey = key; break; } }\n  return { ...a, _n: n, _c: c, _bloqueada: bloqueada, _exclKey: exclKey, _prioKey: prioKey };\n}).filter(a => !a._bloqueada);\n\nconst aulas = aulasInfo.sort((a,b) => a.capacidad - b.capacidad);\nconst occ = {};\nconst asignaciones = [];\nconst noAsignadas = [];\n\nfunction disp(cod, dia, ini, fin) {\n  const key = cod + '|' + dia;\n  if (!occ[key]) return true;\n  for (let i = 0; i < occ[key].length; i++) {\n    const [oi, of_] = occ[key][i];\n    if (ini < of_ && fin > oi) return false;\n  }\n  return true;\n}\n\nfunction ocup(cod, dia, ini, fin) {\n  const key = cod + '|' + dia;\n  if (!occ[key]) occ[key] = [];\n  occ[key].push([ini, fin]);\n}\n\nfunction buscar(clase, soloRegla) {\n  const ne = clase.num_estudiantes || 1;\n  const car = norm(clase.carrera);\n  let mejor = null, menorDif = Infinity;\n  for (const a of aulas) {\n    if (a.capacidad < ne) continue;\n    if (a._exclKey) {\n      const ok = EXCLUSIVAS[a._exclKey].some(cr => car.includes(cr));\n      if (!ok) continue;\n      if (soloRegla || true) { /* exclusive match */ }\n    } else if (a._prioKey) {\n      const ok = PRIORIDAD[a._prioKey].some(cr => car.includes(cr));\n      if (soloRegla && !ok) continue;\n      if (!soloRegla && !ok) continue;\n    } else {\n      if (soloRegla) continue;\n    }\n    if (clase.dia && clase.hora_inicio && clase.hora_fin && !disp(a.codigo, clase.dia, clase.hora_inicio, clase.hora_fin)) continue;\n    const d = a.capacidad - ne;\n    if (d < menorDif) { menorDif = d; mejor = a; }\n  }\n  if (!mejor && !soloRegla) {\n    menorDif = Infinity;\n    for (const a of aulas) {\n      if (a.capacidad < ne) continue;\n      if (a._exclKey && !EXCLUSIVAS[a._exclKey].some(cr => car.includes(cr))) continue;\n      if (clase.dia && clase.hora_inicio && clase.hora_fin && !disp(a.codigo, clase.dia, clase.hora_inicio, clase.hora_fin)) continue;\n      const d = a.capacidad - ne;\n      if (d < menorDif) { menorDif = d; mejor = a; }\n    }\n  }\n  return mejor;\n}\n\nconst rest = [];\nfor (const c of clases) {\n  const a = buscar(c, true);\n  if (a) {\n    asignaciones.push({clase_id:c.clase_id,aula_id:a.id,aula_codigo:a.codigo,aula_nombre:a.nombre,capacidad_aula:a.capacidad,num_estudiantes:c.num_estudiantes,materia:c.materia,ciclo:c.ciclo,paralelo:c.paralelo,carrera:c.carrera,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,docente:c.docente});\n    if (c.dia && c.hora_inicio && c.hora_fin) ocup(a.codigo, c.dia, c.hora_inicio, c.hora_fin);\n  } else rest.push(c);\n}\nfor (const c of rest) {\n  const a = buscar(c, false);\n  if (a) {\n    asignaciones.push({clase_id:c.clase_id,aula_id:a.id,aula_codigo:a.codigo,aula_nombre:a.nombre,capacidad_aula:a.capacidad,num_estudiantes:c.num_estudiantes,materia:c.materia,ciclo:c.ciclo,paralelo:c.paralelo,carrera:c.carrera,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,docente:c.docente});\n    if (c.dia && c.hora_inicio && c.hora_fin) ocup(a.codigo, c.dia, c.hora_inicio, c.hora_fin);\n  } else noAsignadas.push({clase_id:c.clase_id,materia:c.materia,num_estudiantes:c.num_estudiantes,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,razon:'Sin aula disponible'});\n}\nconst total = clases.length || 1;\nreturn {asignaciones, clases_no_asignadas:noAsignadas, total_asignadas:asignaciones.length, total_no_asignadas:noAsignadas.length, porcentaje_exito:((asignaciones.length/total)*100).toFixed(2), timestamp:new Date().toISOString()};"
+        "jsCode": "// ALGORITMO OPTIMIZADO DE DISTRIBUCIÃ“N UIDE\nconst EXCLUIDAS = ['AUDITORIO'];\nconst EXCLUSIVAS = {'SALA DE AUDIENCIAS':['DERECHO'],'AUDIENCIAS':['DERECHO'],'AULA 20':['PSICOLOGIA','PSICOLOGÃA'],'AULA20':['PSICOLOGIA','PSICOLOGÃA'],'LABORATORIO DE PSICOLOGIA':['PSICOLOGIA','PSICOLOGÃA'],'C15':['ARQUITECTURA'],'C16':['ARQUITECTURA'],'C17':['ARQUITECTURA'],'C18':['ARQUITECTURA']};\nconst PRIORIDAD = {'LABORATORIO 1':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA'],'LABORATORIO 2':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA'],'LABORATORIO 3':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA'],'LAB1':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA'],'LAB2':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA'],'LAB3':['INFORMATICA','INFORMÃTICA','SISTEMAS','TECNOLOGIA','TECNOLOGÃA']};\nconst norm = t => t ? t.toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim() : '';\n\nconst clasesRaw = $('Obtener Clases Pendientes').all().map(i => i.json);\nconst aulasRaw = $input.all().map(i => i.json);\nconst clases = Array.isArray(clasesRaw[0]) ? clasesRaw[0] : clasesRaw;\nconst todasAulas = Array.isArray(aulasRaw[0]) ? aulasRaw[0] : aulasRaw;\n\n// Pre-compute aula properties\nconst aulasInfo = todasAulas.map(a => {\n  const n = norm(a.nombre), c = norm(a.codigo), t = norm(a.tipo);\n  const bloqueada = EXCLUIDAS.some(b => n.includes(b) || c.includes(b) || t === b);\n  let exclKey = null;\n  for (const [key] of Object.entries(EXCLUSIVAS)) { if (n.includes(key) || c.includes(key)) { exclKey = key; break; } }\n  let prioKey = null;\n  for (const [key] of Object.entries(PRIORIDAD)) { if (n.includes(key) || c.includes(key)) { prioKey = key; break; } }\n  return { ...a, _n: n, _c: c, _bloqueada: bloqueada, _exclKey: exclKey, _prioKey: prioKey };\n}).filter(a => !a._bloqueada);\n\nconst aulas = aulasInfo.sort((a,b) => a.capacidad - b.capacidad);\nconst occ = {};\nconst asignaciones = [];\nconst noAsignadas = [];\n\nfunction disp(cod, dia, ini, fin) {\n  const key = cod + '|' + dia;\n  if (!occ[key]) return true;\n  for (let i = 0; i < occ[key].length; i++) {\n    const [oi, of_] = occ[key][i];\n    if (ini < of_ && fin > oi) return false;\n  }\n  return true;\n}\n\nfunction ocup(cod, dia, ini, fin) {\n  const key = cod + '|' + dia;\n  if (!occ[key]) occ[key] = [];\n  occ[key].push([ini, fin]);\n}\n\nfunction buscar(clase, soloRegla) {\n  const ne = clase.num_estudiantes || 1;\n  const car = norm(clase.carrera);\n  let mejor = null, menorDif = Infinity;\n  for (const a of aulas) {\n    if (a.capacidad < ne) continue;\n    if (a._exclKey) {\n      const ok = EXCLUSIVAS[a._exclKey].some(cr => car.includes(cr));\n      if (!ok) continue;\n      if (soloRegla || true) { /* exclusive match */ }\n    } else if (a._prioKey) {\n      const ok = PRIORIDAD[a._prioKey].some(cr => car.includes(cr));\n      if (soloRegla && !ok) continue;\n      if (!soloRegla && !ok) continue;\n    } else {\n      if (soloRegla) continue;\n    }\n    if (clase.dia && clase.hora_inicio && clase.hora_fin && !disp(a.codigo, clase.dia, clase.hora_inicio, clase.hora_fin)) continue;\n    const d = a.capacidad - ne;\n    if (d < menorDif) { menorDif = d; mejor = a; }\n  }\n  if (!mejor && !soloRegla) {\n    menorDif = Infinity;\n    for (const a of aulas) {\n      if (a.capacidad < ne) continue;\n      if (a._exclKey && !EXCLUSIVAS[a._exclKey].some(cr => car.includes(cr))) continue;\n      if (clase.dia && clase.hora_inicio && clase.hora_fin && !disp(a.codigo, clase.dia, clase.hora_inicio, clase.hora_fin)) continue;\n      const d = a.capacidad - ne;\n      if (d < menorDif) { menorDif = d; mejor = a; }\n    }\n  }\n  return mejor;\n}\n\nconst rest = [];\nfor (const c of clases) {\n  const a = buscar(c, true);\n  if (a) {\n    asignaciones.push({clase_id:c.clase_id,aula_id:a.id,aula_codigo:a.codigo,aula_nombre:a.nombre,capacidad_aula:a.capacidad,num_estudiantes:c.num_estudiantes,materia:c.materia,ciclo:c.ciclo,paralelo:c.paralelo,carrera:c.carrera,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,docente:c.docente});\n    if (c.dia && c.hora_inicio && c.hora_fin) ocup(a.codigo, c.dia, c.hora_inicio, c.hora_fin);\n  } else rest.push(c);\n}\nfor (const c of rest) {\n  const a = buscar(c, false);\n  if (a) {\n    asignaciones.push({clase_id:c.clase_id,aula_id:a.id,aula_codigo:a.codigo,aula_nombre:a.nombre,capacidad_aula:a.capacidad,num_estudiantes:c.num_estudiantes,materia:c.materia,ciclo:c.ciclo,paralelo:c.paralelo,carrera:c.carrera,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,docente:c.docente});\n    if (c.dia && c.hora_inicio && c.hora_fin) ocup(a.codigo, c.dia, c.hora_inicio, c.hora_fin);\n  } else noAsignadas.push({clase_id:c.clase_id,materia:c.materia,num_estudiantes:c.num_estudiantes,dia:c.dia,hora_inicio:c.hora_inicio,hora_fin:c.hora_fin,razon:'Sin aula disponible'});\n}\nconst total = clases.length || 1;\nreturn {asignaciones, clases_no_asignadas:noAsignadas, total_asignadas:asignaciones.length, total_no_asignadas:noAsignadas.length, porcentaje_exito:((asignaciones.length/total)*100).toFixed(2), timestamp:new Date().toISOString()};"
       },
       "id": "6f08ec11-4bce-4cf4-abaa-85be23c1e6a7",
-      "name": "Algoritmo de Distribución",
+      "name": "Algoritmo de DistribuciÃ³n",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -532,7 +553,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $json;\nconst asignaciones = data.asignaciones || [];\n\nif (!asignaciones || asignaciones.length === 0) {\n  return {\n    mensaje: 'No hay asignaciones para guardar',\n    asignaciones: [],\n    total_asignadas: 0,\n    total_no_asignadas: data.total_no_asignadas || 0,\n    porcentaje_exito: '0',\n    clases_no_asignadas: data.clases_no_asignadas || [],\n    skip_distribucion: true\n  };\n}\n\n// Filtrar asignaciones con horario válido para la tabla distribucion\nconst conHorario = asignaciones.filter(a => a.dia && a.dia !== 'null' && a.dia !== '' && a.hora_inicio && a.hora_inicio !== 'null' && a.hora_inicio !== '' && a.hora_fin && a.hora_fin !== 'null' && a.hora_fin !== '');\ndata.asignaciones_con_horario = conHorario;\ndata.skip_distribucion = conHorario.length === 0;\nreturn data;"
+        "jsCode": "const data = $json;\nconst asignaciones = data.asignaciones || [];\n\nif (!asignaciones || asignaciones.length === 0) {\n  return {\n    mensaje: 'No hay asignaciones para guardar',\n    asignaciones: [],\n    total_asignadas: 0,\n    total_no_asignadas: data.total_no_asignadas || 0,\n    porcentaje_exito: '0',\n    clases_no_asignadas: data.clases_no_asignadas || [],\n    skip_distribucion: true\n  };\n}\n\n// Filtrar asignaciones con horario vÃ¡lido para la tabla distribucion\nconst conHorario = asignaciones.filter(a => a.dia && a.dia !== 'null' && a.dia !== '' && a.hora_inicio && a.hora_inicio !== 'null' && a.hora_inicio !== '' && a.hora_fin && a.hora_fin !== 'null' && a.hora_fin !== '');\ndata.asignaciones_con_horario = conHorario;\ndata.skip_distribucion = conHorario.length === 0;\nreturn data;"
       },
       "id": "869dfe71-fff2-48fc-b9a4-ba80b4abe809",
       "name": "Preparar Actualizaciones",
@@ -571,7 +592,7 @@
         "options": {}
       },
       "id": "70ac0499-faae-4445-aba0-8e366ce29bbe",
-      "name": "Registrar Distribución",
+      "name": "Registrar DistribuciÃ³n",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
@@ -587,10 +608,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const resultado = $('Preparar Actualizaciones').first().json;\n\nreturn {\n  success: true,\n  mensaje: 'Distribución de aulas completada',\n  total_clases: resultado.total_asignadas + resultado.total_no_asignadas,\n  asignadas: resultado.total_asignadas,\n  no_asignadas: resultado.total_no_asignadas,\n  porcentaje_exito: resultado.porcentaje_exito + '%',\n  clases_no_asignadas: resultado.clases_no_asignadas || [],\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "const resultado = $('Preparar Actualizaciones').first().json;\n\nreturn {\n  success: true,\n  mensaje: 'DistribuciÃ³n de aulas completada',\n  total_clases: resultado.total_asignadas + resultado.total_no_asignadas,\n  asignadas: resultado.total_asignadas,\n  no_asignadas: resultado.total_no_asignadas,\n  porcentaje_exito: resultado.porcentaje_exito + '%',\n  clases_no_asignadas: resultado.clases_no_asignadas || [],\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "9be8a00d-1484-4661-b2b2-e6b50713ade3",
-      "name": "Respuesta Distribución",
+      "name": "Respuesta DistribuciÃ³n",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -605,7 +626,7 @@
         "options": {}
       },
       "id": "6e1cce59-67ce-4a07-a9af-197133236dae",
-      "name": "Respond - Distribución",
+      "name": "Respond - DistribuciÃ³n",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
@@ -664,10 +685,10 @@
     },
     {
       "parameters": {
-        "jsCode": "return {\n  success: false,\n  error: 'Acción no reconocida',\n  accion_recibida: $json.accion,\n  acciones_disponibles: [\n    'subir_planificacion',\n    'subir_estudiantes',\n    'distribuir_aulas',\n    'obtener_estado'\n  ],\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "return {\n  success: false,\n  error: 'AcciÃ³n no reconocida',\n  accion_recibida: $json.accion,\n  acciones_disponibles: [\n    'subir_planificacion',\n    'subir_estudiantes',\n    'distribuir_aulas',\n    'obtener_estado'\n  ],\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "7c1b3273-88b2-48a6-82dc-658c73d34aad",
-      "name": "Acción No Reconocida",
+      "name": "AcciÃ³n No Reconocida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -721,6 +742,101 @@
         1072,
         300
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.carrera as nombre_carrera, u.nombre as director_nombre, u.telefono as director_telefono FROM uploads_carreras c LEFT JOIN usuarios u ON u.carrera_director = c.carrera AND u.rol = 'director' WHERE c.id = COALESCE({{ $json.datos.carrera_id }}, 0) LIMIT 1",
+        "options": {}
+      },
+      "id": "reporte-db-001",
+      "name": "Obtener Carrera y Director",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        176,
+        840
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "UGPKcLPpSuxVeqXk",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Eres el asistente de gestiÃ³n acadÃ©mica de la UIDE. Generas reportes ejecutivos concisos y profesionales en espaÃ±ol para directores de carrera. Usa emojis moderadamente. MÃ¡ximo 300 palabras."
+            },
+            {
+              "role": "user",
+              "content": "=Genera un reporte ejecutivo de distribuciÃ³n de aulas para el director de la carrera '{{ $('Obtener Carrera y Director').item.json.nombre_carrera || 'Sin nombre' }}'.\n\nEstadÃ­sticas de la distribuciÃ³n automÃ¡tica reciÃ©n completada:\n- Total de clases procesadas: {{ $('Router - Detectar AcciÃ³n').item.json.datos.estadisticas.total || 'N/D' }}\n- Clases asignadas exitosamente: {{ $('Router - Detectar AcciÃ³n').item.json.datos.estadisticas.exitosas || 'N/D' }}\n- Clases sin aula disponible: {{ $('Router - Detectar AcciÃ³n').item.json.datos.estadisticas.fallidas || 'N/D' }}\n- Clases con sobrecupo: {{ $('Router - Detectar AcciÃ³n').item.json.datos.estadisticas.sobrecupos || 'N/D' }}\n- Eficiencia global: {{ $('Router - Detectar AcciÃ³n').item.json.datos.estadisticas.eficiencia || 'N/D' }}\n- Fecha y hora: {{ $('Router - Detectar AcciÃ³n').item.json.datos.timestamp }}\n\nEl reporte debe incluir:\n1. Saludo personalizado al director\n2. Resumen de resultados (2-3 lÃ­neas)\n3. Puntos de atenciÃ³n si hay clases sin aula o con sobrecupo\n4. RecomendaciÃ³n de acciÃ³n si aplica\n5. Firma: Sistema de GestiÃ³n UIDE"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "reporte-gpt-001",
+      "name": "GPT-4o Reporte IA",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        400,
+        840
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-uide",
+          "name": "OpenAI UIDE"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://evolution-api:8080/message/sendText/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"number\": \"{{ $('Obtener Carrera y Director').item.json.director_telefono }}\", \"text\": \"{{ $json.message.content.replace(/\"/g, '\\\\\"') }}\"}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "reporte-wa-001",
+      "name": "Enviar WhatsApp Director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        624,
+        840
+      ]
     }
   ],
   "pinData": {},
@@ -729,14 +845,14 @@
       "main": [
         [
           {
-            "node": "Router - Detectar Acción",
+            "node": "Router - Detectar AcciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Router - Detectar Acción": {
+    "Router - Detectar AcciÃ³n": {
       "main": [
         [
           {
@@ -779,7 +895,14 @@
         ],
         [
           {
-            "node": "Acción No Reconocida",
+            "node": "Obtener Carrera y Director",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AcciÃ³n No Reconocida",
             "type": "main",
             "index": 0
           }
@@ -801,14 +924,14 @@
       "main": [
         [
           {
-            "node": "¿Carrera Activa?",
+            "node": "Â¿Carrera Activa?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "¿Carrera Activa?": {
+    "Â¿Carrera Activa?": {
       "main": [
         [
           {
@@ -830,14 +953,14 @@
       "main": [
         [
           {
-            "node": "Leer Excel Planificación",
+            "node": "Leer Excel PlanificaciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Leer Excel Planificación": {
+    "Leer Excel PlanificaciÃ³n": {
       "main": [
         [
           {
@@ -874,29 +997,29 @@
       "main": [
         [
           {
-            "node": "Registrar Planificación",
+            "node": "Registrar PlanificaciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Registrar Planificación": {
+    "Registrar PlanificaciÃ³n": {
       "main": [
         [
           {
-            "node": "Respuesta Éxito",
+            "node": "Respuesta Ã‰xito",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respuesta Éxito": {
+    "Respuesta Ã‰xito": {
       "main": [
         [
           {
-            "node": "Respond - Planificación",
+            "node": "Respond - PlanificaciÃ³n",
             "type": "main",
             "index": 0
           }
@@ -973,14 +1096,14 @@
       "main": [
         [
           {
-            "node": "Respuesta Éxito Estudiantes",
+            "node": "Respuesta Ã‰xito Estudiantes",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respuesta Éxito Estudiantes": {
+    "Respuesta Ã‰xito Estudiantes": {
       "main": [
         [
           {
@@ -1006,14 +1129,14 @@
       "main": [
         [
           {
-            "node": "Algoritmo de Distribución",
+            "node": "Algoritmo de DistribuciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Algoritmo de Distribución": {
+    "Algoritmo de DistribuciÃ³n": {
       "main": [
         [
           {
@@ -1039,29 +1162,29 @@
       "main": [
         [
           {
-            "node": "Registrar Distribución",
+            "node": "Registrar DistribuciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Registrar Distribución": {
+    "Registrar DistribuciÃ³n": {
       "main": [
         [
           {
-            "node": "Respuesta Distribución",
+            "node": "Respuesta DistribuciÃ³n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respuesta Distribución": {
+    "Respuesta DistribuciÃ³n": {
       "main": [
         [
           {
-            "node": "Respond - Distribución",
+            "node": "Respond - DistribuciÃ³n",
             "type": "main",
             "index": 0
           }
@@ -1090,7 +1213,7 @@
         ]
       ]
     },
-    "Acción No Reconocida": {
+    "AcciÃ³n No Reconocida": {
       "main": [
         [
           {
@@ -1106,6 +1229,28 @@
         [
           {
             "node": "Respond - Error Interno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Carrera y Director": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o Reporte IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o Reporte IA": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp Director",
             "type": "main",
             "index": 0
           }
