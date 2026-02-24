@@ -218,7 +218,7 @@ services:
       - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-redis123}@redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
       - QRCODE_LIMIT=30
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.10123
     volumes:
       - evolution_store:/evolution/store
       - evolution_instances:/evolution/instances
