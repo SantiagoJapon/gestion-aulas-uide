@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { FaSearch, FaEdit, FaWhatsapp, FaKey, FaCheckCircle, FaExclamationCircle, FaCopy, FaCheck } from 'react-icons/fa';
 import { Button } from './common/Button';
 import { Modal } from './common/Modal';
-import { docenteService, Docente } from '../services/api';
+import { docenteService, carreraService, Docente, Carrera } from '../services/api';
 
 interface DocenteTableProps {
     carreraId: number;
@@ -31,9 +31,13 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
         telefono: '',
         titulo_pregrado: '',
         titulo_posgrado: '',
-        tipo: 'Tiempo Completo'
+        tipo: 'Tiempo Completo',
+        carrera_id: 0,
     });
     const [saving, setSaving] = useState(false);
+
+    // Carreras disponibles (solo para admin, cuando carreraId === 0)
+    const [carreras, setCarreras] = useState<Carrera[]>([]);
 
     // Panel de credenciales post-creación
     const [credenciales, setCredenciales] = useState<Credenciales | null>(null);
@@ -44,6 +48,15 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
 
     useEffect(() => {
         loadDocentes();
+    }, [carreraId]);
+
+    // Cargar carreras activas solo cuando es admin (carreraId === 0)
+    useEffect(() => {
+        if (carreraId === 0) {
+            carreraService.getCarreras().then(res => {
+                if (res.success) setCarreras(res.carreras.filter(c => c.activa));
+            }).catch(console.error);
+        }
     }, [carreraId]);
 
     const loadDocentes = async () => {
@@ -88,11 +101,12 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                 telefono: docente.telefono || '',
                 titulo_pregrado: docente.titulo_pregrado || '',
                 titulo_posgrado: docente.titulo_posgrado || '',
-                tipo: docente.tipo || 'Tiempo Completo'
+                tipo: docente.tipo || 'Tiempo Completo',
+                carrera_id: 0,
             });
         } else {
             setEditingDocente(null);
-            setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo' });
+            setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo', carrera_id: 0 });
         }
         setIsModalOpen(true);
     };
@@ -118,7 +132,10 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                     }
                 }
             } else {
-                const res = await docenteService.createDocente({ ...formData, carrera_id: carreraId });
+                const res = await docenteService.createDocente({
+                    ...formData,
+                    carrera_id: carreraId > 0 ? carreraId : formData.carrera_id,
+                });
                 if (res.success) {
                     loadDocentes();
                     // Mostrar credenciales en el mismo modal (sin cerrar)
@@ -475,7 +492,7 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                             <Button
                                 variant="primary"
                                 className="flex-1 rounded-2xl"
-                                onClick={() => { setCredenciales(null); setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo' }); }}
+                                onClick={() => { setCredenciales(null); setFormData({ nombre: '', email: '', telefono: '', titulo_pregrado: '', titulo_posgrado: '', tipo: 'Tiempo Completo', carrera_id: 0 }); }}
                             >
                                 <span className="material-symbols-outlined text-sm">person_add</span>
                                 Agregar otro
@@ -557,6 +574,26 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                 </select>
                             </div>
                         </div>
+
+                        {/* Selector de carrera: solo visible para admin (carreraId === 0) al crear */}
+                        {carreraId === 0 && !editingDocente && (
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
+                                    Carrera *
+                                </label>
+                                <select
+                                    required
+                                    className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer"
+                                    value={formData.carrera_id}
+                                    onChange={e => setFormData({ ...formData, carrera_id: Number(e.target.value) })}
+                                >
+                                    <option value={0}>Seleccionar carrera...</option>
+                                    {carreras.map(c => (
+                                        <option key={c.id} value={c.id}>{c.carrera}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-6">
                             <div className="space-y-1.5">

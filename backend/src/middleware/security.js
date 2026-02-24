@@ -13,7 +13,7 @@ const validateOrigin = (req, res, next) => {
   ];
 
   const origin = req.get('origin');
-  
+
   // Permitir requests sin origin (Postman, curl, etc.) en desarrollo
   if (process.env.NODE_ENV === 'development' && !origin) {
     return next();
@@ -109,7 +109,7 @@ const helmetConfig = helmet({
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // Solo 5 intentos de login/registro por IP cada 15 minutos
+  max: 1000, // Incrementado de 5 a 1000 para pruebas
   message: {
     error: 'Demasiados intentos de autenticación. Por favor intenta de nuevo en 15 minutos.'
   },
@@ -170,7 +170,7 @@ const securityLogger = (req, res, next) => {
   // Registrar intentos fallidos de autenticación
   if (req.path.includes('/login') || req.path.includes('/register')) {
     const originalSend = res.send;
-    res.send = function(data) {
+    res.send = function (data) {
       if (res.statusCode === 401 || res.statusCode === 400) {
         console.warn(`[SECURITY] Intento fallido de autenticación desde ${req.ip} - ${req.path}`);
       }

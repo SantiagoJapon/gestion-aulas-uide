@@ -7,6 +7,7 @@ import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
+import IncidenciasView from '../components/IncidenciasView';
 
 
 // --- Utility Functions ---
@@ -513,6 +514,9 @@ export default function ProfesorDashboard() {
             <HorarioVisual mode="personal" title="Mi Horario Académico" />
           </div>
         );
+
+      case 'incidencias':
+        return <IncidenciasView />;
 
       case 'settings':
         return <UserSettings />;

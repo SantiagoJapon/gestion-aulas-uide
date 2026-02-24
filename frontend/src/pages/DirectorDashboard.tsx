@@ -18,6 +18,7 @@ import { Step } from 'react-joyride';
 
 import { HealthReportModal } from '../components/director/HealthReportModal';
 import { ComunicadoModal } from '../components/director/ComunicadoModal';
+import IncidenciasView from '../components/IncidenciasView';
 
 const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
@@ -464,6 +465,8 @@ const DirectorDashboard = () => {
         return <UserSettings />;
       case 'reportes':
         return <ReporteEjecutivo carreraPreseleccionada={{ id: user?.carrera?.id || 0, nombre: user?.carrera?.carrera || '' }} />;
+      case 'incidencias':
+        return <IncidenciasView />;
       default:
         return null;
     }
