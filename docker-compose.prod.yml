@@ -20,6 +20,7 @@ services:
       POSTGRES_DB: ${DB_NAME:-gestion_aulas}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     # NO exponemos puerto al host en produccion
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $${DB_USER:-postgres}" ]
@@ -179,7 +180,7 @@ services:
     environment:
       EVOLUTION_API_URL: http://evolution-api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-roomie_instancia}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
       BOT_PORT: 3020
       BACKEND_URL: http://gestion_aulas_backend:3000
       DB_HOST: postgres
@@ -218,7 +219,7 @@ services:
       - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-redis123}@redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
       - QRCODE_LIMIT=30
-      - CONFIG_SESSION_PHONE_VERSION=2.26.6.72
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
     volumes:
       - evolution_store:/evolution/store
       - evolution_instances:/evolution/instances
