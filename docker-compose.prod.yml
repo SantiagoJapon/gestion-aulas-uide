@@ -201,28 +201,47 @@ services:
 
   # ==========================================
   # Evolution API - WhatsApp Gateway
+  # Imagen: evolution-api-dev:2.3.7 (build manual requerido)
+  # Ver: EVOLUTION_API_SETUP.md para instrucciones de build
   # ==========================================
   evolution-api:
-    image: atendai/evolution-api:latest
+    image: evolution-api-dev:2.3.7
     container_name: gestion_aulas_evolution_api
     restart: always
     ports:
       - "8080:8080"
     environment:
-      - AUTHENTICATION_TYPE=apikey
+      # Autenticación (v2.3.7: sin AUTHENTICATION_TYPE ni DATABASE_ENABLED)
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
-      - DATABASE_ENABLED=true
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      # Base de datos
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgres://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/evolution_db
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+      # Redis
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-redis123}@redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_LOCAL_ENABLED=true
+      # QR / Sesión WhatsApp
       - QRCODE_LIMIT=30
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
+      - CONFIG_SESSION_PHONE_CLIENT=Chrome
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      # IMPORTANTE: NO incluir CONFIG_SESSION_PHONE_VERSION — causa que se reporte
+      # una versión antigua de WhatsApp Web y WhatsApp rechaza la conexión
+      # Timezone y logs
+      - TZ=America/Guayaquil
+      - LOG_LEVEL=ERROR,WARN,INFO,LOG
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE
+      # os-patch.js: NO necesario en Linux real (solo en WSL2/Windows)
+      # Descomentar solo si el servidor corre en WSL2:
+      # - NODE_OPTIONS=--require /os-patch.js
     volumes:
       - evolution_store:/evolution/store
       - evolution_instances:/evolution/instances
+      # Descomentar solo si el servidor corre en WSL2:
+      # - ./os-patch.js:/os-patch.js:ro
     depends_on:
       postgres:
         condition: service_started
@@ -231,7 +250,7 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/instance/instances" ]
+      test: [ "CMD-SHELL", "curl -s --max-time 5 http://localhost:8080/ -o /dev/null" ]
       interval: 30s
       timeout: 10s
       retries: 5

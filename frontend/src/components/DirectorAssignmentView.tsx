@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { distribucionService, usuarioService, User } from '../services/api';
 import DirectorManagementModal from './DirectorManagementModal';
 
@@ -130,8 +131,9 @@ export default function DirectorAssignmentView() {
     return (
         <div className="flex h-full flex-col relative overflow-hidden bg-transparent transition-colors duration-300">
 
-            {isManagementModalOpen && (
-                <DirectorManagementModal isOpen={isManagementModalOpen} onClose={() => setIsManagementModalOpen(false)} />
+            {isManagementModalOpen && createPortal(
+                <DirectorManagementModal isOpen={isManagementModalOpen} onClose={() => setIsManagementModalOpen(false)} />,
+                document.body
             )}
 
             {/* Toolbar simplificada - Sin encabezado redundante */}
@@ -274,121 +276,113 @@ export default function DirectorAssignmentView() {
                 </div>
             </div>
 
-            {/* Side Panel Drawer (Overlay) */}
-            {isDrawerOpen && (
-                <div className="absolute inset-0 z-50 flex justify-end">
+            {/* Side Panel Drawer (Overlay) — Renderizado vía Portal para cubrir toda la pantalla */}
+            {isDrawerOpen && createPortal(
+                <div className="fixed inset-0 z-[200] flex justify-end animate-fade-in">
                     {/* Backdrop */}
                     <div
-                        className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-sm transition-opacity"
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                         onClick={() => setIsDrawerOpen(false)}
-                    ></div>
+                    />
 
                     {/* Drawer Panel */}
-                    <div className="relative w-full max-w-[400px] h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col animate-slide-in-right">
+                    <div className="relative w-full max-w-sm h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 flex flex-col animate-slide-in-right">
 
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        {/* Drawer Header */}
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/50">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Asignar Director</h3>
-                                <p className="text-xs text-slate-400 font-medium mt-0.5">{selectedCarrera?.nombre_carrera}</p>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-white">Asignar Director</h3>
+                                <p className="text-xs text-uide-blue font-bold mt-0.5 truncate max-w-[200px]">{selectedCarrera?.nombre_carrera}</p>
                             </div>
                             <button
                                 onClick={() => setIsDrawerOpen(false)}
-                                className="size-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 transition-colors"
+                                className="size-9 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 transition-colors"
                             >
                                 <span className="material-symbols-outlined text-[20px]">close</span>
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6">
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                                Selecciona un docente para liderar la carrera de <span className="text-uide-blue font-bold">{selectedCarrera?.nombre_carrera}</span>.
+                        {/* Drawer Body */}
+                        <div className="flex-1 overflow-y-auto p-5">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
+                                Selecciona el director para liderar <span className="text-uide-blue font-bold">{selectedCarrera?.nombre_carrera}</span>.
                             </p>
 
-                            <div className="space-y-4">
-                                <label className="block">
-                                    <span className="text-xs font-bold text-slate-400 uppercase mb-2 block">Buscar Docente</span>
-                                    <div className="relative">
-                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">person_search</span>
-                                        <input
-                                            value={assignSearchTerm}
-                                            onChange={(e) => setAssignSearchTerm(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-uide-blue/50 dark:text-white transition-all outline-none"
-                                            placeholder="Nombre o Correo..."
-                                            type="text"
-                                        />
+                            {/* Buscador */}
+                            <div className="relative mb-4">
+                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">person_search</span>
+                                <input
+                                    value={assignSearchTerm}
+                                    onChange={(e) => setAssignSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-uide-blue/30 dark:text-white transition-all outline-none text-sm"
+                                    placeholder="Buscar por nombre o correo..."
+                                    type="text"
+                                    autoFocus
+                                />
+                            </div>
+
+                            {/* Lista de directores */}
+                            <div className="space-y-2">
+                                {filteredDirectors.length === 0 && (
+                                    <div className="text-center py-10">
+                                        <span className="material-symbols-outlined text-3xl text-slate-300 block mb-2">person_off</span>
+                                        <p className="text-sm text-slate-400">No se encontraron directores.</p>
                                     </div>
-                                </label>
+                                )}
+                                {filteredDirectors.map(director => {
+                                    const isSelected = selectedDirectorId === director.id;
+                                    const isAssignedToOther = director.carrera_nombre && director.carrera_nombre !== selectedCarrera?.nombre_carrera;
 
-                                <div className="space-y-3 pt-2">
-                                    {filteredDirectors.length === 0 && (
-                                        <p className="text-center text-sm text-slate-400 py-4">No se encontraron directores.</p>
-                                    )}
-
-                                    {filteredDirectors.map(director => {
-                                        const isSelected = selectedDirectorId === director.id;
-                                        const isAssignedToOther = director.carrera_nombre && director.carrera_nombre !== selectedCarrera?.nombre_carrera;
-
-                                        return (
-                                            <div
-                                                key={director.id}
-                                                onClick={() => setSelectedDirectorId(director.id)}
-                                                className={`
-                                            p-3 border rounded-xl cursor-pointer transition-all flex items-center gap-3
-                                            ${isSelected
-                                                        ? 'bg-uide-blue/5 border-uide-blue ring-1 ring-uide-blue'
-                                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'}
-                                        `}
-                                            >
-                                                <div className={`size-10 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ${isSelected ? 'bg-uide-blue' : 'bg-slate-400'}`}>
-                                                    {getInitials(director.nombre + ' ' + director.apellido)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm font-bold truncate ${isSelected ? 'text-uide-blue' : 'text-slate-900 dark:text-white'}`}>
-                                                        {director.nombre} {director.apellido}
-                                                    </p>
-                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                                        {isAssignedToOther ? `Asignado a: ${director.carrera_nombre}` : 'Disponible'}
-                                                    </p>
-                                                </div>
-                                                {isSelected && (
-                                                    <span className="material-symbols-outlined text-uide-blue text-[20px]">check_circle</span>
-                                                )}
+                                    return (
+                                        <div
+                                            key={director.id}
+                                            onClick={() => setSelectedDirectorId(director.id)}
+                                            className={`p-3.5 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${isSelected
+                                                    ? 'bg-uide-blue/5 border-uide-blue ring-2 ring-uide-blue/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className={`size-10 rounded-full flex items-center justify-center text-xs font-black text-white shadow-sm flex-shrink-0 ${isSelected ? 'bg-uide-blue' : 'bg-slate-400'}`}>
+                                                {getInitials(director.nombre + ' ' + director.apellido)}
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm font-bold truncate ${isSelected ? 'text-uide-blue' : 'text-slate-900 dark:text-white'}`}>
+                                                    {director.nombre} {director.apellido}
+                                                </p>
+                                                <p className={`text-[11px] font-medium truncate ${isAssignedToOther ? 'text-amber-500' : 'text-slate-400'}`}>
+                                                    {isAssignedToOther ? `↗ Asignado a: ${director.carrera_nombre}` : '✓ Disponible'}
+                                                </p>
+                                            </div>
+                                            {isSelected && (
+                                                <span className="material-symbols-outlined text-uide-blue text-[22px] flex-shrink-0">check_circle</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-white dark:bg-slate-900 z-10">
+                        {/* Drawer Footer */}
+                        <div className="p-5 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-white dark:bg-slate-900">
                             <button
                                 onClick={handleAssign}
                                 disabled={!selectedDirectorId}
-                                className="w-full bg-uide-blue disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold shadow-lg shadow-uide-blue/20 hover:brightness-110 transition-all active:scale-[0.98]"
+                                className="w-full bg-uide-blue disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-400 text-white py-3 rounded-xl font-black shadow-lg shadow-uide-blue/20 hover:brightness-110 transition-all active:scale-[0.98] text-sm"
                             >
                                 Confirmar Asignación
                             </button>
                             <button
                                 onClick={() => setIsDrawerOpen(false)}
-                                className="w-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm"
                             >
                                 Cancelar
                             </button>
                             {selectedCarrera?.director_nombre && (
                                 <button
                                     onClick={async () => {
-                                        // Logic to unassign could be implemented here (passing null to API)
-                                        // For now, we reuse handleAssign but maybe we need a dedicated unassign button/flow
-                                        if (!confirm('¿Estás seguro de quitar al director actual?')) return;
+                                        if (!confirm('¿Estás seguro de desvincular al director actual?')) return;
                                         try {
-                                            // Assuming passing null unassigns? The API `updateDirectorCarrera` takes `carrera` string. 
-                                            // If we want to unassign we might need to update the user to have null career.
-                                            // But since API takes ID and Carrera Name, simply assigning to another works.
-                                            // To Unassign, we might need to look at API capabilities. The service takes string | null.
-                                            // Let's assume we can pass null.
                                             if (selectedCarrera.director_nombre) {
-                                                // Find the current director ID? We might not have it easily here without searching 'directores' array.
-                                                // Let's assume we maintain it.
                                                 const currentDir = directores.find(d => d.nombre + ' ' + d.apellido === selectedCarrera.director_nombre);
                                                 if (currentDir) {
                                                     await usuarioService.updateDirectorCarrera(currentDir.id, null);
@@ -398,14 +392,15 @@ export default function DirectorAssignmentView() {
                                             }
                                         } catch (e) { console.error(e); }
                                     }}
-                                    className="w-full text-red-500 text-xs font-bold hover:underline mt-2"
+                                    className="w-full text-red-500 text-xs font-bold hover:text-red-600 py-1 transition-colors"
                                 >
                                     Desvincular Director Actual
                                 </button>
                             )}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

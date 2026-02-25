@@ -2,6 +2,7 @@ const { User: Usuario, Carrera } = require('../models');
 const bcrypt = require('bcryptjs');
 const { generarToken } = require('../utils/jwt');
 const whatsappService = require('../services/whatsappService');
+const emailService = require('../services/emailService');
 
 // ==========================================
 // REGISTRAR USUARIO
@@ -346,6 +347,14 @@ exports.crearDirector = async (req, res) => {
             });
         }
 
+        // Validar que el email sea institucional
+        if (!email.endsWith('@uide.edu.ec')) {
+            return res.status(400).json({
+                success: false,
+                mensaje: 'El correo debe ser institucional (@uide.edu.ec)'
+            });
+        }
+
         const existente = await Usuario.findOne({ where: { email } });
         if (existente) {
             return res.status(400).json({
@@ -354,7 +363,10 @@ exports.crearDirector = async (req, res) => {
             });
         }
 
-        const passwordTemporal = 'uide2026';
+        // Generar contraseña temporal segura y aleatoria
+        const passwordTemporal = emailService.generarPasswordTemporal(12);
+        const passwordExpira = emailService.generarTokenExpiracion(24); // 24 horas
+
         const nuevo = await Usuario.create({
             nombre,
             apellido,
@@ -363,13 +375,35 @@ exports.crearDirector = async (req, res) => {
             rol: 'director',
             estado: 'activo',
             requiere_cambio_password: true,
+            passwordTemporal_expira: passwordExpira,
             carrera_director,
             telefono: telefono || null
         });
 
         let whatsapp_enviado = false;
+        let email_enviado = false;
+        let email_error = null;
+
+        // Enviar notificación por email (principal)
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const emailResult = await emailService.enviarCredenciales({
+            email,
+            nombre: `${nombre} ${apellido}`,
+            passwordTemporal,
+            rol: 'director',
+            linkAcceso: frontendUrl
+        });
+
+        if (emailResult.success) {
+            email_enviado = true;
+            console.log('✅ Email enviado exitosamente a:', email);
+        } else {
+            email_error = emailResult.error;
+            console.warn('⚠️ Error enviando email:', email_error);
+        }
+
+        // Enviar también WhatsApp como respaldo (si tiene teléfono)
         if (telefono) {
-            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
             const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, tu cuenta de director ha sido creada.\n\n📧 *Correo:* ${email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n🏫 *Carrera:* ${carrera_director}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
             try {
                 await whatsappService.sendMessage(telefono, mensaje);
@@ -381,6 +415,7 @@ exports.crearDirector = async (req, res) => {
 
         const usuarioData = nuevo.toJSON();
         delete usuarioData.password;
+        delete usuarioData.passwordTemporal_expira;
 
         res.status(201).json({
             success: true,
@@ -388,7 +423,10 @@ exports.crearDirector = async (req, res) => {
             credenciales: {
                 email,
                 password: passwordTemporal,
-                whatsapp_enviado
+                whatsapp_enviado,
+                email_enviado,
+                email_error,
+                expira_en: '24 horas'
             }
         });
 

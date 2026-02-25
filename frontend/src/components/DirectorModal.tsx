@@ -15,6 +15,7 @@ interface Credenciales {
   email: string;
   password: string;
   whatsapp_enviado: boolean;
+  email_enviado?: boolean;
   nombre: string;
 }
 
@@ -73,6 +74,7 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
             email: (res as any).credenciales.email,
             password: (res as any).credenciales.password,
             whatsapp_enviado: (res as any).credenciales.whatsapp_enviado,
+            email_enviado: (res as any).credenciales.email_enviado,
             nombre: `${formData.nombre} ${formData.apellido}`
           });
         } else {
@@ -175,6 +177,24 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
               >
                 {copiedField === 'password' ? <FaCheck size={12} /> : <FaCopy size={12} />}
               </button>
+            </div>
+          </div>
+
+          {/* Estado Email */}
+          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${credenciales.email_enviado
+            ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400'
+            : 'bg-muted/30 border-border text-muted-foreground'
+            }`}>
+            <span className="material-symbols-outlined text-xl flex-shrink-0">email</span>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest">
+                {credenciales.email_enviado ? 'Email enviado exitosamente' : 'Email no enviado'}
+              </p>
+              <p className="text-[10px] font-medium opacity-70 mt-0.5">
+                {credenciales.email_enviado
+                  ? `Las credenciales fueron enviadas a ${credenciales.email}`
+                  : 'Revisa la configuración del servidor de correo.'}
+              </p>
             </div>
           </div>
 
@@ -293,7 +313,7 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-              placeholder="juan.perez@uide.edu.ec"
+              placeholder="correo@institucional.edu.ec"
             />
           </div>
 

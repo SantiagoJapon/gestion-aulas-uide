@@ -644,7 +644,7 @@ async function getAudioUrl(messageData) {
 // MENUS (texto formateado para WhatsApp)
 // ==========================================
 
-async function sendMainMenu(jid, session, overrideName = null) {
+async function sendMainMenu(jid, session, overrideName = null, rolLabel = null) {
   const phone = formatPhone(jid);
   const name = overrideName || await getSessionName(session);
   const rol = session?.rol || 'user';
@@ -655,7 +655,11 @@ async function sendMainMenu(jid, session, overrideName = null) {
 
   const emojis = ['🏫', '📋', '👨‍🏫', '📚', '📊', '👤'];
   let text = `👋 ¡Hola *${name}*! Soy *Roomie* 🤖\n`;
-  text += `_Tu asistente de aulas UIDE_\n\n`;
+  if (rolLabel) {
+    text += `_${rolLabel}_\n\n`;
+  } else {
+    text += `_Tu asistente de aulas UIDE_\n\n`;
+  }
   text += `¿Qué necesitas hoy?\n\n`;
   visibleOptions.forEach((opt, i) => {
     text += `${emojis[i] || '▪️'} *${i + 1}.* ${opt.label}\n`;
@@ -736,6 +740,43 @@ async function searchAndShowRooms(jid, dia, hora) {
 }
 
 // ==========================================
+// AUTO-LOGIN POR NUMERO DE TELEFONO
+// ==========================================
+
+// Convierte número internacional de WhatsApp al formato local ecuatoriano
+// "593987654321" -> "0987654321"
+function toLocalPhone(phone) {
+  if (phone && phone.startsWith('593') && phone.length >= 12) {
+    return '0' + phone.slice(3);
+  }
+  return phone;
+}
+
+// Busca un usuario (admin/director/docente) en usuarios.telefono.
+// Prueba el número tal como llega de WhatsApp y también en formato local.
+async function autoLoginByPhone(cleanPhone) {
+  const localPhone = toLocalPhone(cleanPhone);
+  const client = await pool.connect();
+  try {
+    const res = await client.query(
+      `SELECT id, nombre, apellido, rol, carrera_director
+       FROM usuarios
+       WHERE (telefono = $1 OR telefono = $2)
+         AND estado = 'activo'
+         AND rol IN ('admin', 'director', 'docente', 'profesor')
+       LIMIT 1`,
+      [cleanPhone, localPhone]
+    );
+    return res.rows.length > 0 ? res.rows[0] : null;
+  } catch (e) {
+    console.error('[autoLoginByPhone] Error:', e.message);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+// ==========================================
 // PROCESAR MENSAJE ENTRANTE
 // ==========================================
 
@@ -748,9 +789,34 @@ async function handleMessage(jid, text, messageData) {
     const stateObj = userState.get(phone);
     const state = stateObj?.state || null;
 
-    // --- AUTO-START: si no tiene sesion, pedir cedula ---
+    // --- AUTO-START: si no tiene sesion, intentar auto-login por telefono ---
     const session = await getSession(jid);
     if (!session && state !== 'WAITING_CEDULA') {
+      // Buscar en usuarios.telefono antes de pedir cedula.
+      // El numero de WhatsApp llega como "593987654321"; usuarios guarda "0987654321" o "593987654321".
+      const autoUser = await autoLoginByPhone(phone);
+      if (autoUser) {
+        // Registrar sesion y saludar directamente
+        await pool.query(`
+          INSERT INTO bot_sessions (telefono, user_id, user_type, rol)
+          VALUES ($1, $2, 'usuario', $3)
+          ON CONFLICT (telefono)
+          DO UPDATE SET user_id = EXCLUDED.user_id, user_type = EXCLUDED.user_type, rol = EXCLUDED.rol
+        `, [phone, autoUser.id, autoUser.rol]);
+        userState.delete(phone);
+        const newSession = await getSession(jid);
+
+        // Construir etiqueta de rol personalizada
+        const rolLabels = { admin: 'Administrador UIDE', director: 'Director de Carrera', docente: 'Docente', profesor: 'Docente' };
+        let rolLabel = rolLabels[autoUser.rol] || autoUser.rol;
+        if (autoUser.rol === 'director' && autoUser.carrera_director) {
+          rolLabel = `Director de ${autoUser.carrera_director}`;
+        }
+
+        await sendMainMenu(jid, newSession, autoUser.nombre.split(' ')[0], rolLabel);
+        return;
+      }
+
       userState.set(phone, { state: 'WAITING_CEDULA' });
       await sendText(jid,
         '¡Hola! Soy *Roomie*, tu asistente de aulas en la UIDE 🤖\n\nPara empezar, necesito verificar tu identidad.\n\nEnvía tu número de *cédula* (10 dígitos):'

@@ -4,42 +4,14 @@ const { Op } = require('sequelize');
 // ============================================
 // REGLAS DE DISTRIBUCIÓN UIDE
 // ============================================
-// 1. Auditorio: NO se asigna en distribución automática (se reserva con aprobación admin, uso para eventos)
-// 2. Sala de Audiencias: solo para Derecho
-// 3. Aula 20 (Lab Psicología): solo para Psicología
-// 4. Aulas C15-C18: solo para Arquitectura (Taller de maquetería)
-// 5. Laboratorios 1, 2, 3: prioridad para Informática, otras escuelas solo si sobra espacio
+// Única regla fija: el Auditorio NO se asigna en distribución automática.
+// Se reserva manualmente para eventos institucionales.
+//
+// Las prioridades de aulas por carrera se gestionan desde la BD:
+// - aula.restriccion_carrera → carrera con prioridad (no exclusiva)
+// - aula.es_prioritaria = true → la carrera indicada tiene prioridad de scoring
+// - Cualquier otra carrera SÍ puede usar el aula si hay disponibilidad
 // ============================================
-
-const REGLAS_AULAS = {
-  // Aulas excluidas de distribución automática
-  excluidas_distribucion: ['AUDITORIO'],
-
-  // Aulas exclusivas por carrera
-  exclusivas: {
-    'SALA DE AUDIENCIAS': ['DERECHO'],
-    'AUDIENCIAS': ['DERECHO'],
-    'AULA 20': ['PSICOLOGIA', 'PSICOLOGÍA'],
-    'AULA20': ['PSICOLOGIA', 'PSICOLOGÍA'],
-    'LABORATORIO DE PSICOLOGIA': ['PSICOLOGIA', 'PSICOLOGÍA'],
-    'AULA 16': ['ARQUITECTURA'],
-    'AULA 17': ['ARQUITECTURA'],
-    'AULA 18': ['ARQUITECTURA'],
-    'A16': ['ARQUITECTURA'],
-    'A17': ['ARQUITECTURA'],
-    'A18': ['ARQUITECTURA'],
-  },
-
-  // Aulas con prioridad para una carrera
-  prioridad: {
-    'LABORATORIO 1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-    'LABORATORIO 2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-    'LABORATORIO 3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-    'LAB1': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-    'LAB2': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-    'LAB3': ['INFORMATICA', 'INFORMÁTICA', 'SISTEMAS', 'TECNOLOGIA', 'TECNOLOGÍA'],
-  }
-};
 
 function normalizarTexto(texto) {
   if (!texto) return '';
@@ -48,50 +20,12 @@ function normalizarTexto(texto) {
     .trim();
 }
 
+// Excluye de la distribución automática solo el Auditorio
+// (tipo AUDITORIO o restriccion_carrera = 'AUDITORIO_INSTITUCIONAL')
 function aulaExcluidaDeDistribucion(aula) {
-  const nombre = normalizarTexto(aula.nombre);
-  const codigo = normalizarTexto(aula.codigo);
-  const tipo = normalizarTexto(aula.tipo);
-
-  for (const excluida of REGLAS_AULAS.excluidas_distribucion) {
-    if (nombre.includes(excluida) || codigo.includes(excluida) || tipo === excluida) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function aulaEsExclusiva(aula, carreraClase) {
-  const nombre = normalizarTexto(aula.nombre);
-  const codigo = normalizarTexto(aula.codigo);
-  const carreraNorm = normalizarTexto(carreraClase);
-
-  // Regla especial para Aulas 16, 17, 18 de Arquitectura (Taller de maquetería)
-  const isArqRoom = (nombre.includes('16') || nombre.includes('17') || nombre.includes('18')) &&
-    (nombre.includes('AULA') || codigo.includes('A'));
-
-  if (isArqRoom) {
-    return carreraNorm.includes('ARQUITECTURA') ? 'permitida' : 'bloqueada';
-  }
-
-  for (const [aulaKey, carreras] of Object.entries(REGLAS_AULAS.exclusivas)) {
-    if (nombre.includes(aulaKey) || codigo.includes(aulaKey)) {
-      return carreras.some(c => carreraNorm.includes(c)) ? 'permitida' : 'bloqueada';
-    }
-  }
-  return 'sin_restriccion';
-}
-
-function aulaConPrioridad(aula) {
-  const nombre = normalizarTexto(aula.nombre);
-  const codigo = normalizarTexto(aula.codigo);
-
-  for (const [aulaKey, carreras] of Object.entries(REGLAS_AULAS.prioridad)) {
-    if (nombre.includes(aulaKey) || codigo.includes(aulaKey)) {
-      return carreras;
-    }
-  }
-  return null;
+  const tipo = normalizarTexto(aula.tipo || '');
+  const restriccion = normalizarTexto(aula.restriccion_carrera || '');
+  return tipo === 'AUDITORIO' || restriccion === 'AUDITORIO_INSTITUCIONAL';
 }
 
 class DistribucionService {
@@ -122,7 +56,7 @@ class DistribucionService {
 
       const todasLasClases = await Clase.findAll({ where: whereClases });
       const todasAulas = await Aula.findAll({
-        where: { estado: { [Op.iLike]: 'DISPONIBLE' } },
+        where: { estado: 'disponible' },
         order: [['capacidad', 'ASC']]
       });
       const aulas = todasAulas.filter(a => !aulaExcluidaDeDistribucion(a));
@@ -253,65 +187,68 @@ class DistribucionService {
   }
 
   /**
-   * Busca el aula óptima para una clase respetando las reglas UIDE
+   * Busca el aula óptima para una clase.
+   *
+   * Reglas:
+   *  - Solo el Auditorio queda excluido (ya filtrado antes de llegar aquí).
+   *  - Todas las demás aulas pueden ser usadas por cualquier carrera.
+   *  - Si un aula tiene restriccion_carrera + es_prioritaria=true, recibe un
+   *    bonus de score cuando la clase pertenece a esa carrera prioritaria.
+   *    Las demás carreras también pueden usar el aula, solo con menor prioridad.
    */
   buscarAulaOptima(clase, aulas, aulasOcupadas, estrictoCapacidad = true) {
     let mejorAula = null;
     let menorScore = Infinity;
     let isOvercapacity = false;
 
-    // 0. Si la clase tiene aula_sugerida, filtrar solo aulas que coincidan con el tipo sugerido
+    const carreraNorm = normalizarTexto(clase.carrera);
+
+    // Si la clase tiene aula_sugerida, intentar acotar la búsqueda a aulas que coincidan
     const aulaSugerida = clase.aula_sugerida ? normalizarTexto(clase.aula_sugerida) : null;
     const aulasFiltradas = aulaSugerida
       ? aulas.filter(aula => {
-        const nombreAula = normalizarTexto(aula.nombre);
-        const codigoAula = normalizarTexto(aula.codigo);
-        // Verificar si el nombre o código del aula contiene las palabras clave de la sugerencia
-        return aulaSugerida.split(' ').some(palabra =>
-          palabra.length > 3 && (nombreAula.includes(palabra) || codigoAula.includes(palabra))
-        );
-      })
+          const nombreAula = normalizarTexto(aula.nombre);
+          const codigoAula = normalizarTexto(aula.codigo);
+          return aulaSugerida.split(' ').some(p =>
+            p.length > 3 && (nombreAula.includes(p) || codigoAula.includes(p))
+          );
+        })
       : aulas;
 
-    // Si hay aulas que coinciden con la sugerencia, usarlas; si no, usar todas
     const aulasParaBuscar = aulasFiltradas.length > 0 ? aulasFiltradas : aulas;
 
     if (aulaSugerida && aulasFiltradas.length > 0) {
-      console.log(`[Distribucion] Clase "${clase.materia}" tiene aula_sugerida: "${clase.aula_sugerida}" - buscando entre ${aulasFiltradas.length} aulas coincidentes`);
+      console.log(`[Distribucion] "${clase.materia}" tiene aula_sugerida: "${clase.aula_sugerida}" → ${aulasFiltradas.length} candidatas`);
     }
 
-    // 1. Intentar encontrar aula con capacidad suficiente
     for (const aula of aulasParaBuscar) {
+      // Capacidad mínima en modo estricto
       if (estrictoCapacidad && aula.capacidad < (clase.num_estudiantes || 1)) continue;
 
-      const exclusividad = aulaEsExclusiva(aula, clase.carrera);
-      if (exclusividad === 'bloqueada') continue;
-
-      const carrerasPrioritarias = aulaConPrioridad(aula);
-      const carreraNorm = normalizarTexto(clase.carrera);
-      const esPrioritaria = carrerasPrioritarias && carrerasPrioritarias.some(c => carreraNorm.includes(c));
-
-      // Si el aula tiene prioridad para otra carrera, no usarla en estricto (proteger recursos)
-      if (carrerasPrioritarias && !esPrioritaria && estrictoCapacidad) continue;
-
+      // Verificar disponibilidad en el horario
       if (!this.aulaDisponibleEnHorario(aula.codigo, clase, aulasOcupadas)) continue;
 
-      // CÁLCULO DE SCORE DE CALIDAD DE ASIGNACIÓN
-      // Menor score es mejor.
+      // ── SCORING ──────────────────────────────────────────────────────────
+      // Menor score = mejor asignación.
       const diferenciaCapacidad = Math.abs(aula.capacidad - (clase.num_estudiantes || 1));
 
-      // Bonus por Especialidad: Si el aula es exclusiva o prioritaria para esta carrera, 
-      // reducir el score drásticamente para preferirla sobre aulas genéricas.
-      const isExclusiveMatch = Object.keys(REGLAS_AULAS.exclusivas).some(key => normalizarTexto(aula.nombre).includes(key));
-      const hasBonus = isExclusiveMatch || esPrioritaria;
+      // Bonus de prioridad: el aula tiene una carrera preferente en la BD
+      // y la clase pertenece a esa carrera → se favorece esta asignación.
+      let bonusPrioridad = 0;
+      if (aula.es_prioritaria && aula.restriccion_carrera) {
+        const restriccionNorm = normalizarTexto(aula.restriccion_carrera);
+        if (carreraNorm.includes(restriccionNorm) || restriccionNorm.includes(carreraNorm)) {
+          bonusPrioridad = 1000;
+        }
+      }
 
-      // Bonus adicional si el aula coincide con la sugerencia del usuario
+      // Bonus por coincidencia con aula_sugerida
       const matchesSugerencia = aulaSugerida && (
         normalizarTexto(aula.nombre).includes(aulaSugerida) ||
         normalizarTexto(aula.codigo).includes(aulaSugerida)
       );
 
-      const score = diferenciaCapacidad - (hasBonus ? 1000 : 0) - (matchesSugerencia ? 2000 : 0);
+      const score = diferenciaCapacidad - bonusPrioridad - (matchesSugerencia ? 2000 : 0);
 
       if (score < menorScore) {
         menorScore = score;

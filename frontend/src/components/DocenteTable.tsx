@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { FaSearch, FaEdit, FaWhatsapp, FaKey, FaCheckCircle, FaExclamationCircle, FaCopy, FaCheck } from 'react-icons/fa';
+import { FaSearch, FaEdit, FaWhatsapp, FaKey, FaCheckCircle, FaExclamationCircle, FaCopy, FaCheck, FaBook } from 'react-icons/fa';
 import { Button } from './common/Button';
+import DocenteCargaModal from './DocenteCargaModal';
 import { Modal } from './common/Modal';
 import { docenteService, carreraService, Docente, Carrera } from '../services/api';
 
@@ -12,6 +13,7 @@ interface Credenciales {
     email: string;
     password: string;
     whatsapp_enviado: boolean;
+    email_enviado?: boolean;
     nombre: string;
     isReset?: boolean;
 }
@@ -21,6 +23,8 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [accFilter, setAccFilter] = useState('all');
+    const [isCargaModalOpen, setIsCargaModalOpen] = useState(false);
+    const [docenteCarga, setDocenteCarga] = useState<Docente | null>(null);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -94,6 +98,11 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
     const handleOpenModal = (docente?: Docente) => {
         setCredenciales(null);
         if (docente) {
+            // Verificar si es un director - no se puede editar desde aquí
+            if (docente.es_director) {
+                alert('Los directores se gestionan desde el panel de Directores. Usa el botón de la llave para generar o renovar sus credenciales de acceso.');
+                return;
+            }
             setEditingDocente(docente);
             setFormData({
                 nombre: docente.nombre,
@@ -157,6 +166,23 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
             alert(`No se pudo guardar: ${errorMsg}`);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleGenerarMasivo = async () => {
+        if (!confirm(`¿Estás seguro de que deseas generar cuentas de acceso para todos los docentes de esta carrera que aún no tienen una? Se enviarán notificaciones por WhatsApp automáticamente.`)) return;
+
+        try {
+            setGenerando(true);
+            const res = await docenteService.generarCredenciales(carreraId);
+            if (res.success) {
+                alert(res.mensaje);
+                loadDocentes();
+            }
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Error al generar accesos masivos');
+        } finally {
+            setGenerando(false);
         }
     };
 
@@ -226,6 +252,22 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                    {/* Botón Masivo - Solo si hay docentes sin cuenta */}
+                    {docentes.some(d => !d.usuario_id) && (
+                        <button
+                            onClick={handleGenerarMasivo}
+                            disabled={generando || loading}
+                            className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+                            title="Generar accesos para todos los que no tienen"
+                        >
+                            {generando ? (
+                                <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <span className="material-symbols-outlined text-sm">key_visualizer</span>
+                            )}
+                            Accesos Pendientes
+                        </button>
+                    )}
                     <button
                         onClick={() => handleOpenModal()}
                         className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:shadow-lg hover:shadow-emerald-500/20 transition-all active:scale-95"
@@ -323,13 +365,17 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                         <td className="px-6 py-6">
                                             <div className="space-y-2">
                                                 <p className="text-xs font-bold text-foreground line-clamp-1 max-w-[150px]">
-                                                    {docente.titulo_posgrado || docente.titulo_pregrado || 'Sin título'}
+                                                    {(docente as any).es_director
+                                                        ? ((docente as any).carrera_director || 'Director')
+                                                        : (docente.titulo_posgrado || docente.titulo_pregrado || 'Sin título')}
                                                 </p>
-                                                <span className={`inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter ${docente.tipo?.includes('Completo')
-                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                                                    : 'bg-orange-50 text-orange-600 border border-orange-100'
+                                                <span className={`inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter ${(docente as any).es_director
+                                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                    : docente.tipo?.includes('Completo')
+                                                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                        : 'bg-orange-50 text-orange-600 border border-orange-100'
                                                     }`}>
-                                                    {docente.tipo}
+                                                    {(docente as any).es_director ? '🎓 Director de Carrera' : docente.tipo}
                                                 </span>
                                             </div>
                                         </td>
@@ -376,6 +422,13 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                                         <FaKey />
                                                     </button>
                                                 )}
+                                                <button
+                                                    onClick={() => { setDocenteCarga(docente); setIsCargaModalOpen(true); }}
+                                                    className="size-9 rounded-xl bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all flex items-center justify-center shadow-sm border border-primary/10"
+                                                    title="Gestionar Carga Académica"
+                                                >
+                                                    <FaBook />
+                                                </button>
                                                 <button
                                                     onClick={() => handleOpenModal(docente)}
                                                     className="size-9 rounded-xl bg-muted text-muted-foreground hover:bg-primary hover:text-white transition-all flex items-center justify-center shadow-sm border border-border"
@@ -452,6 +505,24 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                 >
                                     {copiedField === 'password' ? <FaCheck size={12} /> : <FaCopy size={12} />}
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Estado Email */}
+                        <div className={`flex items-center gap-3 p-4 rounded-2xl border ${credenciales.email_enviado
+                            ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400'
+                            : 'bg-muted/30 border-border text-muted-foreground'
+                            }`}>
+                            <span className="material-symbols-outlined text-xl flex-shrink-0">email</span>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-widest">
+                                    {credenciales.email_enviado ? 'Email enviado exitosamente' : 'Email no enviado'}
+                                </p>
+                                <p className="text-[10px] font-medium opacity-70 mt-0.5">
+                                    {credenciales.email_enviado
+                                        ? `Las credenciales fueron enviadas a ${credenciales.email}`
+                                        : 'Revisa la configuración del servidor de correo.'}
+                                </p>
                             </div>
                         </div>
 
@@ -619,15 +690,36 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
 
                         {/* Info box para nuevos docentes */}
                         {!editingDocente && (
-                            <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/20">
-                                <span className="material-symbols-outlined text-primary text-xl flex-shrink-0">auto_awesome</span>
-                                <div className="text-xs font-medium text-foreground/70">
-                                    <strong className="text-foreground">Acceso automático:</strong> Al guardar, se creará una cuenta con contraseña temporal <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary">uide2026</code>.
-                                    {formData.telefono
-                                        ? <span className="text-green-600"> Las credenciales se enviarán por WhatsApp al número ingresado.</span>
-                                        : <span> Si ingresas un teléfono, las credenciales se enviarán por WhatsApp.</span>
-                                    }
+                            <div className="space-y-4">
+                                <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/20">
+                                    <span className="material-symbols-outlined text-primary text-xl flex-shrink-0">auto_awesome</span>
+                                    <div className="text-xs font-medium text-foreground/70">
+                                        <strong className="text-foreground">Acceso automático:</strong> Al guardar, se creará una cuenta con contraseña temporal <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary">uide2026</code>.
+                                        {formData.telefono
+                                            ? <span className="text-green-600"> Las credenciales se enviarán por WhatsApp al número ingresado.</span>
+                                            : <span> Si ingresas un teléfono, las credenciales se enviarán por WhatsApp.</span>
+                                        }
+                                    </div>
                                 </div>
+
+                                {formData.nombre && !formData.email && (
+                                    <div className="flex items-center gap-3 p-3 bg-muted/20 rounded-xl border border-dashed border-border animate-in fade-in slide-in-from-top-2">
+                                        <span className="material-symbols-outlined text-sm text-muted-foreground">contact_mail</span>
+                                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                            Vista previa del correo: <span className="text-primary lowercase bg-primary/5 px-2 py-0.5 rounded ml-1">
+                                                {(() => {
+                                                    const titulos = ['Ing.', 'Dr.', 'Dra.', 'Abg.', 'Mag.', 'Msc.', 'Mgs.', 'Lic.', 'Phd.', 'Psic.', 'Arq.'];
+                                                    let n = formData.nombre.trim();
+                                                    for (const t of titulos) if (n.toLowerCase().startsWith(t.toLowerCase())) n = n.substring(t.length).trim();
+                                                    const partes = n.split(' ');
+                                                    const nom = (partes[0] || 'docente').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                                    const ape = (partes[1] || 'uide').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                                    return `${nom}.${ape}@docente.uide.edu.ec`;
+                                                })()}
+                                            </span>
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -640,6 +732,16 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                     </form>
                 )}
             </Modal>
+
+            {/* Modal de Carga Académica */}
+            {docenteCarga && (
+                <DocenteCargaModal
+                    docente={docenteCarga}
+                    isOpen={isCargaModalOpen}
+                    onClose={() => setIsCargaModalOpen(false)}
+                    onUpdate={loadDocentes}
+                />
+            )}
         </div>
     );
 }

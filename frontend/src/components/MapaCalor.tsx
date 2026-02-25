@@ -239,8 +239,6 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
                     const punto = obtenerPunto(dia, hora);
                     const nivel = punto?.nivel || 'EMPTY';
                     const config = NIVEL_STYLES[nivel];
-                    const detalle = obtenerDetalle(dia, hora);
-                    const tieneClases = detalle && detalle.clases.length > 0;
                     const isSelected = puntoSeleccionado?.dia === dia && puntoSeleccionado?.hora === hora;
 
                     return (
@@ -324,30 +322,57 @@ export default function MapaCalor({ carreraId, titulo = 'Mapa de Calor', showExp
 
                     {detalle.clases.length > 0 ? (
                       detalle.clases.map((clase, idx) => (
-                        <div key={idx} className="p-3 rounded-xl bg-muted/40 border border-border hover:border-primary/50 transition-colors">
-                            <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-base text-muted-foreground">book</span>
-                              <span className="text-xs font-bold text-foreground">{clase.materia}</span>
+                        <div key={idx} className={`p-3 rounded-xl border transition-colors ${clase.sobrecupo ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50' : 'bg-muted/40 border-border hover:border-primary/50'}`}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="material-symbols-outlined text-base text-muted-foreground shrink-0">book</span>
+                              <span className="text-xs font-bold text-foreground truncate">{clase.materia}</span>
                             </div>
-                            <span className="px-2 py-0.5 bg-card border border-border text-muted-foreground rounded text-[10px] font-bold shadow-sm">
-                              {clase.aula}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              {clase.sobrecupo && (
+                                <span className="px-1.5 py-0.5 bg-red-500 text-white rounded text-[9px] font-black uppercase flex items-center gap-0.5">
+                                  <span className="material-symbols-outlined text-[11px]">warning</span>
+                                  Sobrecupo
+                                </span>
+                              )}
+                              <span className="px-2 py-0.5 bg-card border border-border text-muted-foreground rounded text-[10px] font-bold shadow-sm">
+                                {clase.aula}
+                              </span>
+                            </div>
                           </div>
-                            <div className="flex flex-col gap-1 ml-6">
+                          <div className="flex flex-col gap-1 ml-6">
                             <div className="flex items-center gap-2">
                               <span className="material-symbols-outlined text-[14px] text-muted-foreground">account_circle</span>
                               <span className="text-xs text-muted-foreground">{clase.docente}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="material-symbols-outlined text-[14px] text-muted-foreground">group</span>
-                              <span className="text-xs text-muted-foreground">{clase.estudiantes} estudiantes ({clase.carrera})</span>
+                              <span className={`text-xs font-semibold ${clase.sobrecupo ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                {clase.estudiantes} estudiantes
+                                {clase.capacidad_aula > 0 && (
+                                  <span className="font-normal text-muted-foreground"> / {clase.capacidad_aula} cap. ({clase.porcentaje_uso}%)</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[14px] text-muted-foreground">school</span>
+                              <span className="text-xs text-muted-foreground">{clase.carrera}</span>
                             </div>
                           </div>
+                          {clase.capacidad_aula > 0 && clase.porcentaje_uso !== null && (
+                            <div className="mt-2 ml-6">
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${clase.porcentaje_uso > 100 ? 'bg-red-500' : clase.porcentaje_uso >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                  style={{ width: `${Math.min(clase.porcentaje_uso ?? 0, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     ) : (
-                    <p className="text-center text-muted-foreground text-sm py-4">No hay clases registradas</p>
+                      <p className="text-center text-muted-foreground text-sm py-4">No hay clases registradas</p>
                     )}
                   </div>
                   <div className="p-3 bg-muted/40 border-t border-border text-center">

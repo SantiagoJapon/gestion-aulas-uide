@@ -56,6 +56,7 @@ const COLUMN_KEYWORDS = {
   malla: ['malla', 'plan estudios', 'plan de estudios', 'pensum'],
   modalidad: ['modalidad', 'tipo asistencia'],
   creditos: ['creditos', 'credito'],
+  cedula: ['cedula', 'identificacion', 'documento', 'id student', 'student id', 'ced', 'cc', 'id'],
 };
 
 // Palabras que indican que una columna NO es "hora" de horario sino "horas" de conteo

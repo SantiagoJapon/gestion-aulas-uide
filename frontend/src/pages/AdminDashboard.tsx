@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect, useMemo } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { aulaService } from '../services/api';
 import AulaTable from '../components/AulaTable';
@@ -13,12 +13,14 @@ import EspacioTable from '../components/EspacioTable';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import EstudianteTable from '../components/EstudianteTable';
+import ImportarCupos from '../components/ImportarCupos';
 import DocenteTable from '../components/DocenteTable';
 import IncidenciasView from '../components/IncidenciasView';
 import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
+import ReservasAdminView from '../components/reservas/ReservasAdminView';
 
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
@@ -32,7 +34,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'disponibilidad' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'disponibilidad' | 'reservas' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -122,6 +124,58 @@ export default function AdminDashboard() {
       case 'general':
         return (
           <div className="space-y-10 pb-20 animate-fade-in">
+            {/* Friendly Header Card */}
+            <div id="tour-header-card" className="bg-gradient-to-br from-[#003da5] via-[#002D72] to-[#001a4d] rounded-[2.5rem] p-6 sm:p-10 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/30 border border-white/10 group mb-2">
+              {/* Decorative elements */}
+              <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/15 transition-all duration-700"></div>
+
+              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+                <div className="flex flex-col lg:flex-row items-center gap-6 text-center lg:text-left">
+                  {/* Mascot / Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="size-24 sm:size-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-2 shadow-inner overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                      <img src="/image_guia.png" alt="Mascota UIDE" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 size-10 bg-uide-gold border-4 border-[#002D72] rounded-full flex items-center justify-center shadow-lg">
+                      <span className="material-symbols-outlined text-white text-lg">admin_panel_settings</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-3">
+                      <span className="bg-uide-gold/20 text-uide-gold px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.15em] border border-uide-gold/20">Administración Central</span>
+                      <span className="bg-white/10 text-white/80 px-3 py-1 rounded-full text-[10px] font-bold tracking-wide backdrop-blur-sm">Sede Loja</span>
+                    </div>
+                    <h2 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
+                      ¡Hola, <span className="text-uide-gold">{user?.nombre}</span>!
+                    </h2>
+                    <p className="text-base sm:text-lg font-medium text-white/70 max-w-lg leading-relaxed italic">
+                      "Gestión inteligente para una educación de excelencia."
+                    </p>
+                    <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
+                      <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
+                        className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
+                      >
+                        Guía del Administrador
+                      </button>
+                      <p className="text-[11px] text-white/50 font-medium uppercase tracking-widest">
+                        {new Date().toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hidden lg:flex bg-white/5 backdrop-blur-sm border border-white/10 p-6 rounded-[2rem] min-w-[200px] flex-col items-center justify-center text-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-uide-gold">Infraestructura</span>
+                  <div className="text-3xl font-black">{stats.total}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="size-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span className="text-[10px] font-bold text-white/60">{stats.disponibles} Libres</span>
+                  </div>
+                </div>
+              </div>
+            </div>
             {/* 1. KPIs PANORÁMICOS */}
             <div id="tour-kpis" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
@@ -254,6 +308,9 @@ export default function AdminDashboard() {
       case 'disponibilidad':
         return <DisponibilidadAulas />;
 
+      case 'reservas':
+        return <ReservasAdminView />;
+
       case 'espacios':
         return (
           <div className="space-y-6 animate-fade-in pb-20">
@@ -272,9 +329,12 @@ export default function AdminDashboard() {
                   <EstudianteTable />
                 </DashboardWidget>
               </div>
-              <div className="lg:col-span-4">
-                <DashboardWidget title="Carga Masiva" subtitle="Importación desde Excel" icon="upload_file">
+              <div className="lg:col-span-4 space-y-6">
+                <DashboardWidget title="Carga Masiva (Perfiles)" subtitle="Nombres y Cédulas" icon="upload_file">
                   <SubirEstudiantes />
+                </DashboardWidget>
+                <DashboardWidget title="Importar Cupos (Excel)" subtitle="Vinculación de materias" icon="sync_alt">
+                  <ImportarCupos isCompact />
                 </DashboardWidget>
               </div>
             </div>

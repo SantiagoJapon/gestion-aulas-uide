@@ -10,7 +10,9 @@ import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import SubirEstudiantes from '../components/SubirEstudiantes';
 import DocenteTable from '../components/DocenteTable';
+import MateriaManagement from '../components/MateriaManagement';
 import EstudianteTable from '../components/EstudianteTable';
+import ImportarCupos from '../components/ImportarCupos';
 import ClaseEditModal from '../components/ClaseEditModal';
 import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import GuidedTour from '../components/common/GuidedTour';
@@ -19,6 +21,7 @@ import { Step } from 'react-joyride';
 import { HealthReportModal } from '../components/director/HealthReportModal';
 import { ComunicadoModal } from '../components/director/ComunicadoModal';
 import IncidenciasView from '../components/IncidenciasView';
+import ReservasAdminView from '../components/reservas/ReservasAdminView';
 
 const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
@@ -91,7 +94,7 @@ const DirectorDashboard = () => {
   };
 
   const [uploading, setUploading] = useState(false);
-  const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, porcentaje_completado: 0 });
+  const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, sobrecupos: 0, porcentaje_completado: 0 });
   const [misClases, setMisClases] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [editingClase, setEditingClase] = useState<any>(null);
@@ -115,7 +118,13 @@ const DirectorDashboard = () => {
         distribucionService.getMiDistribucion(carreraId)
       ]);
 
-      if (resStats.success) setStats(resStats.estadisticas);
+      if (resStats.success) {
+        const clases = resHorario.success ? (resHorario.clases || []) : [];
+        setStats({
+          ...resStats.estadisticas,
+          sobrecupos: clases.filter((c: any) => c.sobrecupo).length
+        });
+      }
       if (resHorario.success) setMisClases(resHorario.clases || []);
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -168,6 +177,10 @@ const DirectorDashboard = () => {
     }
   };
 
+  const openManualManagement = () => {
+    setActiveTab('docentes');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'general':
@@ -175,12 +188,13 @@ const DirectorDashboard = () => {
           <div className="space-y-10 pb-20 animate-fade-in px-1">
 
             {/* 1. KPIs SUPERIORES - Vista Panorámica */}
-            <div id="tour-kpis-director" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div id="tour-kpis-director" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
                 { label: 'Clases Totales', value: stats.total_clases, icon: 'analytics', color: 'blue', desc: 'Carga académica' },
                 { label: 'Asignadas', value: stats.clases_asignadas, icon: 'verified', color: 'emerald', desc: 'Con aula física' },
                 { label: 'Pendientes', value: stats.clases_pendientes, icon: 'clock_loader_40', color: 'orange', desc: 'Por distribuir' },
                 { label: 'Conflictos', value: (stats as any).conflictos || 0, icon: 'warning', color: 'red', desc: 'Solapamientos' },
+                { label: 'Sobrecupo', value: stats.sobrecupos, icon: 'event_seat', color: 'amber', desc: 'Capacidad excedida' },
                 { label: 'Eficiencia', value: `${stats.porcentaje_completado}%`, icon: 'query_stats', color: 'purple', desc: 'Meta institucional' }
               ].map((kpi, i) => (
                 <div key={i} className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
@@ -212,7 +226,52 @@ const DirectorDashboard = () => {
               </DashboardWidget>
             </div>
 
-            {/* 3. GRID DINÁMICO (Tabla + Acciones) */}
+            {/* 3. PANEL DE ALERTAS DE SOBRECUPO */}
+            {misClases.filter((c: any) => c.sobrecupo).length > 0 && (
+              <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 overflow-hidden">
+                <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/50 flex items-center gap-3">
+                  <div className="size-9 rounded-2xl bg-amber-500/15 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-amber-600 text-xl">event_seat</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-widest">Alertas de Sobrecupo</h3>
+                    <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 font-medium">
+                      {misClases.filter((c: any) => c.sobrecupo).length} clase(s) asignadas a aulas con capacidad insuficiente — haz clic en Reasignar para ver alternativas disponibles
+                    </p>
+                  </div>
+                </div>
+                <div className="divide-y divide-amber-100 dark:divide-amber-900/30">
+                  {misClases.filter((c: any) => c.sobrecupo).map((clase: any, i: number) => (
+                    <div key={i} className="px-6 py-4 flex items-center gap-4 hover:bg-amber-100/40 dark:hover:bg-amber-900/20 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-foreground truncate">{clase.materia}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                          {clase.dia} {clase.hora_inicio} · Ciclo {clase.ciclo}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-right">
+                          <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase">{clase.aula_asignada}</p>
+                          <p className="text-[10px]">
+                            <span className="text-red-600 font-black">{clase.num_estudiantes} est</span>
+                            <span className="text-muted-foreground"> / {clase.aula_capacidad} cap ({clase.porcentaje_uso}%)</span>
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setEditingClase(clase); setIsEditModalOpen(true); }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase transition-colors shadow-sm"
+                        >
+                          <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                          Reasignar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. GRID DINÁMICO (Tabla + Acciones) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
               {/* Listado Detallado (8/12) */}
@@ -331,6 +390,31 @@ const DirectorDashboard = () => {
                         </div>
                       </div>
 
+                      {/* Gestión Manual */}
+                      <div className="pt-6 border-t border-border">
+                        <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-sm">edit_calendar</span>
+                          Gestión Académica Manual
+                        </h4>
+                        <div className="space-y-3">
+                          <Button
+                            variant="secondary"
+                            fullWidth
+                            size="sm"
+                            className="rounded-2xl"
+                            onClick={openManualManagement}
+                          >
+                            <span className="material-symbols-outlined text-base mr-2">person_add</span>
+                            Gestionar por Docente
+                          </Button>
+                          <div className="p-4 bg-muted/30 rounded-2xl border border-dashed border-border text-center">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter leading-tight italic">
+                              💡 Ve a "Docentes" y haz clic en 📖 para configurar carga.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Acciones de Distribución */}
                       <div className="pt-6 border-t border-border">
                         <h4 className="text-[11px] font-black text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -424,6 +508,8 @@ const DirectorDashboard = () => {
         return <MapaCalor />;
       case 'disponibilidad':
         return <DisponibilidadAulas />;
+      case 'reservas':
+        return <ReservasAdminView />;
       case 'estudiantes':
         const nombreCarrera = user?.carrera?.carrera || user?.carrera_director || '';
         return (
@@ -444,6 +530,19 @@ const DirectorDashboard = () => {
               </div>
             </DashboardWidget>
 
+            <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10">
+              <h5 className="text-xs font-black text-primary uppercase tracking-widest mb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm">info</span>
+                ¿Cómo gestionar estudiantes irregulares o con homologación?
+              </h5>
+              <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
+                Para estudiantes que no siguen un ciclo regular (repetidores o con materias homologadas):
+                <br />1. Localice al estudiante en la tabla superior.
+                <br />2. Haga clic en el botón <strong>CALENDAR_MONTH Carga</strong>.
+                <br />3. Allí podrá añadir o quitar materias de <strong>cualquier ciclo</strong> de la carrera para personalizar su horario.
+              </p>
+            </div>
+
             <DashboardWidget
               title="Carga Masiva de Alumnos"
               subtitle="Importar listado oficial desde archivo Excel"
@@ -453,12 +552,28 @@ const DirectorDashboard = () => {
                 <SubirEstudiantes carreraNombre={nombreCarrera} isCompact />
               </div>
             </DashboardWidget>
+
+            <DashboardWidget
+              title="Sincronización de Inscripciones (Cupos)"
+              subtitle="Vincular estudiantes con sus materias proyectadas"
+              icon="sync_alt"
+            >
+              <div className="mt-4">
+                <ImportarCupos isCompact />
+              </div>
+            </DashboardWidget>
           </div>
         );
       case 'docentes':
         return (
           <DashboardWidget title="Plantilla Docente" icon="badge">
             <DocenteTable carreraId={user?.carrera?.id || 0} />
+          </DashboardWidget>
+        );
+      case 'materias':
+        return (
+          <DashboardWidget title="Catálogo de Materias" subtitle="Administración de la malla curricular" icon="menu_book">
+            <MateriaManagement carreraId={user?.carrera?.id || 0} />
           </DashboardWidget>
         );
       case 'settings':
@@ -479,18 +594,55 @@ const DirectorDashboard = () => {
       title="Director"
       subtitle="UIDE Gestión"
     >
-      <div className="mb-12 px-2 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h2 className="text-5xl font-black text-foreground tracking-tighter leading-none mb-3">
-            {user ? `${user.nombre}` : 'Bienvenido'}
-          </h2>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/10">
-              UIDE Académico
-            </span>
-            <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px]">
-              {new Date().toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
+      {/* Friendly Header Card */}
+      <div id="tour-header-card" className="bg-gradient-to-br from-[#003da5] via-[#002D72] to-[#001a4d] rounded-[2.5rem] p-6 sm:p-10 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/30 border border-white/10 group mb-12">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/15 transition-all duration-700"></div>
+
+        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+          <div className="flex flex-col lg:flex-row items-center gap-6 text-center lg:text-left">
+            {/* Mascot / Avatar */}
+            <div className="relative shrink-0">
+              <div className="size-24 sm:size-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-2 shadow-inner overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                <img src="/image_guia.png" alt="Mascota UIDE" className="w-full h-full object-contain" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 size-10 bg-uide-gold border-4 border-[#002D72] rounded-full flex items-center justify-center shadow-lg">
+                <span className="material-symbols-outlined text-white text-lg">verified_user</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-3">
+                <span className="bg-uide-gold/20 text-uide-gold px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.15em] border border-uide-gold/20">Panel Directivo</span>
+                <span className="bg-white/10 text-white/80 px-3 py-1 rounded-full text-[10px] font-bold tracking-wide backdrop-blur-sm">Gestión Académica</span>
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
+                ¡Hola, <span className="text-uide-gold">{user?.nombre}</span>!
+              </h2>
+              <p className="text-base sm:text-lg font-medium text-white/70 max-w-lg leading-relaxed italic">
+                {user?.carrera?.carrera || "Director de Facultad"} • Loja, Ecuador
+              </p>
+              <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
+                  className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
+                >
+                  Reiniciar Guía
+                </button>
+                <p className="text-[11px] text-white/50 font-medium uppercase tracking-widest">
+                  {new Date().toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex bg-white/5 backdrop-blur-sm border border-white/10 p-6 rounded-[2rem] min-w-[200px] flex-col items-center justify-center text-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-uide-gold">Estado Global</span>
+            <div className="text-3xl font-black">ACTIVO</div>
+            <div className="flex items-center gap-1.5">
+              <div className="size-2 bg-emerald-500 rounded-full animate-pulse"></div>
+              <span className="text-[10px] font-bold text-white/60">Sincronizado</span>
+            </div>
           </div>
         </div>
       </div>
@@ -521,6 +673,7 @@ const DirectorDashboard = () => {
         run={runTour}
         onFinish={handleTourFinish}
       />
+
     </DashboardLayout>
   );
 };

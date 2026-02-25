@@ -120,6 +120,16 @@ const createAula = async (req, res) => {
       req.body.capacidad = parseInt(req.body.capacidad);
     }
 
+    // Normalizar estado a minúsculas (el CHECK constraint de la BD usa minúsculas)
+    if (req.body.estado) {
+      req.body.estado = req.body.estado.toLowerCase();
+    }
+
+    // Normalizar tipo a mayúsculas (el modelo valida AULA, LABORATORIO, etc.)
+    if (req.body.tipo) {
+      req.body.tipo = req.body.tipo.toUpperCase();
+    }
+
     const aula = await Aula.create(req.body);
 
     res.status(201).json({
@@ -187,6 +197,16 @@ const updateAula = async (req, res) => {
       req.body.capacidad = parseInt(req.body.capacidad);
     }
 
+    // Normalizar estado a minúsculas (el CHECK constraint de la BD usa minúsculas)
+    if (req.body.estado) {
+      req.body.estado = req.body.estado.toLowerCase();
+    }
+
+    // Normalizar tipo a mayúsculas
+    if (req.body.tipo) {
+      req.body.tipo = req.body.tipo.toUpperCase();
+    }
+
     await aula.update(req.body);
 
     res.json({
@@ -251,7 +271,7 @@ const deleteAula = async (req, res) => {
     }
 
     // En lugar de eliminar, cambiamos el estado a 'no_disponible'
-    await aula.update({ estado: 'NO_DISPONIBLE' });
+    await aula.update({ estado: 'no_disponible' });
 
     res.json({
       success: true,

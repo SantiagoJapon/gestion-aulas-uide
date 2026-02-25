@@ -38,57 +38,57 @@ services:
       timeout: 5s
       retries: 5
 
-  # Backend - Node.js API
-  backend:
-    build: ./backend
-    container_name: gestion_aulas_backend
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - PORT=3000
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=gestion_aulas
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/gestion_aulas
-      - JWT_SECRET=${JWT_SECRET:-supersecreto123}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
-      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
-      - EVOLUTION_API_URL=http://evolution-api:8080
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
-      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-bot}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-      - ./backend/uploads:/app/uploads
-    command: npm run dev
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - app_network
-    restart: always
-
-  # Frontend - React + Vite
-  frontend:
-    build: ./frontend
-    container_name: gestion_aulas_frontend
-    environment:
-      - VITE_API_URL=http://localhost:3000
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
-    networks:
-      - app_network
-    restart: always
+  #  # Backend - Node.js API
+  #  backend:
+  #    build: ./backend
+  #    container_name: gestion_aulas_backend
+  #    environment:
+  #      - NODE_ENV=${NODE_ENV:-development}
+  #      - PORT=3000
+  #      - DB_HOST=postgres
+  #      - DB_PORT=5432
+  #      - DB_NAME=gestion_aulas
+  #      - DB_USER=postgres
+  #      - DB_PASSWORD=postgres
+  #      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/gestion_aulas
+  #      - JWT_SECRET=${JWT_SECRET:-supersecreto123}
+  #      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+  #      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
+  #      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
+  #      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+  #      - EVOLUTION_API_URL=http://evolution-api:8080
+  #      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+  #      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-bot}
+  #      - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #    ports:
+  #      - "3000:3000"
+  #    volumes:
+  #      - ./backend:/app
+  #      - /app/node_modules
+  #      - ./backend/uploads:/app/uploads
+  #    command: npm run dev
+  #    depends_on:
+  #      postgres:
+  #        condition: service_healthy
+  #      redis:
+  #        condition: service_healthy
+  #    networks:
+  #      - app_network
+  #    restart: always
+  #
+  #  # Frontend - React + Vite
+  #  frontend:
+  #    build: ./frontend
+  #    container_name: gestion_aulas_frontend
+  #    environment:
+  #      - VITE_API_URL=http://localhost:3000
+  #    ports:
+  #      - "5173:80"
+  #    depends_on:
+  #      - backend
+  #    networks:
+  #      - app_network
+  #    restart: always
 
   # n8n - Workflow Automation
   n8n:
@@ -153,26 +153,33 @@ services:
 
   # Evolution API - WhatsApp Gateway
   evolution-api:
-    image: atendai/evolution-api:latest
+    image: evolution-api-dev:2.3.7
     container_name: evolution_api
     restart: always
     ports:
       - "8080:8080"
     environment:
-      - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
-      - DATABASE_ENABLED=true
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgres://postgres:postgres@postgres:5432/evolution_db
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_LOCAL_ENABLED=true
       - QRCODE_LIMIT=30
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1028355510
+      - CONFIG_SESSION_PHONE_CLIENT=Chrome
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - NODE_OPTIONS=--require /os-patch.js
+      - TZ=America/Guayaquil
+      - LOG_LEVEL=ERROR,WARN,DEBUG,INFO,LOG,VERBOSE,WEBHOOKS,WEBSOCKET
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE
     volumes:
       - evolution_store:/evolution/store
       - evolution_instances:/evolution/instances
+      - ./os-patch.js:/os-patch.js:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -189,10 +196,10 @@ services:
     environment:
       - EVOLUTION_API_URL=http://evolution-api:8080
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
-      - EVOLUTION_INSTANCE=bot
+      - EVOLUTION_INSTANCE=botuide
       - BOT_PORT=3020
-      - BACKEND_URL=http://gestion_aulas_backend:3000
-      - DB_HOST=gestion_aulas_db
+      - BACKEND_URL=http://host.docker.internal:3001
+      - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres

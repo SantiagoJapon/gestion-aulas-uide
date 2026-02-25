@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { aulaService, Aula, AulaStats } from '../services/api';
+import { aulaService, carreraService, Aula, AulaStats, Carrera } from '../services/api';
 import { Modal } from './common/Modal';
 import { FaBan, FaPlus, FaEdit, FaTrash, FaDoorOpen, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 interface AulaFilters {
-  edificio: string;
   tipo: string;
   estado: string;
-  piso: string;
 }
 
 const AulaTable: React.FC = () => {
@@ -16,41 +14,37 @@ const AulaTable: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<AulaStats | null>(null);
   const [filters, setFilters] = useState<AulaFilters>({
-    edificio: '',
     tipo: '',
     estado: '',
-    piso: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [modalOpen, setModalOpen] = useState(false);
   const [currentAula, setCurrentAula] = useState<Aula | null>(null);
+  const [carreras, setCarreras] = useState<Carrera[]>([]);
+
   const [formData, setFormData] = useState<{
     codigo: string;
     nombre: string;
     capacidad: string;
     tipo: string;
-    edificio: string;
-    piso: string;
     equipamiento: string;
     restriccion_carrera: string;
-    es_prioritaria: boolean;
-    estado: 'DISPONIBLE' | 'MANTENIMIENTO' | 'NO_DISPONIBLE';
+    estado: 'disponible' | 'mantenimiento' | 'no_disponible';
     notas: string;
   }>({
     codigo: '',
     nombre: '',
     capacidad: '',
     tipo: 'AULA',
-    edificio: '',
-    piso: '1',
     equipamiento: '',
     restriccion_carrera: '',
-    es_prioritaria: false,
-    estado: 'DISPONIBLE',
+    estado: 'disponible',
     notas: '',
   });
+
+
 
   const loadStats = async () => {
     try {
@@ -66,10 +60,8 @@ const AulaTable: React.FC = () => {
       setLoading(true);
       setError(null);
       const filtersToSend: any = {};
-      if (filters.edificio) filtersToSend.edificio = filters.edificio;
       if (filters.tipo) filtersToSend.tipo = filters.tipo;
       if (filters.estado) filtersToSend.estado = filters.estado;
-      if (filters.piso) filtersToSend.piso = filters.piso;
 
       const response = await aulaService.getAulas(filtersToSend);
       setAulas(response.aulas);
@@ -84,6 +76,12 @@ const AulaTable: React.FC = () => {
   useEffect(() => {
     loadAulas();
     loadStats();
+    // Cargar carreras activas desde la base de datos
+    carreraService.getCarreras(false).then((res) => {
+      setCarreras(res.carreras.filter((c) => c.activa));
+    }).catch(() => {
+      console.error('No se pudieron cargar las carreras');
+    });
   }, [filters]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,29 +89,33 @@ const AulaTable: React.FC = () => {
     try {
       setError(null);
 
-      // Parsear equipamiento si es JSON string
-      let equipamientoObj = {};
-      if (formData.equipamiento) {
+      // Validar campos requeridos
+      if (!formData.codigo.trim()) { alert('El código del aula es obligatorio'); return; }
+      if (!formData.nombre.trim()) { alert('El nombre del aula es obligatorio'); return; }
+      if (!formData.capacidad || parseInt(formData.capacidad) < 1) { alert('La capacidad debe ser al menos 1'); return; }
+      if (!formData.tipo) { alert('Selecciona la categoría del espacio'); return; }
+
+      // Parsear equipamiento — enviar null si está vacío (JSONB no acepta {})
+      let equipamientoObj: any = null;
+      if (formData.equipamiento && formData.equipamiento.trim()) {
         try {
           equipamientoObj = JSON.parse(formData.equipamiento);
         } catch {
-          // Si no es JSON válido, crear objeto con descripción
-          equipamientoObj = { descripcion: formData.equipamiento };
+          equipamientoObj = { descripcion: formData.equipamiento.trim() };
         }
       }
 
       const data: any = {
-        codigo: formData.codigo,
-        nombre: formData.nombre,
+        codigo: formData.codigo.trim().toUpperCase(),
+        nombre: formData.nombre.trim(),
         capacidad: parseInt(formData.capacidad),
         tipo: formData.tipo,
-        edificio: formData.edificio || null,
-        piso: parseInt(formData.piso),
         equipamiento: equipamientoObj,
         restriccion_carrera: formData.restriccion_carrera || null,
-        es_prioritaria: formData.es_prioritaria,
+        // Prioritaria si tiene carrera asignada (incluyendo auditorio institucional)
+        es_prioritaria: !!formData.restriccion_carrera,
         estado: formData.estado,
-        notas: formData.notas || null,
+        notas: formData.notas?.trim() || null,
       };
 
       if (currentAula) {
@@ -127,10 +129,13 @@ const AulaTable: React.FC = () => {
       loadAulas();
       loadStats();
     } catch (err: any) {
-      const errorMsg = err.response?.data?.mensaje || err.response?.data?.error || 'Error al guardar el aula';
+      const respData = err.response?.data;
+      const detalles = respData?.detalles?.map((d: any) => `• ${d.campo}: ${d.mensaje}`).join('\n') || '';
+      const errorMsg = respData?.mensaje || respData?.error || err.message || 'Error al guardar el aula';
+      const fullMsg = detalles ? `${errorMsg}\n\n${detalles}` : errorMsg;
       setError(errorMsg);
-      console.error('Error al guardar aula:', err);
-      alert(errorMsg);
+      console.error('Error al guardar aula:', err.response?.data || err);
+      alert(fullMsg);
     }
   };
 
@@ -141,12 +146,9 @@ const AulaTable: React.FC = () => {
       nombre: '',
       capacidad: '',
       tipo: 'AULA',
-      edificio: '',
-      piso: '1',
       equipamiento: '',
       restriccion_carrera: '',
-      es_prioritaria: false,
-      estado: 'DISPONIBLE',
+      estado: 'disponible',
       notas: '',
     });
   };
@@ -157,13 +159,11 @@ const AulaTable: React.FC = () => {
       codigo: aula.codigo || '',
       nombre: aula.nombre,
       capacidad: aula.capacidad.toString(),
-      tipo: aula.tipo || 'AULA',
-      edificio: aula.edificio || '',
-      piso: aula.piso?.toString() || '1',
+      tipo: (aula.tipo || 'AULA').toUpperCase(),
       equipamiento: aula.equipamiento ? JSON.stringify(aula.equipamiento, null, 2) : '',
       restriccion_carrera: aula.restriccion_carrera || '',
-      es_prioritaria: aula.es_prioritaria || false,
-      estado: aula.estado as 'DISPONIBLE' | 'MANTENIMIENTO' | 'NO_DISPONIBLE',
+      // Normalizar estado a minúsculas para coincidir con la BD
+      estado: (aula.estado || 'disponible').toLowerCase() as any,
       notas: aula.notas || '',
     });
     setModalOpen(true);
@@ -238,7 +238,7 @@ const AulaTable: React.FC = () => {
   );
 
   const limpiarFiltros = () => {
-    setFilters({ edificio: '', tipo: '', estado: '', piso: '' });
+    setFilters({ tipo: '', estado: '' });
     setSearchTerm('');
     setCurrentPage(1);
   };
@@ -603,77 +603,57 @@ const AulaTable: React.FC = () => {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Ubicación (Edificio)</label>
-              <select
-                value={formData.edificio}
-                onChange={(e) => setFormData({ ...formData, edificio: e.target.value })}
-                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-              >
-                <option value="">No Asignado</option>
-                <option value="Edificio A">Edificio A</option>
-                <option value="Edificio B">Edificio B</option>
-                <option value="Edificio C">Edificio C</option>
-                <option value="Laboratorios">Laboratorios</option>
-                <option value="Auditorio">Auditorio</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Piso / Nivel</label>
-              <select
-                value={formData.piso}
-                onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
-                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-              >
-                <option value="1">Piso 1</option>
-                <option value="2">Piso 2</option>
-                <option value="3">Piso 3</option>
-                <option value="4">Piso 4</option>
-              </select>
-            </div>
-
             <div className="md:col-span-2 space-y-2">
-              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Prioridad y Restricción</label>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <label className="flex-1 flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-amber-50/50 transition-colors group">
-                  <input
-                    type="checkbox"
-                    checked={formData.es_prioritaria}
-                    onChange={(e) => setFormData({ ...formData, es_prioritaria: e.target.checked })}
-                    className="w-5 h-5 accent-uide-blue"
-                  />
-                  <div>
-                    <p className="text-xs font-black text-slate-700 dark:text-slate-300 group-hover:text-amber-700">Espacio Prioritario</p>
-                    <p className="text-[10px] text-slate-400">Preferente en asignación auto.</p>
-                  </div>
-                </label>
-                <div className="flex-[2]">
-                  <input
-                    type="text"
-                    value={formData.restriccion_carrera}
-                    onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
-                    className="w-full border border-slate-100 dark:border-slate-700 rounded-xl px-4 py-4 bg-slate-50 dark:bg-slate-900/50 text-sm font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none"
-                    placeholder="Restringir a carrera (opcional)"
-                  />
-                </div>
-              </div>
+              <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
+                Carrera Asignada
+              </label>
+              <p className="text-[10px] text-muted-foreground ml-1 -mt-1">
+                La carrera elegida tendrá prioridad en la asignación automática, pero cualquier otra carrera también puede usar el espacio si hay disponibilidad.
+                Selecciona «Auditorio institucional» para excluirlo de la distribución de clases.
+              </p>
+              <select
+                value={formData.restriccion_carrera}
+                onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
+                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                <option value="">🌐 Uso general (sin restricción)</option>
+                {carreras.length === 0 && (
+                  <option disabled>— Cargando carreras... —</option>
+                )}
+                {carreras.map((c) => (
+                  <option key={c.id} value={c.carrera}>🎓 {c.carrera}</option>
+                ))}
+                <option disabled>──────────────</option>
+                <option value="AUDITORIO_INSTITUCIONAL">🏛️ Auditorio (uso institucional, sin clases)</option>
+              </select>
+              {formData.restriccion_carrera === 'AUDITORIO_INSTITUCIONAL' && (
+                <p className="text-[10px] text-blue-600 font-bold ml-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">info</span>
+                  Este espacio quedará <strong>excluido de la distribución automática de clases</strong>. Solo se podrá reservar manualmente.
+                </p>
+              )}
+              {formData.restriccion_carrera && formData.restriccion_carrera !== 'AUDITORIO_INSTITUCIONAL' && (
+                <p className="text-[10px] text-amber-600 font-bold ml-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">star</span>
+                  Prioridad para <strong>{formData.restriccion_carrera}</strong>. Las demás carreras también pueden usar este espacio.
+                </p>
+              )}
             </div>
 
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Estado de Operatividad</label>
               <div className="flex gap-2">
-                {['DISPONIBLE', 'MANTENIMIENTO', 'NO_DISPONIBLE'].map((estado) => (
+                {(['disponible', 'mantenimiento', 'no_disponible'] as const).map((estado) => (
                   <button
                     key={estado}
                     type="button"
-                    onClick={() => setFormData({ ...formData, estado: estado as any })}
+                    onClick={() => setFormData({ ...formData, estado })}
                     className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${formData.estado === estado
                       ? 'bg-uide-blue text-white border-uide-blue shadow-lg shadow-uide-blue/20 scale-105'
                       : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'
                       }`}
                   >
-                    {estado.replace('_', ' ')}
+                    {estado.replace(/_/g, ' ')}
                   </button>
                 ))}
               </div>

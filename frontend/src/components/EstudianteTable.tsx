@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { estudianteService, Estudiante, ListarEstudiantesResponse } from '../services/api';
 import { FaUserGraduate, FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import EstudianteLoadModal from './EstudianteLoadModal';
 
 interface EstudianteTableProps {
   carreraNombre?: string;
@@ -14,6 +15,8 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
   const [page, setPage] = useState<number>(1);
   const [total, setTotal] = useState<number>(0);
   const [pages, setPages] = useState<number>(1);
+  const [selectedEstudiante, setSelectedEstudiante] = useState<Estudiante | null>(null);
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const limit = 20;
 
   const loadEstudiantes = async () => {
@@ -57,6 +60,11 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
     e.preventDefault();
     setPage(1);
     loadEstudiantes();
+  };
+
+  const handleManageLoad = (est: Estudiante) => {
+    setSelectedEstudiante(est);
+    setIsLoadModalOpen(true);
   };
 
   return (
@@ -134,6 +142,7 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
                     <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase text-[11px] tracking-wide">Escuela</th>
                     <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase text-[11px] tracking-wide">Nivel</th>
                     <th className="px-4 py-3 text-left font-semibold text-muted-foreground uppercase text-[11px] tracking-wide">Email</th>
+                    <th className="px-4 py-3 text-right font-semibold text-muted-foreground uppercase text-[11px] tracking-wide">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -151,6 +160,16 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {est.email || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleManageLoad(est)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-all text-[11px] font-bold uppercase tracking-wider shadow-sm"
+                          title="Gestionar Carga Académica"
+                        >
+                          <span className="material-symbols-outlined text-sm">calendar_month</span>
+                          Carga
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -189,6 +208,13 @@ const EstudianteTable: React.FC<EstudianteTableProps> = ({ carreraNombre }) => {
           </>
         )}
       </div>
+
+      {isLoadModalOpen && selectedEstudiante && (
+        <EstudianteLoadModal
+          estudiante={selectedEstudiante}
+          onClose={() => setIsLoadModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

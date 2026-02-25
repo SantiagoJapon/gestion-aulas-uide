@@ -40,8 +40,10 @@ router.get('/reporte', verificarAuth, verificarRol('director', 'admin'), getRepo
 router.get('/docentes-carga', verificarAuth, verificarRol('director', 'admin'), getDocentesCarga);
 
 // Mantenimiento y Edición Manual
-const { updateClase, checkDisponibilidad } = require('../controllers/distribucionController');
+const { updateClase, checkDisponibilidad, createClase, deleteClase } = require('../controllers/distribucionController');
+router.post('/clase', verificarAuth, verificarRol('director', 'admin'), createClase);
 router.put('/clase/:id', verificarAuth, verificarRol('director', 'admin'), updateClase);
+router.delete('/clase/:id', verificarAuth, verificarRol('director', 'admin'), deleteClase);
 router.get('/disponibilidad', verificarAuth, verificarRol('director', 'admin'), checkDisponibilidad);
 
 module.exports = router;

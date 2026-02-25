@@ -46,7 +46,7 @@ const Aula = sequelize.define('Aula', {
     allowNull: false,
     validate: {
       isIn: {
-        args: [['AULA', 'LABORATORIO', 'SALA_ESPECIAL', 'AUDITORIO']],
+        args: [['AULA', 'LABORATORIO', 'SALA_ESPECIAL', 'AUDITORIO', 'aula', 'laboratorio', 'sala_especial', 'auditorio']],
         msg: 'El tipo debe ser: AULA, LABORATORIO, SALA_ESPECIAL o AUDITORIO'
       }
     }
@@ -77,11 +77,11 @@ const Aula = sequelize.define('Aula', {
   estado: {
     type: DataTypes.STRING(50),
     allowNull: false,
-    defaultValue: 'DISPONIBLE',
+    defaultValue: 'disponible',
     validate: {
       isIn: {
-        args: [['DISPONIBLE', 'NO_DISPONIBLE', 'MANTENIMIENTO', 'OCUPADA']],
-        msg: 'El estado debe ser: DISPONIBLE, NO_DISPONIBLE, MANTENIMIENTO o OCUPADA'
+        args: [['disponible', 'no_disponible', 'mantenimiento', 'ocupada']],
+        msg: 'El estado debe ser: disponible, no_disponible, mantenimiento u ocupada'
       }
     }
   },
@@ -119,7 +119,7 @@ Aula.prototype.tienePrioridad = function (carrera) {
 
 // Método de instancia para verificar si el aula está disponible
 Aula.prototype.estaDisponible = function () {
-  return this.estado === 'DISPONIBLE';
+  return this.estado === 'disponible';
 };
 
 // Método de instancia para obtener datos públicos
@@ -130,23 +130,26 @@ Aula.prototype.toJSON = function () {
 
 // Método estático para buscar aulas disponibles por capacidad
 Aula.findByCapacidad = async function (capacidadMinima) {
-  const aulas = await this.findAll({
+  return await this.findAll({
     where: {
-      estado: 'DISPONIBLE',
+      estado: 'disponible',
       capacidad: { [sequelize.Sequelize.Op.gte]: capacidadMinima }
     },
     order: [['capacidad', 'ASC']]
   });
 };
 
-// Método estático para buscar aulas por prioridad de carrera
+// Método estático para buscar aulas disponibles para una carrera.
+// Retorna TODAS las aulas disponibles (no hay exclusivas), ordenadas por:
+// 1. Aulas prioritarias para esta carrera primero
+// 2. Luego por capacidad ascendente
 Aula.findByCarrera = async function (carrera) {
-  // Usar query parametrizada para evitar SQL injection
   return await sequelize.query(`
     SELECT * FROM aulas
-    WHERE estado = 'DISPONIBLE'
-      AND (restriccion_carrera = :carrera OR restriccion_carrera IS NULL)
-    ORDER BY CASE WHEN restriccion_carrera = :carrera THEN 0 ELSE 1 END ASC,
+    WHERE estado = 'disponible'
+      AND tipo != 'AUDITORIO'
+      AND (restriccion_carrera IS NULL OR restriccion_carrera != 'AUDITORIO_INSTITUCIONAL')
+    ORDER BY CASE WHEN es_prioritaria = true AND restriccion_carrera = :carrera THEN 0 ELSE 1 END ASC,
              capacidad ASC
   `, {
     replacements: { carrera },

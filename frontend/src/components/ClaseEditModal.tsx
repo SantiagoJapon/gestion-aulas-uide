@@ -95,6 +95,18 @@ const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose,
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    {clase.sobrecupo && (
+                        <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-start gap-2">
+                            <span className="material-symbols-outlined text-amber-600 text-base shrink-0 mt-0.5">event_seat</span>
+                            <div>
+                                <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-wide">Aula con sobrecupo</p>
+                                <p className="text-[10px] text-amber-600/80 dark:text-amber-400/60 font-medium mt-0.5">
+                                    {clase.num_estudiantes} estudiantes en aula de {clase.aula_capacidad} capacidad ({clase.porcentaje_uso}% de uso).
+                                    Selecciona un aula alternativa de la lista de abajo.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     <div className="space-y-4">
                         <div>
                             <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Materia</label>

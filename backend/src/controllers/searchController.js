@@ -1,4 +1,4 @@
-const { Clase, Docente, Aula, User, Carrera } = require('../models');
+const { Clase, Docente, Aula, User, Carrera, Distribucion, Reserva, Espacio } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
@@ -92,51 +92,145 @@ exports.globalSearch = async (req, res) => {
 };
 
 /**
- * Búsqueda de disponibilidad (Aulas Vacías)
+ * Búsqueda de disponibilidad (Aulas y Espacios Vacíos)
  * GET /api/search/disponibilidad?dia=Lunes&hora_inicio=07:00&hora_fin=09:00
+ * También soporta: fecha=2024-01-15 (para verificar reservas específicas en fecha)
+ * tipo_espacio: 'aula' | 'espacio' | undefined (ambos)
  */
 exports.searchAvailability = async (req, res) => {
     try {
-        const { dia, hora_inicio, hora_fin, capacidad_minima } = req.query;
+        const { dia, hora_inicio, hora_fin, capacidad_minima, fecha, tipo_espacio } = req.query;
 
-        if (!dia || !hora_inicio || !hora_fin) {
+        if ((!dia && !fecha) || !hora_inicio || !hora_fin) {
             return res.status(400).json({ success: false, message: 'Faltan parámetros de tiempo' });
         }
 
-        // Query para encontrar aulas que NO tienen clases en ese horario
-        const aulasOcupadasRaw = await sequelize.query(`
-      SELECT DISTINCT aula_asignada 
-      FROM clases 
-      WHERE dia = :dia 
-      AND aula_asignada IS NOT NULL
-      AND (
-        (hora_inicio < :hora_fin AND hora_fin > :hora_inicio)
-      )
-    `, {
-            replacements: { dia, hora_inicio, hora_fin },
-            type: sequelize.QueryTypes.SELECT
-        });
-
-        const codigosOcupados = aulasOcupadasRaw.map(r => r.aula_asignada);
-
-        const whereAula = {
-            codigo: { [Op.notIn]: codigosOcupados.length > 0 ? codigosOcupados : ['__NONE__'] },
-            estado: 'DISPONIBLE'
-        };
-
-        if (capacidad_minima) {
-            whereAula.capacidad = { [Op.gte]: parseInt(capacidad_minima) };
+        // Normalizar el día de la semana
+        let diaSemana = dia;
+        if (fecha) {
+            const diasLookup = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+            const [year, month, day] = fecha.split('-').map(Number);
+            const d = new Date(year, month - 1, day);
+            diaSemana = diasLookup[d.getDay()];
         }
 
-        const aulasDisponibles = await Aula.findAll({
-            where: whereAula,
-            order: [['capacidad', 'ASC']]
-        });
+        // Determinar qué tipo de espacio buscar
+        const buscarAulas = !tipo_espacio || tipo_espacio === 'aula';
+        const buscarEspacios = !tipo_espacio || tipo_espacio === 'espacio';
+
+        let aulasLibres = [];
+        let espaciosLibres = [];
+
+        // 1. Aulas ocupadas en Distribución (Clases distribuidas)
+        let idsOcupadasDist = [];
+        if (buscarAulas) {
+            const ocupadasPorDistribucion = await Distribucion.findAll({
+                attributes: ['aula_id'],
+                where: {
+                    dia: diaSemana.toUpperCase(),
+                    [Op.or]: [
+                        {
+                            hora_inicio: { [Op.lt]: hora_fin },
+                            hora_fin: { [Op.gt]: hora_inicio }
+                        }
+                    ]
+                },
+                raw: true
+            });
+            idsOcupadasDist = ocupadasPorDistribucion.map(d => d.aula_id);
+        }
+
+        // 2. Aulas ocupadas vía Clase (asignación directa)
+        let codigosOcupadosClase = [];
+        if (buscarAulas) {
+            const ocupadasPorClase = await Clase.findAll({
+                attributes: ['aula_asignada'],
+                where: {
+                    dia: diaSemana.toUpperCase(),
+                    aula_asignada: { [Op.ne]: null },
+                    [Op.or]: [
+                        {
+                            hora_inicio: { [Op.lt]: hora_fin },
+                            hora_fin: { [Op.gt]: hora_inicio }
+                        }
+                    ]
+                },
+                raw: true
+            });
+            codigosOcupadosClase = ocupadasPorClase.map(c => c.aula_asignada);
+        }
+
+        // 3. Reservas existentes (solo si se proporciona fecha)
+        let codigosOcupadosResAula = [];
+        let codigosOcupadosResEspacio = [];
+        if (fecha) {
+            const reservasExistentes = await Reserva.findAll({
+                where: {
+                    fecha,
+                    estado: { [Op.in]: ['activa', 'pendiente_aprobacion'] },
+                    [Op.or]: [
+                        {
+                            hora_inicio: { [Op.lt]: hora_fin },
+                            hora_fin: { [Op.gt]: hora_inicio }
+                        }
+                    ]
+                },
+                raw: true
+            });
+            codigosOcupadosResAula = reservasExistentes
+                .filter(r => r.aula_codigo)
+                .map(r => r.aula_codigo);
+            codigosOcupadosResEspacio = reservasExistentes
+                .filter(r => r.espacio_codigo)
+                .map(r => r.espacio_codigo);
+        }
+
+        // Buscar aulas disponibles
+        if (buscarAulas) {
+            const whereAula = {
+                estado: 'disponible',
+                codigo: {
+                    [Op.notIn]: codigosOcupadosResAula.concat(codigosOcupadosClase)
+                },
+                id: {
+                    [Op.notIn]: idsOcupadasDist
+                }
+            };
+
+            if (capacidad_minima) {
+                whereAula.capacidad = { [Op.gte]: parseInt(capacidad_minima) };
+            }
+
+            aulasLibres = await Aula.findAll({
+                where: whereAula,
+                order: [['capacidad', 'ASC']]
+            });
+        }
+
+        // Buscar espacios disponibles (biblioteca, salas, etc.)
+        if (buscarEspacios) {
+            const whereEspacio = {
+                estado: 'DISPONIBLE',
+                codigo: {
+                    [Op.notIn]: codigosOcupadosResEspacio
+                }
+            };
+
+            if (capacidad_minima) {
+                whereEspacio.capacidad = { [Op.gte]: parseInt(capacidad_minima) };
+            }
+
+            espaciosLibres = await Espacio.findAll({
+                where: whereEspacio,
+                order: [['nombre', 'ASC']]
+            });
+        }
 
         res.json({
             success: true,
-            count: aulasDisponibles.length,
-            aulas: aulasDisponibles
+            count: aulasLibres.length + espaciosLibres.length,
+            aulas: aulasLibres,
+            espacios: espaciosLibres
         });
     } catch (error) {
         console.error('Error in searchAvailability:', error);

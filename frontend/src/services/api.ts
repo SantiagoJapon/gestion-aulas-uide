@@ -252,6 +252,19 @@ export const estudianteService = {
   getHistorialCargas: async (tipo: string = 'estudiantes'): Promise<any> => {
     const response = await api.get('/estudiantes/historial-cargas', { params: { tipo } });
     return response.data;
+  },
+
+  getEstudianteLoad: async (id: number): Promise<{ success: boolean; estudiante: Estudiante; materias: any[] }> => {
+    const response = await api.get(`/estudiantes/${id}/load`);
+    return response.data;
+  },
+
+  syncProyeccionCupos: async (formData: FormData): Promise<any> => {
+    const response = await api.post('/estudiantes/sync-proyeccion', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    });
+    return response.data;
   }
 };
 
@@ -358,7 +371,7 @@ export const usuarioService = {
   // Mantener alias por compatibilidad
   deleteDirector: async (id: number) => usuarioService.deleteUsuario(id),
 
-  generarCredenciales: async (id: number): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean }; mensaje: string }> => {
+  generarCredenciales: async (id: number): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean; email_enviado?: boolean }; mensaje: string }> => {
     const response = await api.post(`/usuarios/${id}/generar-credenciales`);
     return response.data;
   },
@@ -416,6 +429,9 @@ export interface DetalleMapaCalor {
     aula: string;
     docente: string;
     estudiantes: number;
+    capacidad_aula: number;
+    sobrecupo: boolean;
+    porcentaje_uso: number | null;
     carrera: string;
   }>;
 }
@@ -592,10 +608,12 @@ export const searchService = {
   // Buscar disponibilidad de aulas
   buscarDisponibilidad: async (params: {
     dia: string;
+    fecha?: string;
     hora_inicio: string;
     hora_fin: string;
     capacidad_minima?: number;
-  }): Promise<{ success: boolean; count: number; aulas: Aula[] }> => {
+    tipo_espacio?: 'aula' | 'espacio';
+  }): Promise<{ success: boolean; count: number; aulas: Aula[]; espacios: Espacio[] }> => {
     const response = await api.get('/search/disponibilidad', { params });
     return response.data;
   },
@@ -851,7 +869,16 @@ export interface Reserva {
 }
 
 export const reservaService = {
-  crear: async (data: { aula_codigo: string; dia: string; fecha?: string; hora_inicio: string; hora_fin: string; motivo?: string }): Promise<{ success: boolean; reserva: Reserva }> => {
+  crear: async (data: {
+    aula_codigo?: string;
+    espacio_codigo?: string;
+    tipo_espacio?: string;
+    dia: string;
+    fecha?: string;
+    hora_inicio: string;
+    hora_fin: string;
+    motivo?: string
+  }): Promise<{ success: boolean; reserva: Reserva }> => {
     // Si no se envía fecha, calcularla basada en el día (opcional, el backend lo requiere)
     // Por simplicidad, el frontend debe enviar la fecha
     const response = await api.post('/reservas', data);
@@ -870,6 +897,22 @@ export const reservaService = {
 
   getDisponibles: async (params: { fecha: string; hora_inicio: string; hora_fin: string; tipo?: string }): Promise<{ success: boolean; aulas: Aula[] }> => {
     const response = await api.get('/reservas/disponibles', { params });
+    return response.data;
+  },
+
+  // Admin / Director
+  listarTodas: async (params?: { fecha?: string; estado?: string }): Promise<{ success: boolean; reservas: Reserva[] }> => {
+    const response = await api.get('/reservas/todas', { params });
+    return response.data;
+  },
+
+  listarPendientes: async (): Promise<{ success: boolean; reservas: Reserva[] }> => {
+    const response = await api.get('/reservas/pendientes');
+    return response.data;
+  },
+
+  cambiarEstado: async (id: number, estado: string, motivo_rechazo?: string): Promise<{ success: boolean; message: string; reserva: Reserva }> => {
+    const response = await api.patch(`/reservas/${id}/estado`, { estado, motivo_rechazo });
     return response.data;
   }
 };
@@ -1008,15 +1051,16 @@ export const incidenciaService = {
 // ============================================
 
 export interface Docente {
-  id: number;
+  id: number | string;
   nombre: string;
   email: string | null;
   telefono?: string | null;
   titulo_pregrado: string | null;
   titulo_posgrado: string | null;
   tipo: string;
-  carrera_id: number;
+  carrera_id: number | null;
   usuario_id?: number | null;
+  es_director?: boolean;
   usuario?: {
     id: number;
     email: string;
@@ -1056,23 +1100,113 @@ export const docenteService = {
     return response.data;
   },
 
-  updateDocente: async (id: number, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string; credenciales?: { email: string; password: string; whatsapp_enviado: boolean } }> => {
+  updateDocente: async (id: number | string, data: Partial<Docente>): Promise<{ success: boolean; docente: Docente; mensaje: string; credenciales?: { email: string; password: string; whatsapp_enviado: boolean } }> => {
     const response = await api.put(`/docentes/${id}`, data);
     return response.data;
   },
 
-  updateTelefono: async (id: number, telefono: string): Promise<{ success: boolean; message: string }> => {
+  updateTelefono: async (id: number | string, telefono: string): Promise<{ success: boolean; message: string }> => {
     const response = await api.put<{ success: boolean; message: string }>(`/docentes/${id}/telefono`, { telefono });
     return response.data;
   },
 
-  crearCuenta: async (id: number): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean }; mensaje: string }> => {
+  crearCuenta: async (id: number | string): Promise<{ success: boolean; credenciales: { email: string; password: string; whatsapp_enviado: boolean; email_enviado?: boolean }; mensaje: string }> => {
     const response = await api.post(`/docentes/${id}/crear-cuenta`);
     return response.data;
   },
 
   generarCredenciales: async (carrera_id?: number): Promise<{ success: boolean; mensaje: string; stats: any }> => {
     const response = await api.post<{ success: boolean; mensaje: string; stats: any }>('/docentes/generar-credenciales', { carrera_id });
+    return response.data;
+  }
+};
+
+// ============================================
+// CATÁLOGO DE MATERIAS
+// ============================================
+
+export interface MateriaCatalogo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  creditos: number;
+  ciclo: number;
+  carrera_id: number;
+  activo: boolean;
+  carrera?: {
+    id: number;
+    carrera: string;
+  };
+}
+
+export const materiaCatalogoService = {
+  getMaterias: async (params: { carrera_id?: number; search?: string; ciclo?: number } = {}): Promise<{ success: boolean; materias: MateriaCatalogo[] }> => {
+    const response = await api.get('/materias-catalogo', { params });
+    return response.data;
+  },
+  getMateriaById: async (id: number): Promise<{ success: boolean; materia: MateriaCatalogo }> => {
+    const response = await api.get(`/materias-catalogo/${id}`);
+    return response.data;
+  },
+  createMateria: async (data: any): Promise<{ success: boolean; materia: MateriaCatalogo }> => {
+    const response = await api.post('/materias-catalogo', data);
+    return response.data;
+  },
+  updateMateria: async (id: number, data: any): Promise<{ success: boolean; materia: MateriaCatalogo }> => {
+    const response = await api.put(`/materias-catalogo/${id}`, data);
+    return response.data;
+  },
+  deleteMateria: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/materias-catalogo/${id}`);
+    return response.data;
+  },
+  syncCatalogo: async (carrera_id: number): Promise<{ success: boolean; mensaje: string }> => {
+    const response = await api.post('/materias-catalogo/sync', { carrera_id });
+    return response.data;
+  }
+};
+
+// ============================================
+// GESTIÓN DE CLASES MANUALES Y ESTUDIANTES
+// ============================================
+
+export const gestionAcademicaService = {
+  // Crear clase manual
+  createClase: async (data: {
+    materia_catalogo_id: number;
+    docente_id: number | string;
+    dia: string;
+    hora_inicio: string;
+    hora_fin: string;
+    paralelo?: string;
+    ciclo?: string;
+    num_estudiantes?: number;
+  }) => {
+    const response = await api.post('/distribucion/clase', data);
+    return response.data;
+  },
+
+  // Eliminar clase manual
+  deleteClase: async (id: number) => {
+    const response = await api.delete(`/distribucion/clase/${id}`);
+    return response.data;
+  },
+
+  // Inscribir estudiantes individualmente
+  inscribirEstudiantesManual: async (clase_id: number, estudiante_ids: number[]) => {
+    const response = await api.post('/estudiantes/inscribir-manual', { clase_id, estudiante_ids });
+    return response.data;
+  },
+
+  // Inscribir por nivel completo
+  inscribirNivelCompleto: async (clase_id: number, nivel: string) => {
+    const response = await api.post('/estudiantes/inscribir-nivel', { clase_id, nivel });
+    return response.data;
+  },
+
+  // Desvincular estudiante
+  desinscribirEstudiante: async (estudiante_id: number, clase_id: number) => {
+    const response = await api.delete(`/estudiantes/${estudiante_id}/clase/${clase_id}`);
     return response.data;
   }
 };

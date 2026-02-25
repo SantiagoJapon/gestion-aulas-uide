@@ -307,36 +307,72 @@ export default function EstudianteDashboard() {
         return (
           <div className="space-y-6 animate-fade-in">
             <GuidedTour steps={tourSteps} run={runTour} onFinish={handleTourFinish} />
-            {/* Header Card */}
-            <div id="tour-header-card" className="bg-gradient-to-br from-uide-blue/90 to-uide-blue rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/20">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+            {/* Friendly Header Card */}
+            <div id="tour-header-card" className="bg-gradient-to-br from-[#003da5] via-[#002D72] to-[#001a4d] rounded-[2.5rem] p-6 sm:p-10 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/30 border border-white/10 group">
+              {/* Decorative elements */}
+              <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/15 transition-all duration-700"></div>
+              <div className="absolute bottom-0 left-0 w-40 h-40 bg-uide-gold/10 rounded-full blur-[60px] translate-y-1/2 -translate-x-1/2"></div>
 
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                  <div className="flex items-center gap-2 mb-2 opacity-80">
-                    <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest">{user?.rol || 'ESTUDIANTE'}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-widest">• Bienestar Universitario</span>
+              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+                <div className="flex flex-col lg:flex-row items-center gap-6 text-center lg:text-left">
+                  {/* Mascot / Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="size-24 sm:size-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-2 shadow-inner overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                      <img src="/image_guia.png" alt="Mascota UIDE" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 size-10 bg-emerald-500 border-4 border-[#002D72] rounded-full flex items-center justify-center shadow-lg">
+                      <span className="material-symbols-outlined text-white text-lg">check</span>
+                    </div>
                   </div>
-                  <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-2">¡Hola, {user?.nombre?.split(' ')[0]}!</h2>
-                  <p className="text-sm font-medium text-white/80 max-w-lg leading-relaxed">
-                    Recuerda revisar tus notificaciones para cambios de aula recientes.
-                  </p>
+
+                  <div>
+                    <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-3">
+                      <span className="bg-uide-gold/20 text-uide-gold px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.15em] border border-uide-gold/20">Portal Estudiantil</span>
+                      <span className="bg-white/10 text-white/80 px-3 py-1 rounded-full text-[10px] font-bold tracking-wide backdrop-blur-sm">Comunidad UIDE</span>
+                    </div>
+                    <h2 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
+                      ¡Hola, <span className="text-uide-gold">{user?.nombre}</span>!
+                    </h2>
+                    <p className="text-base sm:text-lg font-medium text-white/70 max-w-lg leading-relaxed italic">
+                      "Tu esfuerzo de hoy es el éxito de tu mañana. ¡Que tengas una excelente jornada!"
+                    </p>
+                    <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
+                      <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
+                        className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
+                      >
+                        Recorrido rápido
+                      </button>
+                      <p className="text-[11px] text-white/50 font-medium">Actualizado: {new Date().toLocaleDateString()}</p>
+                    </div>
+                  </div>
                 </div>
 
                 {nextClass ? (
-                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl min-w-[200px] flex flex-col gap-1 shadow-lg">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Tu Siguiente Clase</span>
-                    <span className="text-xl font-black">{nextClass.hora_inicio}</span>
-                    <span className="text-sm font-bold truncate max-w-[180px]">{nextClass.materia}</span>
-                    <div className="flex items-center gap-1 mt-1 text-xs text-white/80">
-                      <span className="material-symbols-outlined text-sm">room</span>
-                      {nextClass.aula || 'Por asignar'}
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-[2rem] min-w-[240px] flex flex-col gap-2 shadow-2xl hover:bg-white/15 transition-colors border-l-4 border-l-uide-gold">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-uide-gold">Próxima Clase</span>
+                      <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black">{nextClass.hora_inicio}</span>
+                      <span className="text-xs font-medium text-white/60">en {nextClass.aula || 'S/A'}</span>
+                    </div>
+                    <span className="text-sm font-black truncate max-w-[200px] uppercase tracking-tight">{nextClass.materia}</span>
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/10 text-[11px] text-white/80">
+                      <img src="/blob.png" className="size-4 opacity-70" alt="" />
+                      <span className="font-medium">{nextClass.docente || 'Por confirmar'}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl min-w-[180px] flex flex-col justify-center items-center text-center gap-1 shadow-lg">
-                    <span className="material-symbols-outlined text-3xl mb-1">check_circle</span>
-                    <span className="text-xs font-bold">Sin más clases hoy</span>
+                  <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] min-w-[240px] flex flex-col justify-center items-center text-center gap-3 shadow-xl">
+                    <div className="size-16 bg-white/10 rounded-full flex items-center justify-center mb-1">
+                      <span className="material-symbols-outlined text-4xl text-uide-gold">verified</span>
+                    </div>
+                    <div>
+                      <span className="block text-sm font-black uppercase tracking-widest text-white">¡Día completado!</span>
+                      <span className="text-[10px] text-white/50 font-medium">No tienes más clases hoy</span>
+                    </div>
                   </div>
                 )}
               </div>

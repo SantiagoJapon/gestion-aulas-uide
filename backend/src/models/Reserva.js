@@ -11,7 +11,12 @@ const Reserva = sequelize.define('Reserva', {
     },
     aula_codigo: {
         type: DataTypes.STRING(50),
-        allowNull: false
+        allowNull: true
+    },
+    espacio_codigo: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Código del espacio (biblioteca, sala, etc.) si tipo_espacio no es aula'
     },
     dia: {
         type: DataTypes.STRING(20),

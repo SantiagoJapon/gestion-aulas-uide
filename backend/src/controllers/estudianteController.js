@@ -937,10 +937,369 @@ const obtenerHistorialCargas = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Inscribir estudiantes individualmente o masivamente por IDs a una clase
+ */
+const inscribirEstudiantesManual = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { clase_id, estudiante_ids } = req.body;
+    const usuario = req.usuario;
+
+    if (!clase_id || !estudiante_ids || !Array.isArray(estudiante_ids)) {
+      return res.status(400).json({ success: false, error: 'Datos incompletos' });
+    }
+
+    // Validar que la clase exista y pertenezca a la carrera si es director
+    const [clase] = await sequelize.query('SELECT * FROM clases WHERE id = :clase_id', {
+      replacements: { clase_id },
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    if (!clase) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Clase no encontrada' });
+    }
+
+    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
+    }
+
+    let inscritos = 0;
+    for (const est_id of estudiante_ids) {
+      await sequelize.query(
+        `INSERT INTO estudiantes_materias (estudiante_id, clase_id, created_at, updated_at)
+         VALUES (:est_id, :clase_id, NOW(), NOW())
+         ON CONFLICT (estudiante_id, clase_id) DO NOTHING`,
+        {
+          replacements: { est_id, clase_id },
+          type: QueryTypes.INSERT,
+          transaction
+        }
+      );
+      inscritos++;
+    }
+
+    // Actualizar conteo de estudiantes en la clase
+    const [stats] = await sequelize.query(
+      'SELECT COUNT(*) as total FROM estudiantes_materias WHERE clase_id = :clase_id',
+      { replacements: { clase_id }, type: QueryTypes.SELECT, transaction }
+    );
+
+    await sequelize.query(
+      'UPDATE clases SET num_estudiantes = :total WHERE id = :clase_id',
+      { replacements: { total: stats.total, clase_id }, type: QueryTypes.UPDATE, transaction }
+    );
+
+    await transaction.commit();
+    res.json({ success: true, mensaje: `${inscritos} estudiantes inscritos correctamente`, total: stats.total });
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error en inscribirEstudiantesManual:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * @desc    Desvincular a un estudiante de una clase
+ */
+const desinscribirEstudiante = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { clase_id, estudiante_id } = req.params;
+    const usuario = req.usuario;
+
+    const [clase] = await sequelize.query('SELECT * FROM clases WHERE id = :clase_id', {
+      replacements: { clase_id },
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
+    }
+
+    await sequelize.query(
+      'DELETE FROM estudiantes_materias WHERE clase_id = :clase_id AND estudiante_id = :estudiante_id',
+      { replacements: { clase_id, estudiante_id }, type: QueryTypes.DELETE, transaction }
+    );
+
+    // Actualizar conteo
+    const [stats] = await sequelize.query(
+      'SELECT COUNT(*) as total FROM estudiantes_materias WHERE clase_id = :clase_id',
+      { replacements: { clase_id }, type: QueryTypes.SELECT, transaction }
+    );
+
+    await sequelize.query(
+      'UPDATE clases SET num_estudiantes = :total WHERE id = :clase_id',
+      { replacements: { total: stats.total, clase_id }, type: QueryTypes.UPDATE, transaction }
+    );
+
+    await transaction.commit();
+    res.json({ success: true, mensaje: 'Estudiante desvinculado correctamente', total: stats.total });
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error en desinscribirEstudiante:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * @desc    Inscribir a todos los estudiantes de un nivel/carrera a una clase
+ */
+const inscribirNivelCompleto = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { clase_id, nivel } = req.body;
+    const usuario = req.usuario;
+
+    const [clase] = await sequelize.query('SELECT * FROM clases WHERE id = :clase_id', {
+      replacements: { clase_id },
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    if (!clase) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Clase no encontrada' });
+    }
+
+    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
+    }
+
+    // Buscar estudiantes del nivel y carrera (transliteración incluida para seguridad)
+    const carreraActual = clase.carrera;
+    const estudiantes = await sequelize.query(
+      `SELECT id FROM estudiantes 
+       WHERE nivel = :nivel 
+       AND (escuela = :carrera OR escuela ILIKE :carrera)`,
+      { replacements: { nivel, carrera: carreraActual }, type: QueryTypes.SELECT, transaction }
+    );
+
+    let inscritos = 0;
+    for (const est of estudiantes) {
+      await sequelize.query(
+        `INSERT INTO estudiantes_materias (estudiante_id, clase_id, created_at, updated_at)
+         VALUES (:est_id, :clase_id, NOW(), NOW())
+         ON CONFLICT (estudiante_id, clase_id) DO NOTHING`,
+        {
+          replacements: { est_id: est.id, clase_id },
+          type: QueryTypes.INSERT,
+          transaction
+        }
+      );
+      inscritos++;
+    }
+
+    // Actualizar conteo
+    const [stats] = await sequelize.query(
+      'SELECT COUNT(*) as total FROM estudiantes_materias WHERE clase_id = :clase_id',
+      { replacements: { clase_id }, type: QueryTypes.SELECT, transaction }
+    );
+
+    await sequelize.query(
+      'UPDATE clases SET num_estudiantes = :total WHERE id = :clase_id',
+      { replacements: { total: stats.total, clase_id }, type: QueryTypes.UPDATE, transaction }
+    );
+
+    await transaction.commit();
+    res.json({
+      success: true,
+      mensaje: `Se han inscrito ${inscritos} estudiantes de ${nivel} correctamente.`,
+      total: stats.total
+    });
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error en inscribirNivelCompleto:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * @desc    Obtener carga académica actual de un estudiante específico (para director)
+ */
+const getEstudianteLoad = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuario = req.usuario;
+
+    // Buscar el estudiante
+    const estudiante = await Estudiante.findByPk(id);
+    if (!estudiante) {
+      return res.status(404).json({ success: false, error: 'Estudiante no encontrado' });
+    }
+
+    // Verificar permisos si es director
+    if (usuario.rol === 'director') {
+      const carreraOriginal = usuario.carrera_director.trim();
+      const escuelaEstudiante = (estudiante.escuela || '').trim();
+      // Comparación flexible
+      if (!escuelaEstudiante.toLowerCase().includes(carreraOriginal.toLowerCase()) &&
+        !carreraOriginal.toLowerCase().includes(escuelaEstudiante.toLowerCase())) {
+        return res.status(403).json({ success: false, error: 'No tienes permiso para ver estudiantes de otras carreras' });
+      }
+    }
+
+    // Obtener materias inscritas con detalles de horario y aula
+    const materias = await sequelize.query(`
+        SELECT 
+            c.*,
+            em.fecha_inscripcion,
+            a.nombre as aula_nombre,
+            a.capacidad as aula_capacidad
+        FROM estudiantes_materias em
+        JOIN clases c ON em.clase_id = c.id
+        LEFT JOIN aulas a ON a.codigo = c.aula_asignada
+        WHERE em.estudiante_id = :id
+        ORDER BY c.dia, c.hora_inicio
+    `, {
+      replacements: { id },
+      type: QueryTypes.SELECT
+    });
+
+    res.json({
+      success: true,
+      estudiante,
+      materias
+    });
+  } catch (error) {
+    console.error('Error en getEstudianteLoad:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * @desc    Sincronizar carga académica (inscripciones) desde Excel "Proyección de Cupos"
+   * @route   POST /api/estudiantes/sync-proyeccion
+   * @access  Admin, Director
+   */
+const subirProyeccionCupos = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    if (!req.file) {
+      if (transaction) await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'No se recibió el archivo' });
+    }
+
+    const { processExcel } = require('../services/excel-parser.service');
+    const result = processExcel(req.file.buffer);
+
+    if (!result.clases || result.clases.length === 0) {
+      if (transaction) await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'No se pudieron extraer datos válidos del Excel. Asegúrese de que tenga columnas de Cédula y Materia.'
+      });
+    }
+
+    console.log(`📑 Procesando ${result.clases.length} registros de proyección de cupos...`);
+
+    let procesados = 0;
+    let vinculados = 0;
+    let errores = [];
+
+    // Para cada fila del Excel
+    for (const record of result.clases) {
+      procesados++;
+      const cedula = record.cedula;
+      const materiaNombre = record.materia;
+      const paralelo = record.paralelo;
+
+      if (!cedula || !materiaNombre) {
+        continue;
+      }
+
+      // 1. Buscar estudiante
+      const estudiante = await Estudiante.findOne({
+        where: { cedula },
+        transaction
+      });
+
+      if (!estudiante) {
+        errores.push(`Fila ${procesados}: Estudiante con cédula ${cedula} no encontrado.`);
+        continue;
+      }
+
+      // 2. Buscar la clase (materia + paralelo)
+      const { Clase } = require('../models');
+      const whereClase = {
+        [Op.or]: [
+          { materia: { [Op.iLike]: `%${materiaNombre}%` } },
+          { codigo: { [Op.iLike]: `%${materiaNombre}%` } }
+        ]
+      };
+
+      if (paralelo) {
+        whereClase.paralelo = paralelo;
+      }
+
+      const clase = await Clase.findOne({
+        where: whereClase,
+        transaction
+      });
+
+      if (!clase) {
+        errores.push(`Fila ${procesados}: No se encontró la clase para "${materiaNombre}"${paralelo ? ` paralelo ${paralelo}` : ''}.`);
+        continue;
+      }
+
+      // 3. Vincular (estudiantes_materias)
+      const existe = await sequelize.query(
+        'SELECT 1 FROM estudiantes_materias WHERE estudiante_id = :eid AND clase_id = :cid LIMIT 1',
+        {
+          replacements: { eid: estudiante.id, cid: clase.id },
+          type: QueryTypes.SELECT,
+          transaction
+        }
+      );
+
+      if (existe.length === 0) {
+        await sequelize.query(
+          'INSERT INTO estudiantes_materias (estudiante_id, clase_id, fecha_inscripcion) VALUES (:eid, :cid, NOW())',
+          {
+            replacements: { eid: estudiante.id, cid: clase.id },
+            type: QueryTypes.INSERT,
+            transaction
+          }
+        );
+        vinculados++;
+      }
+    }
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      mensaje: `Sincronización completada: ${vinculados} inscripciones nuevas creadas.`,
+      detalles: {
+        total_excel: result.clases.length,
+        procesados,
+        vinculados_nuevos: vinculados,
+        errores: errores.slice(0, 50)
+      }
+    });
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error en subirProyeccionCupos:', error);
+    res.status(500).json({ success: false, error: 'Error al procesar la proyección: ' + error.message });
+  }
+};
+
 module.exports = {
   lookupEstudianteByEmail,
   loginEstudianteByCedula,
   subirEstudiantes,
+  subirProyeccionCupos,
   obtenerHistorialCargas,
-  listarEstudiantes
+  listarEstudiantes,
+  getEstudianteLoad,
+  inscribirEstudiantesManual,
+  desinscribirEstudiante,
+  inscribirNivelCompleto
 };

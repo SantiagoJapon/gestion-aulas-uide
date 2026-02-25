@@ -9,12 +9,10 @@ export default function ForcePasswordChange() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
-    const [showConfirm, setShowConfirm] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
 
-    // Indicador de fortaleza de contraseña
     const getStrength = (p: string) => {
         if (!p) return { level: 0, label: '', color: '' };
         let score = 0;
@@ -24,9 +22,9 @@ export default function ForcePasswordChange() {
         if (/[^A-Za-z0-9]/.test(p)) score++;
         const levels = [
             { level: 0, label: '', color: '' },
-            { level: 1, label: 'Débil', color: 'bg-red-500' },
-            { level: 2, label: 'Regular', color: 'bg-orange-400' },
-            { level: 3, label: 'Buena', color: 'bg-yellow-400' },
+            { level: 1, label: 'Débil', color: 'bg-rose-500' },
+            { level: 2, label: 'Media', color: 'bg-amber-400' },
+            { level: 3, label: 'Buena', color: 'bg-sky-400' },
             { level: 4, label: 'Fuerte', color: 'bg-emerald-500' },
         ];
         return levels[score] || levels[0];
@@ -57,212 +55,199 @@ export default function ForcePasswordChange() {
 
         setLoading(true);
         try {
-            // Usamos la contraseña temporal como passwordActual
-            // El backend acepta 'uide2026' como clave temporal estándar
             await authService.changePasswordFirstLogin(password);
-
             setSuccess(true);
-
-            // Actualizar el usuario en contexto para quitar el flag
             if (user) {
                 updateUser({ ...user, requiere_cambio_password: false } as any);
             }
-
-            // Redirigir al dashboard correcto después de 2 segundos
             setTimeout(() => {
                 const path = rolePath[user?.rol || ''] || '/';
                 navigate(path);
-            }, 2000);
-
+            }, 2500);
         } catch (err: any) {
-            // Si falla con uide2026, puede ser que ya cambió antes — intentar logout
             const msg = err.response?.data?.error || err.response?.data?.mensaje || '';
-            if (msg.toLowerCase().includes('incorrecta')) {
-                setError('No se pudo verificar tu contraseña temporal. Contacta al administrador.');
-            } else {
-                setError(msg || 'Error al cambiar la contraseña. Intenta de nuevo.');
-            }
+            setError(msg.toLowerCase().includes('incorrecta')
+                ? 'No se pudo verificar tu sesión. Intenta ingresar de nuevo.'
+                : msg || 'Error al actualizar la contraseña.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-primary/30 flex items-center justify-center p-6">
-            {/* Fondo animado */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4 relative overflow-hidden font-outfit">
+            {/* Background Effects */}
+            <div className="absolute inset-0 z-0">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] animate-pulse" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-uide-blue/20 rounded-full blur-[120px] animate-pulse delay-700" />
+                <div className="absolute top-[30%] right-[10%] w-[20%] h-[20%] bg-emerald-500/10 rounded-full blur-[100px]" />
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]" />
             </div>
 
-            <div className="relative w-full max-w-md">
-                {/* Card principal */}
-                <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white/20 overflow-hidden">
-
-                    {/* Header con gradiente */}
-                    <div className="bg-gradient-to-r from-primary to-primary/80 p-8 text-white text-center relative overflow-hidden">
-                        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoNnYtNmgtNnptMCAwdi02aC02djZoNnptNiAwaDZ2LTZoLTZ2NnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-30" />
-                        <div className="relative">
-                            {success ? (
-                                <div className="size-20 mx-auto mb-4 rounded-3xl bg-white/20 flex items-center justify-center animate-bounce">
-                                    <span className="material-symbols-outlined text-5xl">check_circle</span>
-                                </div>
-                            ) : (
-                                <div className="size-20 mx-auto mb-4 rounded-3xl bg-white/20 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-5xl">shield_lock</span>
-                                </div>
-                            )}
-                            <h1 className="text-2xl font-black tracking-tight">
-                                {success ? '¡Contraseña actualizada!' : 'Primer ingreso al sistema'}
-                            </h1>
-                            <p className="text-white/70 text-sm mt-1 font-medium">
-                                {success
-                                    ? 'Redirigiendo a tu panel...'
-                                    : `Bienvenido/a, ${user?.nombre || 'docente'}. Por seguridad, debes crear tu contraseña personal.`
-                                }
-                            </p>
+            <div className="relative z-10 w-full max-w-[440px] animate-fade-in-up">
+                {/* Logo o Marca */}
+                <div className="flex justify-center mb-8">
+                    <div className="bg-white/5 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-2xl">
+                        <div className="bg-gradient-to-br from-primary to-uide-blue size-12 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg">
+                            U
                         </div>
                     </div>
+                </div>
 
-                    {/* Contenido */}
-                    <div className="p-8">
+                <div className="bg-white/[0.03] backdrop-blur-[40px] rounded-[2.5rem] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden transition-all duration-500">
+
+                    {/* Header Section */}
+                    <div className="relative p-8 pb-4 text-center">
+                        <div className="inline-flex items-center justify-center size-16 rounded-2xl bg-gradient-to-br from-primary/20 to-uide-blue/20 border border-white/10 mb-6 group transition-transform duration-500 hover:scale-110">
+                            {success ? (
+                                <span className="material-symbols-outlined text-3xl text-emerald-400 animate-bounce">check_circle</span>
+                            ) : (
+                                <span className="material-symbols-outlined text-3xl text-primary group-hover:rotate-12 transition-transform">lock_person</span>
+                            )}
+                        </div>
+
+                        <h1 className="text-2xl font-black text-white tracking-tight leading-tight">
+                            {success ? '¡Acceso Asegurado!' : 'Configura tu Seguridad'}
+                        </h1>
+                        <p className="text-slate-400 text-sm mt-2 font-medium px-4">
+                            {success
+                                ? 'Todo listo. Estamos preparando tu espacio de trabajo...'
+                                : `Hola ${user?.nombre?.split(' ')[0] || 'Docente'}, es momento de establecer una contraseña segura.`}
+                        </p>
+                    </div>
+
+                    <div className="p-8 pt-6">
                         {success ? (
-                            <div className="text-center py-4">
-                                <div className="size-16 mx-auto mb-4 rounded-2xl bg-emerald-50 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-4xl text-emerald-500">rocket_launch</span>
+                            <div className="space-y-6 py-4">
+                                <div className="flex justify-center">
+                                    <div className="relative size-24">
+                                        <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />
+                                        <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="material-symbols-outlined text-4xl text-emerald-500">verified_user</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <p className="text-slate-600 font-medium">Tu contraseña ha sido guardada correctamente.</p>
-                                <p className="text-sm text-slate-400 mt-1">Serás redirigido a tu panel en unos segundos...</p>
-                                <div className="mt-4 h-1 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 rounded-full animate-[width_2s_ease-in-out]" style={{ width: '100%', transition: 'width 2s' }} />
+                                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full animate-[width_2.5s_ease-in-out]" style={{ width: '100%' }} />
                                 </div>
                             </div>
                         ) : (
-                            <>
+                            <form onSubmit={handleSubmit} className="space-y-6">
                                 {error && (
-                                    <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-bold flex items-start gap-3">
-                                        <span className="material-symbols-outlined text-lg flex-shrink-0">error</span>
-                                        <span>{error}</span>
+                                    <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold flex items-center gap-3 animate-shake">
+                                        <span className="material-symbols-outlined text-lg">warning</span>
+                                        {error}
                                     </div>
                                 )}
 
-                                <form onSubmit={handleSubmit} className="space-y-5">
-                                    {/* Nueva contraseña */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                {/* Password Input Group */}
+                                <div className="space-y-4">
+                                    <div className="group space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
                                             Nueva Contraseña
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">
-                                                <span className="material-symbols-outlined text-xl">lock</span>
-                                            </span>
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-primary">
+                                                <span className="material-symbols-outlined text-xl">password</span>
+                                            </div>
                                             <input
                                                 type={showPass ? 'text' : 'password'}
-                                                required
-                                                placeholder="Mínimo 6 caracteres"
-                                                className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none font-bold transition-all"
+                                                className="w-full bg-white/5 border border-white/5 rounded-2xl pl-12 pr-12 py-4 text-white placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 focus:bg-white/[0.07] transition-all font-bold"
+                                                placeholder="Crea una clave fuerte"
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPass(!showPass)}
-                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-white transition-colors"
                                             >
                                                 <span className="material-symbols-outlined text-xl">
                                                     {showPass ? 'visibility_off' : 'visibility'}
                                                 </span>
                                             </button>
                                         </div>
-
-                                        {/* Barra de fortaleza */}
+                                        {/* Strength Indicators */}
                                         {password && (
-                                            <div className="mt-2 space-y-1">
-                                                <div className="flex gap-1">
+                                            <div className="px-1 space-y-2 pt-1 animate-fade-in">
+                                                <div className="flex gap-1.5">
                                                     {[1, 2, 3, 4].map(i => (
-                                                        <div
-                                                            key={i}
-                                                            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i <= strength.level ? strength.color : 'bg-slate-100'}`}
-                                                        />
+                                                        <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-500 ${i <= strength.level ? strength.color : 'bg-white/5'}`} />
                                                     ))}
                                                 </div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                    Fortaleza: <span className={`${strength.level >= 3 ? 'text-emerald-500' : strength.level >= 2 ? 'text-orange-400' : 'text-red-400'}`}>{strength.label}</span>
-                                                </p>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Seguridad</span>
+                                                    <span className={`text-[9px] font-black uppercase tracking-widest ${strength.color.replace('bg-', 'text-')}`}>
+                                                        {strength.label}
+                                                    </span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Confirmar contraseña */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                    <div className="group space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
                                             Confirmar Contraseña
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-primary">
                                                 <span className="material-symbols-outlined text-xl">lock_reset</span>
-                                            </span>
+                                            </div>
                                             <input
-                                                type={showConfirm ? 'text' : 'password'}
-                                                required
-                                                placeholder="Repite tu nueva contraseña"
-                                                className={`w-full pl-12 pr-12 py-4 bg-slate-50 border rounded-2xl focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all ${confirmPassword && password !== confirmPassword
-                                                    ? 'border-red-300 focus:border-red-400'
-                                                    : confirmPassword && password === confirmPassword
-                                                        ? 'border-emerald-300 focus:border-emerald-400'
-                                                        : 'border-slate-100 focus:border-primary'
+                                                type="password"
+                                                className={`w-full bg-white/5 border rounded-2xl pl-12 pr-12 py-4 text-white placeholder:text-slate-600 outline-none transition-all font-bold focus:ring-2 ${confirmPassword
+                                                        ? password === confirmPassword
+                                                            ? 'border-emerald-500/30 focus:ring-emerald-500/30'
+                                                            : 'border-rose-500/30 focus:ring-rose-500/30'
+                                                        : 'border-white/5 focus:ring-primary/40 focus:border-primary/40'
                                                     }`}
+                                                placeholder="Repite la clave"
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowConfirm(!showConfirm)}
-                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
-                                            >
-                                                <span className="material-symbols-outlined text-xl">
-                                                    {showConfirm ? 'visibility_off' : 'visibility'}
-                                                </span>
-                                            </button>
                                             {confirmPassword && (
-                                                <span className={`absolute right-12 top-1/2 -translate-y-1/2 material-symbols-outlined text-lg ${password === confirmPassword ? 'text-emerald-500' : 'text-red-400'}`}>
-                                                    {password === confirmPassword ? 'check_circle' : 'cancel'}
-                                                </span>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
+                                                    <span className={`material-symbols-outlined text-lg ${password === confirmPassword ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                        {password === confirmPassword ? 'check_circle' : 'error'}
+                                                    </span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Botón */}
-                                    <button
-                                        type="submit"
-                                        disabled={loading || (!!confirmPassword && password !== confirmPassword)}
-                                        className="w-full bg-primary hover:bg-primary/90 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-widest text-xs mt-2"
-                                    >
+                                <button
+                                    type="submit"
+                                    disabled={loading || !password || password !== confirmPassword}
+                                    className="w-full relative group overflow-hidden bg-gradient-to-r from-primary to-uide-blue text-white font-black py-4.5 rounded-2xl transition-all shadow-xl shadow-primary/20 disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] mt-2"
+                                >
+                                    <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
+                                    <div className="flex items-center justify-center gap-3 relative z-10">
                                         {loading ? (
-                                            <>
-                                                <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                Guardando...
-                                            </>
+                                            <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         ) : (
-                                            <>
-                                                <span className="material-symbols-outlined text-base">security</span>
-                                                Establecer mi contraseña
-                                            </>
+                                            <span className="material-symbols-outlined text-xl">task_alt</span>
                                         )}
-                                    </button>
+                                        <span className="uppercase tracking-[0.15em] text-xs">Finalizar Configuración</span>
+                                    </div>
+                                </button>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => { logout(); navigate('/login'); }}
-                                        className="w-full text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-primary transition-colors py-2"
-                                    >
-                                        Cancelar y salir
-                                    </button>
-                                </form>
-                            </>
+                                <button
+                                    type="button"
+                                    onClick={() => { logout(); navigate('/login'); }}
+                                    className="w-full text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] hover:text-white transition-colors pt-2"
+                                >
+                                    Salir sin cambiar
+                                </button>
+                            </form>
                         )}
                     </div>
                 </div>
+
+                <p className="text-center text-slate-600 text-[10px] mt-12 font-bold uppercase tracking-[0.3em]">
+                    UIDE • Security System v2.0
+                </p>
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ interface Credenciales {
     email: string;
     password: string;
     whatsapp_enviado: boolean;
+    email_enviado?: boolean;
     nombre: string;
 }
 
@@ -79,6 +80,7 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
                     email: res.credenciales.email,
                     password: res.credenciales.password,
                     whatsapp_enviado: res.credenciales.whatsapp_enviado,
+                    email_enviado: res.credenciales.email_enviado,
                     nombre: `${director.nombre} ${director.apellido}`
                 });
             }

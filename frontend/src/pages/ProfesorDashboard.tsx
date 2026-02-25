@@ -448,30 +448,79 @@ export default function ProfesorDashboard() {
           <div className="space-y-6 animate-fade-in">
             <GuidedTour steps={tourSteps} run={runTour} onFinish={handleTourFinish} />
             {/* Header */}
-            <div id="tour-header-profe" className="bg-card border border-border rounded-[2rem] p-6 md:p-8 relative overflow-hidden shadow-sm">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-                <div className="flex items-center gap-5">
-                  <div className="size-20 bg-brand-navy text-white rounded-full flex items-center justify-center text-3xl font-black border-4 border-white dark:border-slate-800 shadow-xl">
-                    {user?.nombre?.[0]}{user?.apellido?.[0]}
+            {/* Friendly Header Card */}
+            <div id="tour-header-profe" className="bg-gradient-to-br from-[#003da5] via-[#002D72] to-[#001a4d] rounded-[2.5rem] p-6 sm:p-10 text-white relative overflow-hidden shadow-2xl shadow-uide-blue/30 border border-white/10 group">
+              {/* Decorative elements */}
+              <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/15 transition-all duration-700"></div>
+
+              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+                <div className="flex flex-col lg:flex-row items-center gap-6 text-center lg:text-left">
+                  {/* Mascot / Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="size-24 sm:size-32 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-2 shadow-inner overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                      <img src="/image_guia.png" alt="Mascota UIDE" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 size-10 bg-emerald-500 border-4 border-[#002D72] rounded-full flex items-center justify-center shadow-lg">
+                      <span className="material-symbols-outlined text-white text-lg">school</span>
+                    </div>
                   </div>
+
                   <div>
-                    <h2 className="text-3xl font-black text-foreground tracking-tight">Hola, Docente {user?.apellido}</h2>
-                    <p className="text-sm font-medium text-muted-foreground max-w-md">
-                      Tienes <strong className="text-foreground">{clasesHoy.length} clases</strong> programadas para hoy.
-                      {nextClass && (
-                        <span className="block mt-1 text-xs text-primary font-bold">
-                          Siguiente: {nextClass.materia} a las {nextClass.hora_inicio} en {nextClass.aula}
-                        </span>
-                      )}
+                    <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-3">
+                      <span className="bg-uide-gold/20 text-uide-gold px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.15em] border border-uide-gold/20">Portal Docente</span>
+                      <span className="bg-white/10 text-white/80 px-3 py-1 rounded-full text-[10px] font-bold tracking-wide backdrop-blur-sm">Cuerpo Académico</span>
+                    </div>
+                    <h2 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">
+                      ¡Hola, <span className="text-uide-gold">Prof. {user?.nombre}</span>!
+                    </h2>
+                    <p className="text-base sm:text-lg font-medium text-white/70 max-w-lg leading-relaxed italic">
+                      "Formando líderes con valores. Tienes {clasesHoy.length} clases para hoy."
                     </p>
+                    <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
+                      <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
+                        className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
+                      >
+                        Recorrido Docente
+                      </button>
+                      <button
+                        onClick={() => alert("Aviso General NO disponible: En desarrollo")}
+                        className="text-[11px] font-black bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-all shadow-lg"
+                      >
+                        <span className="material-symbols-outlined text-xs mr-1 align-middle">campaign</span>
+                        AVISO GENERAL
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <button onClick={() => alert("Aviso General NO disponible: En desarrollo")} className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2">
-                    <span className="material-symbols-outlined">campaign</span>
-                    Aviso General
-                  </button>
-                </div>
+
+                {nextClass ? (
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-[2rem] min-w-[240px] flex flex-col gap-2 shadow-2xl hover:bg-white/15 transition-colors border-l-4 border-l-uide-gold">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-uide-gold">Próxima Clase</span>
+                      <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black">{nextClass.hora_inicio}</span>
+                      <span className="text-xs font-medium text-white/60">en {nextClass.aula || 'S/A'}</span>
+                    </div>
+                    <span className="text-sm font-black truncate max-w-[200px] uppercase tracking-tight">{nextClass.materia}</span>
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/10 text-[11px] text-white/80">
+                      <span className="material-symbols-outlined text-sm">group</span>
+                      <span className="font-medium">{nextClass.estudiantes || 0} Estudiantes inscritos</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] min-w-[240px] flex flex-col justify-center items-center text-center gap-3 shadow-xl">
+                    <div className="size-16 bg-white/10 rounded-full flex items-center justify-center mb-1">
+                      <span className="material-symbols-outlined text-4xl text-uide-gold">verified</span>
+                    </div>
+                    <div>
+                      <span className="block text-sm font-black uppercase tracking-widest text-white">¡Jornada Completa!</span>
+                      <span className="text-[10px] text-white/50 font-medium">No tienes más clases hoy</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

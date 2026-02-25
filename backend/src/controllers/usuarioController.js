@@ -1,6 +1,7 @@
 const { User, Carrera, sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
 const N8nService = require('../services/n8n.service');
+const emailService = require('../services/emailService');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -241,17 +242,37 @@ const createUsuario = async (req, res) => {
       }
     }
 
-    // Respuesta con credenciales para directores
+    // Enviar credenciales por email (siempre que sea director o docente)
+    let email_enviado = false;
+    if (finalRol === 'director' || finalRol === 'docente') {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const emailResult = await emailService.enviarCredenciales({
+        email: newUsuario.email,
+        nombre: `${nombre} ${apellido}`.trim(),
+        passwordTemporal: passwordFinal,
+        rol: finalRol,
+        linkAcceso: frontendUrl
+      });
+      email_enviado = emailResult.success;
+      if (email_enviado) {
+        console.log(`✅ Email de credenciales enviado a ${newUsuario.email}`);
+      } else {
+        console.warn(`⚠️ No se pudo enviar email a ${newUsuario.email}: ${emailResult.error}`);
+      }
+    }
+
+    // Respuesta con credenciales para directores y docentes
     const responseData = {
       success: true,
       mensaje: 'Usuario creado exitosamente',
       usuario: newUsuario.toJSON()
     };
 
-    if (finalRol === 'director') {
+    if (finalRol === 'director' || finalRol === 'docente') {
       responseData.credenciales = {
         email: newUsuario.email,
         password: passwordFinal,
+        email_enviado,
         whatsapp_enviado
       };
     }
@@ -267,6 +288,7 @@ const generarCredencialesUsuario = async (req, res) => {
   try {
     const { id } = req.params;
     const whatsappService = require('../services/whatsappService');
+    const emailService = require('../services/emailService');
 
     const usuario = await User.findByPk(id);
     if (!usuario) {
@@ -283,6 +305,25 @@ const generarCredencialesUsuario = async (req, res) => {
     usuario.requiere_cambio_password = true;
     await usuario.save();
 
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const nombreCompleto = `${usuario.nombre} ${usuario.apellido}`.trim();
+
+    // Enviar email
+    let email_enviado = false;
+    const emailResult = await emailService.enviarCredenciales({
+      email: usuario.email,
+      nombre: nombreCompleto,
+      passwordTemporal: 'uide2026',
+      rol: usuario.rol,
+      linkAcceso: frontendUrl
+    });
+    email_enviado = emailResult.success;
+    if (emailResult.success) {
+      console.log('✅ Email enviado exitosamente a:', usuario.email);
+    } else {
+      console.warn('⚠️ Error enviando email:', emailResult.error);
+    }
+
     let whatsapp_enviado = false;
     if (usuario.telefono) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -292,7 +333,7 @@ const generarCredencialesUsuario = async (req, res) => {
 
     res.json({
       success: true,
-      credenciales: { email: usuario.email, password: 'uide2026', whatsapp_enviado },
+      credenciales: { email: usuario.email, password: 'uide2026', whatsapp_enviado, email_enviado },
       mensaje: 'Credenciales generadas exitosamente'
     });
   } catch (error) {

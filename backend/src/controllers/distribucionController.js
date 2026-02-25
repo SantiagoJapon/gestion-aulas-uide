@@ -232,7 +232,7 @@ const obtenerMapaCalor = async (req, res) => {
     });
 
     const [statsAulas] = await sequelize.query(`
-      SELECT COUNT(*) as total FROM aulas WHERE estado = 'DISPONIBLE'
+      SELECT COUNT(*) as total FROM aulas WHERE estado = 'disponible'
     `, { type: QueryTypes.SELECT });
 
     const totalAulas = parseInt(statsAulas.total) || 1;
@@ -257,11 +257,16 @@ const obtenerMapaCalor = async (req, res) => {
 
       for (let h = horaInicio; h < horaFin; h++) {
         if (ocupacion[clase.dia] && ocupacion[clase.dia][h]) {
+          const capacidadAula = clase.aula_capacidad || 0;
+          const numEstudiantes = clase.num_estudiantes || 0;
           ocupacion[clase.dia][h].clases.push({
             materia: clase.materia,
             aula: clase.aula_asignada,
             docente: clase.docente || 'Sin asignar',
-            estudiantes: clase.num_estudiantes || 0,
+            estudiantes: numEstudiantes,
+            capacidad_aula: capacidadAula,
+            sobrecupo: capacidadAula > 0 && numEstudiantes > capacidadAula,
+            porcentaje_uso: capacidadAula > 0 ? Math.round((numEstudiantes / capacidadAula) * 100) : null,
             carrera: clase.carrera
           });
           ocupacion[clase.dia][h].aulas_ocupadas++;
@@ -538,7 +543,7 @@ const checkDisponibilidad = async (req, res) => {
     const aulasLibres = await sequelize.query(`
       SELECT a.id, a.codigo, a.nombre, a.capacidad, a.edificio, a.tipo
       FROM aulas a
-      WHERE a.estado = 'DISPONIBLE'
+      WHERE a.estado = 'disponible'
       AND a.capacidad >= $1
       AND a.codigo NOT IN (
         SELECT aula_asignada FROM clases 
@@ -603,26 +608,9 @@ const getMiDistribucion = async (req, res) => {
         replacements.claseIds = claseIds;
         console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id}`);
       } else {
-        // 2. FALLBACK: Filtro por Carrera + Nivel (Diseño original)
-        console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones específicas, usando filtro por nivel.`);
-        const cicloNum = normalizarCiclo(usuario.nivel);
-        if (cicloNum) {
-          whereClause = `WHERE LOWER(TRANSLATE(c.carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) LIKE LOWER(TRANSLATE(:carrera, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) AND c.aula_asignada IS NOT NULL AND c.aula_asignada != ''`;
-          replacements.carrera = `%${normalizarTexto(usuario.escuela)}%`;
-
-          const formasCiclo = [cicloNum.toString()];
-          const sufijos = ['ro', 'do', 'to', 'mo', 'vo', 'no'];
-          sufijos.forEach(s => formasCiclo.push(cicloNum + s));
-          const nombres = ['', 'primero', 'segundo', 'tercero', 'cuarto', 'quinto', 'sexto', 'septimo', 'octavo', 'noveno', 'decimo'];
-          if (nombres[cicloNum]) formasCiclo.push(nombres[cicloNum]);
-
-          whereClause += ` AND (${formasCiclo.map((_, i) => `LOWER(TRANSLATE(c.ciclo, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')) = LOWER(:ciclo${i})`).join(' OR ')})`;
-          formasCiclo.forEach((forma, i) => {
-            replacements[`ciclo${i}`] = forma;
-          });
-        } else {
-          whereClause = 'WHERE 1=0';
-        }
+        // Si no tiene inscripciones, NO mostrar nada (no usar fallback por nivel)
+        console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones específicas. No se muestra horario.`);
+        whereClause = 'WHERE 1=0';
       }
     }
 
@@ -677,6 +665,32 @@ const getMiDistribucion = async (req, res) => {
     const total = clases.length;
     const asignadas = clases.filter(c => c.aula_asignada).length;
 
+    const clasesConEstado = clases.map(c => {
+      const numEst = c.num_estudiantes || 0;
+      const capAula = c.aula_capacidad || 0;
+      const esSobrecupo = c.aula_asignada && capAula > 0 && numEst > capAula;
+      const porcentajeUso = capAula > 0 ? Math.round((numEst / capAula) * 100) : null;
+
+      let estado;
+      if (!c.aula_asignada) estado = 'pendiente';
+      else if (conflictos.has(c.id)) estado = 'conflicto';
+      else if (esSobrecupo) estado = 'sobrecupo';
+      else estado = 'asignada';
+
+      return {
+        ...c,
+        materia: fixEncoding(c.materia),
+        carrera: fixEncoding(c.carrera),
+        docente: fixEncoding(c.docente),
+        aula: c.aula_nombre || c.aula_asignada || 'S/A',
+        sobrecupo: !!esSobrecupo,
+        porcentaje_uso: porcentajeUso,
+        estado
+      };
+    });
+
+    const sobrecupos = clasesConEstado.filter(c => c.sobrecupo).length;
+
     res.json({
       success: true,
       rol: usuario.rol,
@@ -685,16 +699,10 @@ const getMiDistribucion = async (req, res) => {
         clases_asignadas: asignadas,
         clases_pendientes: total - asignadas,
         conflictos: conflictos.size,
+        sobrecupos,
         porcentaje_completado: total > 0 ? Math.round((asignadas / total) * 100) : 0
       },
-      clases: clases.map(c => ({
-        ...c,
-        materia: fixEncoding(c.materia),
-        carrera: fixEncoding(c.carrera),
-        docente: fixEncoding(c.docente),
-        aula: c.aula_nombre || c.aula_asignada || 'S/A',
-        estado: !c.aula_asignada ? 'pendiente' : conflictos.has(c.id) ? 'conflicto' : 'asignada'
-      }))
+      clases: clasesConEstado
     });
   } catch (error) {
     handle500(res, error, 'getMiDistribucion');
@@ -861,9 +869,13 @@ const getDistribucionSimulada = async (req, res) => {
     const carrerasFiltro = (req.query.carreras || '').split(',').map(s => s.trim()).filter(Boolean);
 
     const aulasDisponibles = await sequelize.query(`
-      SELECT id, codigo, nombre, capacidad, edificio, tipo, estado
+      SELECT id, codigo, nombre, capacidad, edificio, tipo, estado,
+             restriccion_carrera, es_prioritaria
       FROM aulas
-      WHERE estado = 'DISPONIBLE' AND codigo IS NOT NULL
+      WHERE estado = 'disponible'
+        AND tipo != 'AUDITORIO'
+        AND (restriccion_carrera IS NULL OR restriccion_carrera != 'AUDITORIO_INSTITUCIONAL')
+        AND codigo IS NOT NULL
       ORDER BY capacidad DESC
     `, { type: QueryTypes.SELECT });
 
@@ -919,7 +931,20 @@ const getDistribucionSimulada = async (req, res) => {
       }
 
       const capacidadNecesaria = Math.ceil((clase.num_estudiantes || 0) * 1.1);
-      const candidata = aulasDisponibles.find(a => (a.capacidad || 0) >= capacidadNecesaria && libre(a.codigo, dia, inicio, fin));
+      const carreraNorm = (clase.carrera || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      // Ordenar candidatas: prioritarias para esta carrera primero, luego por menor diferencia de capacidad
+      const candidatasOrdenadas = aulasDisponibles
+        .filter(a => (a.capacidad || 0) >= capacidadNecesaria && libre(a.codigo, dia, inicio, fin))
+        .sort((a, b) => {
+          const aPrio = a.es_prioritaria && a.restriccion_carrera &&
+            carreraNorm.includes((a.restriccion_carrera || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+          const bPrio = b.es_prioritaria && b.restriccion_carrera &&
+            carreraNorm.includes((b.restriccion_carrera || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+          if (aPrio && !bPrio) return -1;
+          if (!aPrio && bPrio) return 1;
+          return (a.capacidad || 0) - (b.capacidad || 0);
+        });
+      const candidata = candidatasOrdenadas[0] || null;
 
       if (candidata) {
         asignacionesSimuladas[clase.id] = candidata.codigo;
@@ -1017,4 +1042,166 @@ const getCuadroClases = async (req, res) => {
   }
 };
 
-module.exports.getCuadroClases = getCuadroClases;
+const deleteClase = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const usuario = req.usuario;
+
+    const [clase] = await sequelize.query(
+      'SELECT * FROM clases WHERE id = $1',
+      { bind: [id], type: QueryTypes.SELECT, transaction }
+    );
+
+    if (!clase) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Clase no encontrada' });
+    }
+
+    // Seguridad: Si es director, validar que la clase sea de su carrera
+    if (usuario.rol === 'director' && (clase.carrera !== usuario.carrera_director)) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para eliminar esta clase' });
+    }
+
+    // Eliminar de distribución primero
+    await sequelize.query('DELETE FROM distribucion WHERE clase_id = $1', {
+      bind: [id],
+      type: QueryTypes.DELETE,
+      transaction
+    });
+
+    // Eliminar asociaciones de estudiantes
+    await sequelize.query('DELETE FROM estudiantes_materias WHERE clase_id = $1', {
+      bind: [id],
+      type: QueryTypes.DELETE,
+      transaction
+    });
+
+    // Eliminar la clase
+    await sequelize.query('DELETE FROM clases WHERE id = $1', {
+      bind: [id],
+      type: QueryTypes.DELETE,
+      transaction
+    });
+
+    await transaction.commit();
+    res.json({ success: true, mensaje: 'Clase eliminada correctamente' });
+  } catch (error) {
+    await transaction.rollback();
+    handle500(res, error, 'deleteClase');
+  }
+};
+
+const createClase = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const {
+      materia_catalogo_id,
+      docente_id,
+      dia,
+      hora_inicio,
+      hora_fin,
+      paralelo,
+      ciclo,
+      num_estudiantes = 0
+    } = req.body;
+    const usuario = req.usuario;
+
+    // 1. Validar materia del catálogo
+    const materia = await MateriaCatalogo.findByPk(materia_catalogo_id);
+    if (!materia) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Materia no encontrada en el catálogo' });
+    }
+
+    // 2. Obtener Carrera
+    const carrera = await Carrera.findByPk(materia.carrera_id);
+    if (!carrera) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Carrera asociada a la materia no encontrada' });
+    }
+
+    // Seguridad: Director solo crea clases en su carrera
+    if (usuario.rol === 'director' && carrera.carrera !== usuario.carrera_director) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: 'No tienes permiso para crear clases en esta carrera' });
+    }
+
+    // 3. Obtener Docente
+    const docente = await Docente.findByPk(docente_id);
+    if (!docente) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Docente no encontrado' });
+    }
+
+    // 4. Validar conflictos del docente
+    const conflicto = await sequelize.query(`
+      SELECT id, materia, dia, hora_inicio, hora_fin 
+      FROM clases 
+      WHERE docente_id = :docente_id 
+        AND dia = :dia 
+        AND (
+          (hora_inicio < :hora_fin AND hora_fin > :hora_inicio)
+        )
+      LIMIT 1
+    `, {
+      replacements: { docente_id, dia, hora_inicio, hora_fin },
+      type: QueryTypes.SELECT,
+      transaction
+    });
+
+    if (conflicto.length > 0) {
+      await transaction.rollback();
+      return res.status(409).json({
+        success: false,
+        error: `Conflicto de horario: El docente ya tiene la clase "${conflicto[0].materia}" en este horario.`
+      });
+    }
+
+    // 5. Crear la clase
+    const nuevaClase = await Clase.create({
+      carrera_id: carrera.id,
+      carrera: carrera.carrera,
+      materia: materia.nombre,
+      materia_catalogo_id: materia.id,
+      ciclo: ciclo || materia.ciclo?.toString() || '',
+      paralelo: paralelo || 'A',
+      dia,
+      hora_inicio,
+      hora_fin,
+      docente: docente.nombre,
+      docente_id: docente.id,
+      num_estudiantes
+    }, { transaction });
+
+    await transaction.commit();
+    res.status(201).json({
+      success: true,
+      mensaje: 'Clase manual creada correctamente',
+      clase: nuevaClase
+    });
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    handle500(res, error, 'createClase');
+  }
+};
+
+module.exports = {
+  getEstadoDistribucion,
+  forzarDistribucion,
+  ejecutarDistribucionAutomatica,
+  obtenerHorario,
+  limpiarDistribucion,
+  obtenerMapaCalor,
+  getClasesDistribucion,
+  getMiDistribucion,
+  getReporteDistribucion,
+  getDocentesCarga,
+  getDistribucionSimulada,
+  getCuadroClases,
+  updateClase,
+  deleteClase,
+  createClase,
+  checkDisponibilidad
+};

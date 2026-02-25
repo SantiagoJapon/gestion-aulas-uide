@@ -203,8 +203,10 @@ exports.subirPlanificacion = async (req, res) => {
     let errores = [];
 
     // ==========================================
-    // 💾 GUARDAR CLASES Y SINCRONIZAR DOCENTES
+    // 💾 GUARDAR CLASES Y SINCRONIZAR DOCENTES/CATÁLOGO
     // ==========================================
+    const { MateriaCatalogo } = require('../models');
+
     for (let i = 0; i < parseResult.clases.length; i++) {
       const clase = parseResult.clases[i];
 
@@ -213,6 +215,21 @@ exports.subirPlanificacion = async (req, res) => {
         if (!clase.materia || clase.materia.trim().length === 0) {
           continue;
         }
+
+        // 📚 Sincronizar Catálogo de Materias
+        await MateriaCatalogo.findOrCreate({
+          where: {
+            nombre: clase.materia.trim(),
+            carrera_id: carrera_id
+          },
+          defaults: {
+            nombre: clase.materia.trim(),
+            ciclo: parseInt(clase.ciclo) || null,
+            carrera_id: carrera_id,
+            activo: true
+          },
+          transaction
+        });
 
         // 👨‍🏫 Sincronizar Docente si hay metadata
         let docenteId = null;

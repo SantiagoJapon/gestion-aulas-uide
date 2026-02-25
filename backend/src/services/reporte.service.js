@@ -120,7 +120,7 @@ class ReporteService {
                         'tipo',
                         [sequelize.fn('COUNT', sequelize.col('id')), 'total'],
                         [sequelize.fn('SUM', sequelize.col('capacidad')), 'capacidad_total'],
-                        [sequelize.literal("COUNT(CASE WHEN estado = 'DISPONIBLE' THEN 1 END)"), 'disponibles']
+                        [sequelize.literal("COUNT(CASE WHEN estado = 'disponible' THEN 1 END)"), 'disponibles']
                     ],
                     group: ['tipo'],
                     raw: true

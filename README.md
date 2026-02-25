@@ -6,10 +6,28 @@
 
 ---
 
+## 🆕 Novedades de la Versión 2.6.0
+
+### Nuevas Funcionalidades
+- **📧 Sistema de Envío de Emails**: Envío automático de credenciales de acceso a usuarios mediante nodemailer (SMTP)
+- **📚 Catálogo de Materias**: Gestión centralizada del catálogo de materias por carrera
+- **📊 Importación de Cupos**: Carga masiva de proyección de cupos por nivel
+- **✅ Aprobación de Reservas**: Panel de administración para aprobar/rechazar solicitudes de reserva
+- **🔐 Auto-login por Teléfono**: El bot de WhatsApp permite auto-login para usuarios registrados
+- **👨‍🏫 Carga de Estudiantes**: Gestión de carga académica y asignación de estudiantes a materias
+
+### Mejoras
+- Rediseño del login con mascot UIDE
+- Nuevo dashboard para docentes con información de próxima clase
+- Mejoras en la distribución automática de aulas
+
+---
+
 ## 📋 Tabla de Contenidos
 
 1. [Visión General del Proyecto](#-visión-general-del-proyecto)
-2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
+2. [Novedades (v2.6.0)](#-novedades-de-la-versión-260)
+3. [Arquitectura del Sistema](#-arquitectura-del-sistema)
 3. [Stack Tecnológico](#-stack-tecnológico)
 4. [Estructura del Proyecto](#-estructura-del-proyecto)
 5. [Backend - API REST](#-backend---api-rest)
@@ -109,6 +127,7 @@ El proyecto sigue una arquitectura de **microservicios** orquestada con Docker C
 | **xlsx** | ^0.18.5 | Parsing de archivos Excel |
 | **OpenAI** | ^4.20.0 | Integración con GPT-4 |
 | **pdfmake** | ^0.3.3 | Generación de PDFs |
+| **nodemailer** | ^8.0.1 | Envío de emails institucionales |
 
 ### Frontend
 | Tecnología | Versión | Descripción |
@@ -152,6 +171,7 @@ gestion-aulas-uide/
 │   │   │   ├── reservaController.js      # Reservas de espacios
 │   │   │   ├── reporteController.js      # Generación de reportes
 │   │   │   ├── botController.js           # Integración con bot
+│   │   │   ├── materiaController.js      # Catálogo de materias
 │   │   │   └── ...
 │   │   ├── services/                # Lógica especializada
 │   │   │   ├── excel-parser.service.js    # Parser inteligente Excel
@@ -838,6 +858,14 @@ OPENAI_API_KEY=sk-...
 # WhatsApp
 EVOLUTION_API_KEY=your-api-key
 EVOLUTION_INSTANCE=bot
+
+# SMTP (Email)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM="Sistema Gestión Aulas UIDE" <no-reply@uide.edu.ec>
 ```
 
 ### Redes
@@ -862,16 +890,21 @@ Todos los servicios comparten la red `app_network` para comunicación interna:
 | Gestionar usuarios | ✅ | ❌ | ❌ | ❌ |
 | Gestionar carreras | ✅ | ❌ | ❌ | ❌ |
 | Gestionar aulas | ✅ | 🔄 | ❌ | ❌ |
+| Gestionar materias (catálogo) | ✅ | ✅ | ❌ | ❌ |
 | Subir planificación | ✅ | ✅ | ❌ | ❌ |
 | Ejecutar distribución | ✅ | ✅ | ❌ | ❌ |
 | Ver mapa de calor | ✅ | ✅ | ❌ | ❌ |
 | Ver reportes | ✅ | ✅ | ❌ | ❌ |
+| Carga de estudiantes | ✅ | ✅ | ❌ | ❌ |
+| Importar cupos | ✅ | ✅ | ❌ | ❌ |
+| Aprobar reservas | ✅ | ✅ | ❌ | ❌ |
 | Ver mi horario | ✅ | ✅ | ✅ | ✅ |
 | Reservar espacios | ✅ | ✅ | ✅ | ✅ |
 | Reportar incidencia | ✅ | ✅ | ✅ | ✅ |
 | Buscar aula | ✅ | ✅ | ✅ | ✅ |
 | Buscar profesor | ✅ | ✅ | ✅ | ✅ |
 | Estado general | ✅ | ✅ | ❌ | ❌ |
+| Credenciales por email | ✅ | ✅ | ❌ | ❌ |
 
 ---
 

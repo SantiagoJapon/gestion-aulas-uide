@@ -6,8 +6,13 @@ const {
   lookupEstudianteByEmail,
   loginEstudianteByCedula,
   subirEstudiantes,
+  subirProyeccionCupos,
   obtenerHistorialCargas,
-  listarEstudiantes
+  listarEstudiantes,
+  getEstudianteLoad,
+  inscribirEstudiantesManual,
+  desinscribirEstudiante,
+  inscribirNivelCompleto
 } = require('../controllers/estudianteController');
 const { verificarAuth, verificarAdmin, verificarRol } = require('../middleware/auth');
 
@@ -40,6 +45,13 @@ router.get(
   listarEstudiantes
 );
 
+router.get(
+  '/:id/load',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  getEstudianteLoad
+);
+
 /**
  * @route   GET /api/estudiantes/lookup
  * @desc    Buscar estudiante por email institucional
@@ -68,6 +80,19 @@ router.post(
 );
 
 /**
+ * @route   POST /api/estudiantes/sync-proyeccion
+ * @desc    Sincronizar carga académica (inscripciones) desde Excel "Proyección de Cupos"
+ * @access  Private (admin, director)
+ */
+router.post(
+  '/sync-proyeccion',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  upload.single('archivo'),
+  subirProyeccionCupos
+);
+
+/**
  * @route   GET /api/estudiantes/historial-cargas
  * @desc    Obtener historial de cargas de estudiantes
  * @access  Private (admin)
@@ -77,6 +102,30 @@ router.get(
   verificarAuth,
   verificarRol('director', 'admin'),
   obtenerHistorialCargas
+);
+
+/**
+ * Gestión manual de inscripciones
+ */
+router.post(
+  '/inscribir-manual',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  inscribirEstudiantesManual
+);
+
+router.post(
+  '/inscribir-nivel',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  inscribirNivelCompleto
+);
+
+router.delete(
+  '/:estudiante_id/clase/:clase_id',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  desinscribirEstudiante
 );
 
 module.exports = router;

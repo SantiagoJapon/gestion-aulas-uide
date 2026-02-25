@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { sequelize } = require('../config/database');
 
 const User = sequelize.define('User', {
@@ -111,6 +112,26 @@ const User = sequelize.define('User', {
   requiere_cambio_password: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  passwordTemporal_expira: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Fecha de expiración de la contraseña temporal'
+  },
+  token_recuperacion: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    comment: 'Token para recuperación de contraseña'
+  },
+  token_expira: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Fecha de expiración del token de recuperación'
+  },
+  ultimo_cambio_password: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Fecha del último cambio de contraseña'
   }
 }, {
   tableName: 'usuarios',
@@ -136,6 +157,44 @@ const User = sequelize.define('User', {
 // Método de instancia para verificar contraseña
 User.prototype.verificarPassword = async function (passwordIngresado) {
   return await bcrypt.compare(passwordIngresado, this.password);
+};
+
+// Método para generar contraseña temporal segura
+User.prototype.generarPasswordTemporal = function () {
+  const mayusculas = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const minusculas = 'abcdefghijklmnopqrstuvwxyz';
+  const numeros = '0123456789';
+  const especiales = '!@#$%^&*';
+
+  const password = [
+    mayusculas[crypto.randomInt(mayusculas.length)],
+    minusculas[crypto.randomInt(minusculas.length)],
+    numeros[crypto.randomInt(numeros.length)],
+    especiales[crypto.randomInt(especiales.length)]
+  ];
+
+  const todos = mayusculas + minusculas + numeros + especiales;
+  for (let i = 4; i < 12; i++) {
+    password.push(todos[crypto.randomInt(todos.length)]);
+  }
+
+  return password.sort(() => crypto.randomInt(2) - 0.5).join('');
+};
+
+// Método para verificar si la contraseña temporal ha expirado
+User.prototype.passwordTemporalExpirada = function () {
+  if (!this.passwordTemporal_expira) return false;
+  return new Date() > new Date(this.passwordTemporal_expira);
+};
+
+// Método para establecer contraseña temporal con expiración
+User.prototype.establecerPasswordTemporal = async function (horasExpiracion = 24) {
+  const passwordTemporal = this.generarPasswordTemporal();
+  this.password = passwordTemporal;
+  this.requiere_cambio_password = true;
+  this.passwordTemporal_expira = new Date(Date.now() + horasExpiracion * 60 * 60 * 1000);
+  await this.save();
+  return passwordTemporal;
 };
 
 // Método de instancia para obtener datos públicos (sin contraseña)

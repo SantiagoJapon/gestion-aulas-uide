@@ -21,4 +21,7 @@ router.put('/:id/telefono', verificarAuth, verificarRol('admin', 'director'), do
 // Crear cuenta individual para un docente (sin cuenta previa)
 router.post('/:id/crear-cuenta', verificarAuth, verificarRol('admin', 'director'), docenteController.crearCuentaDocente);
 
+// Generar credenciales masivamente para docentes sin cuenta
+router.post('/generar-credenciales', verificarAuth, verificarRol('admin', 'director'), docenteController.generarCredencialesMasivo);
+
 module.exports = router;

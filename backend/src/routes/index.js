@@ -19,6 +19,7 @@ const notificacionRoutes = require('./notificacionRoutes');
 const incidenciaRoutes = require('./incidenciaRoutes');
 const docenteRoutes = require('./docenteRoutes');
 const searchRoutes = require('./searchRoutes');
+const materiaRoutes = require('./materiaRoutes');
 
 // Registrar rutas
 router.use('/auth', authRoutes);
@@ -38,5 +39,6 @@ router.use('/notificaciones', notificacionRoutes);
 router.use('/incidencias', incidenciaRoutes);
 router.use('/docentes', docenteRoutes);
 router.use('/search', searchRoutes);
+router.use('/materias-catalogo', materiaRoutes);
 
 module.exports = router;

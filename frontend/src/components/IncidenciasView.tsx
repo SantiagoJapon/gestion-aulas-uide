@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { incidenciaService, incidenciaFotoUrl, TIPO_INCIDENCIA_LABELS, Incidencia } from '../services/api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ReportarIncidenciaModal from './ReportarIncidenciaModal';
 
 const IncidenciasView = () => {
     const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterEstado, setFilterEstado] = useState('');
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+    const [modalOpen, setModalOpen] = useState(false);
 
     const fetchIncidencias = async () => {
         setLoading(true);
@@ -39,29 +41,39 @@ const IncidenciasView = () => {
 
     return (
         <div className="space-y-6">
-        {/* Lightbox para fotos */}
-        {lightboxUrl && (
-            <div
-                className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-                onClick={() => setLightboxUrl(null)}
-            >
-                <img src={lightboxUrl} alt="evidencia" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
-            </div>
-        )}
-            {/* Filtros */}
-            <div className="flex gap-4 overflow-x-auto pb-2">
-                {['', 'PENDIENTE', 'REVISANDO', 'RESUELTO', 'CERRADO'].map(est => (
-                    <button
-                        key={est}
-                        onClick={() => setFilterEstado(est)}
-                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${filterEstado === est
-                                ? 'bg-primary text-white border-primary'
+            {/* Lightbox para fotos */}
+            {lightboxUrl && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => setLightboxUrl(null)}
+                >
+                    <img src={lightboxUrl} alt="evidencia" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
+                </div>
+            )}
+            {/* Header con Filtros y Botón */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto">
+                    {['', 'PENDIENTE', 'REVISANDO', 'RESUELTO', 'CERRADO'].map(est => (
+                        <button
+                            key={est}
+                            onClick={() => setFilterEstado(est)}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${filterEstado === est
+                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
                                 : 'bg-white dark:bg-slate-900 text-muted-foreground border-border hover:border-primary/50'
-                            }`}
-                    >
-                        {est || 'TODOS'}
-                    </button>
-                ))}
+                                }`}
+                        >
+                            {est || 'TODOS'}
+                        </button>
+                    ))}
+                </div>
+
+                <button
+                    onClick={() => setModalOpen(true)}
+                    className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all w-full md:w-auto justify-center"
+                >
+                    <span className="material-symbols-outlined text-sm">add_circle</span>
+                    Nuevo Reporte
+                </button>
             </div>
 
             {/* Tabla */}
@@ -89,12 +101,12 @@ const IncidenciasView = () => {
                                         <td className="px-6 py-4 text-xs font-mono text-muted-foreground">#{inc.id}</td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide border ${inc.prioridad === 'CRITICA' || inc.prioridad === 'ALTA' ? 'bg-red-50 text-red-600 border-red-200' :
-                                                    inc.prioridad === 'MEDIA' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                                                        'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                inc.prioridad === 'MEDIA' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                                                    'bg-emerald-50 text-emerald-600 border-emerald-200'
                                                 }`}>
                                                 <span className={`size-1.5 rounded-full ${inc.prioridad === 'CRITICA' ? 'bg-red-500 animate-pulse' :
-                                                        inc.prioridad === 'ALTA' ? 'bg-red-500' :
-                                                            inc.prioridad === 'MEDIA' ? 'bg-amber-500' : 'bg-emerald-500'
+                                                    inc.prioridad === 'ALTA' ? 'bg-red-500' :
+                                                        inc.prioridad === 'MEDIA' ? 'bg-amber-500' : 'bg-emerald-500'
                                                     }`}></span>
                                                 {inc.prioridad}
                                             </span>
@@ -145,8 +157,8 @@ const IncidenciasView = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`text-[10px] font-black uppercase ${inc.estado === 'PENDIENTE' ? 'text-red-500' :
-                                                    inc.estado === 'REVISANDO' ? 'text-blue-500' :
-                                                        'text-emerald-500'
+                                                inc.estado === 'REVISANDO' ? 'text-blue-500' :
+                                                    'text-emerald-500'
                                                 }`}>
                                                 {inc.estado}
                                             </span>
@@ -185,6 +197,16 @@ const IncidenciasView = () => {
                     </table>
                 </div>
             </div>
+            {/* Modal para reportar */}
+            {modalOpen && (
+                <ReportarIncidenciaModal
+                    onClose={() => setModalOpen(false)}
+                    onSuccess={() => {
+                        setModalOpen(false);
+                        fetchIncidencias();
+                    }}
+                />
+            )}
         </div>
     );
 };
