@@ -340,7 +340,7 @@ exports.createDocente = async (req, res) => {
 
         // Enviar también WhatsApp como respaldo (si tiene teléfono)
         if (telefono && user && passwordTemporal) {
-            const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre}*, tu cuenta ha sido creada exitosamente.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña por una personal._\n\n¿Necesitas ayuda? Responde este mensaje.`;
+            const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
             try {
                 await whatsappService.sendMessage(telefono, mensaje);
                 whatsapp_enviado = true;
@@ -431,7 +431,7 @@ exports.updateDocente = async (req, res) => {
                 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
                 let whatsapp_enviado = false;
                 if (telefono) {
-                    const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ha sido creada.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+                    const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
                     whatsapp_enviado = await whatsappService.sendMessage(telefono, msg);
                 }
                 credenciales = { email: user.email, password: 'uide2026', whatsapp_enviado };
@@ -509,7 +509,7 @@ exports.crearCuentaDocente = async (req, res) => {
             // Enviar WhatsApp como respaldo
             let whatsapp_enviado = false;
             if (dirUser.telefono) {
-                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombreCompleto}*, tus credenciales han sido generadas.\n\n📧 *Correo:* ${dirUser.email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${nombreCompleto}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
                 try {
                     whatsapp_enviado = await whatsappService.sendMessage(dirUser.telefono, msg);
                 } catch (e) {
@@ -576,7 +576,7 @@ exports.crearCuentaDocente = async (req, res) => {
             let whatsapp_enviado = false;
             if (docente.telefono) {
                 const frontendUrl2 = process.env.FRONTEND_URL || 'http://localhost:5173';
-                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tus credenciales han sido restablecidas.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n\n🌐 *Ingresa aquí:* ${frontendUrl2}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido restablecidas. Por favor revisa tu correo para obtener tu nueva contraseña temporal.`;
                 try { whatsapp_enviado = await whatsappService.sendMessage(docente.telefono, msg); } catch (e) { }
             }
 
@@ -605,7 +605,7 @@ exports.crearCuentaDocente = async (req, res) => {
 
             let whatsapp_enviado = false;
             if (docente.telefono) {
-                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ha sido creada.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+                const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
                 try { whatsapp_enviado = await whatsappService.sendMessage(docente.telefono, msg); } catch (e) { }
             }
 
@@ -677,7 +677,7 @@ exports.generarCredencialesMasivo = async (req, res) => {
                 // Enviar WhatsApp si tiene teléfono
                 if (docente.telefono) {
                     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-                    const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${docente.nombre}*, tu cuenta ha sido creada.\n\n📧 *Correo:* ${user.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar, el sistema te pedirá cambiar tu contraseña._`;
+                    const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
                     whatsappService.sendMessage(docente.telefono, mensaje).catch(e => console.warn('WA error:', e.message));
                     conTelefono++;
                 }

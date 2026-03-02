@@ -1,4 +1,4 @@
-const { Reserva, Aula, Clase, Distribucion, Espacio } = require('../models');
+const { Reserva, Aula, Clase, Distribucion, Espacio, Notificacion } = require('../models');
 const { Op } = require('sequelize');
 
 // Helper para obtener la fecha/hora actual en Ecuador (GMT-5)
@@ -110,11 +110,21 @@ exports.crearReserva = async (req, res) => {
             return res.status(409).json({ error: "Ya existe una reserva (o solicitud) para este espacio en ese horario." });
         }
 
-        // Determinar estado inicial
-        const estadoInicial = (esAuditorio && usuarioRol !== 'admin') ? 'pendiente_aprobacion' : 'activa';
+        // ── Validación de roles para el Auditorio ──────────────────────────
+        if (esAuditorio && !['admin', 'director'].includes(usuarioRol)) {
+            return res.status(403).json({
+                error: 'Solo los Directores de Carrera pueden reservar el Auditorio. Contacta a tu Director para solicitarlo.'
+            });
+        }
+
+        // Determinar estado inicial:
+        //   - Auditorio + director → pendiente_aprobacion (admin lo aprueba)
+        //   - Todo lo demás       → activa (inmediata)
+        const estadoInicial = (esAuditorio && usuarioRol === 'director') ? 'pendiente_aprobacion' : 'activa';
 
         // Obtener datos del usuario
         const usuario = req.usuario || {};
+        const solicitanteNombre = usuario.nombre ? `${usuario.nombre} ${usuario.apellido || ''}`.trim() : 'Usuario';
 
         // Crear la reserva
         const reservaData = {
@@ -127,7 +137,7 @@ exports.crearReserva = async (req, res) => {
             tipo_espacio: tipoEspacio,
             usuario_id: usuarioRol !== 'estudiante' ? usuarioId : null,
             estudiante_id: usuarioRol === 'estudiante' ? usuarioId : null,
-            solicitante_nombre: usuario.nombre ? `${usuario.nombre} ${usuario.apellido || ''}`.trim() : 'Usuario Sistema',
+            solicitante_nombre: solicitanteNombre,
             solicitante_cedula: usuario.cedula || null,
             rol_usuario: usuarioRol
         };
@@ -141,12 +151,57 @@ exports.crearReserva = async (req, res) => {
 
         const nuevaReserva = await Reserva.create(reservaData);
 
+        // ── Notificaciones ──────────────────────────────────────────────────
+        try {
+            const espacioLabel = codigoEspacio;
+            const horarioLabel = `${fecha} ${hora_inicio}–${hora_fin}`;
+
+            if (estadoInicial === 'activa') {
+                // Notificación directa de confirmación al solicitante
+                await Notificacion.create({
+                    titulo: '✅ Reserva confirmada',
+                    mensaje: `Tu reserva de "${espacioLabel}" el ${horarioLabel} ha sido confirmada. El espacio queda ocupado para ese horario.`,
+                    tipo: 'SISTEMA',
+                    prioridad: 'MEDIA',
+                    destinatario_id: usuarioRol !== 'estudiante' ? usuarioId : null,
+                    estudiante_id: usuarioRol === 'estudiante' ? usuarioId : null,
+                    remitente_id: null,
+                    leida: false
+                });
+            } else {
+                // Auditorio pendiente: notificar al solicitante Y crear alerta global para admins
+                await Notificacion.create({
+                    titulo: '⏳ Solicitud de Auditorio en revisión',
+                    mensaje: `Tu solicitud para el Auditorio el ${horarioLabel} está pendiente de aprobación por Administración.`,
+                    tipo: 'SISTEMA',
+                    prioridad: 'MEDIA',
+                    destinatario_id: usuarioRol !== 'estudiante' ? usuarioId : null,
+                    estudiante_id: usuarioRol === 'estudiante' ? usuarioId : null,
+                    remitente_id: null,
+                    leida: false
+                });
+                // Alerta para admins
+                await Notificacion.create({
+                    titulo: '📋 Nueva solicitud de Auditorio',
+                    mensaje: `${solicitanteNombre} solicita el Auditorio el ${horarioLabel}. Motivo: ${motivo || 'No especificado'}.`,
+                    tipo: 'GLOBAL',
+                    prioridad: 'ALTA',
+                    destinatario_id: null,
+                    remitente_id: null,
+                    leida: false
+                });
+            }
+        } catch (notifErr) {
+            // No fallar la reserva si la notificación falla
+            console.error('⚠️ Error al enviar notificación de reserva:', notifErr.message);
+        }
+
         res.status(201).json({
             success: true,
             reserva: nuevaReserva,
-            mensaje: esAuditorio && estadoInicial === 'pendiente_aprobacion'
-                ? "Solicitud enviada. Pendiente de aprobación por administración."
-                : "Reserva creada con éxito."
+            mensaje: estadoInicial === 'pendiente_aprobacion'
+                ? '⏳ Solicitud enviada. Pendiente de aprobación por administración.'
+                : '✅ Reserva confirmada. El espacio ha quedado bloqueado para ese horario.'
         });
 
     } catch (error) {
@@ -336,6 +391,26 @@ exports.cancelarReserva = async (req, res) => {
 
         reserva.estado = 'cancelada';
         await reserva.save();
+
+        // Notificar al propietario si quien cancela es el admin (no el propio dueño)
+        if (!esMio && req.usuarioRol === 'admin') {
+            try {
+                const espacioLabel = reserva.aula_codigo || reserva.espacio_codigo;
+                const horarioLabel = `${reserva.fecha} ${reserva.hora_inicio}–${reserva.hora_fin}`;
+                await Notificacion.create({
+                    titulo: '🚫 Tu reserva fue cancelada',
+                    mensaje: `Tu reserva de "${espacioLabel}" el ${horarioLabel} fue cancelada por administración.`,
+                    tipo: 'SISTEMA',
+                    prioridad: 'ALTA',
+                    destinatario_id: reserva.usuario_id || null,
+                    estudiante_id: reserva.estudiante_id || null,
+                    leida: false
+                });
+            } catch (notifErr) {
+                console.error('⚠️ Error al enviar notificación de cancelación admin:', notifErr.message);
+            }
+        }
+
         res.json({ success: true, message: "Reserva cancelada correctamente" });
 
     } catch (error) {
@@ -394,6 +469,39 @@ exports.cambiarEstado = async (req, res) => {
         }
         await reserva.save();
 
+        // Notificar al solicitante sobre el resultado
+        try {
+            const espacioLabel = reserva.aula_codigo || reserva.espacio_codigo;
+            const horarioLabel = `${reserva.fecha} ${reserva.hora_inicio}–${reserva.hora_fin}`;
+
+            let tituloNotif, mensajeNotif, prioridadNotif;
+            if (estado === 'activa') {
+                tituloNotif = '✅ Reserva aprobada';
+                mensajeNotif = `Tu solicitud para "${espacioLabel}" el ${horarioLabel} fue aprobada. El espacio queda reservado.`;
+                prioridadNotif = 'MEDIA';
+            } else if (estado === 'rechazada') {
+                tituloNotif = '❌ Reserva rechazada';
+                mensajeNotif = `Tu solicitud para "${espacioLabel}" el ${horarioLabel} fue rechazada.${motivo_rechazo ? ` Motivo: ${motivo_rechazo}` : ''}`;
+                prioridadNotif = 'ALTA';
+            } else {
+                tituloNotif = '🚫 Reserva cancelada';
+                mensajeNotif = `Tu reserva de "${espacioLabel}" el ${horarioLabel} fue cancelada por administración.`;
+                prioridadNotif = 'ALTA';
+            }
+
+            await Notificacion.create({
+                titulo: tituloNotif,
+                mensaje: mensajeNotif,
+                tipo: 'SISTEMA',
+                prioridad: prioridadNotif,
+                destinatario_id: reserva.usuario_id || null,
+                estudiante_id: reserva.estudiante_id || null,
+                leida: false
+            });
+        } catch (notifErr) {
+            console.error('⚠️ Error al enviar notificación de cambio de estado:', notifErr.message);
+        }
+
         const mensaje = estado === 'activa' ? 'Reserva aprobada' :
             estado === 'rechazada' ? 'Reserva rechazada' : 'Reserva cancelada';
 
@@ -407,7 +515,7 @@ exports.cambiarEstado = async (req, res) => {
 // Listar TODAS las reservas activas/pendientes (para vista de admin/director)
 exports.listarTodas = async (req, res) => {
     try {
-        const { fecha, estado } = req.query;
+        const { fecha, estado, busqueda, pagina = 1, limite = 50 } = req.query;
         const whereClause = {};
 
         if (fecha) {
@@ -423,12 +531,31 @@ exports.listarTodas = async (req, res) => {
             whereClause.estado = { [Op.in]: ['activa', 'pendiente_aprobacion'] };
         }
 
-        const reservas = await Reserva.findAll({
+        // Búsqueda por código de espacio o nombre del solicitante
+        if (busqueda) {
+            whereClause[Op.or] = [
+                { aula_codigo: { [Op.iLike]: `%${busqueda}%` } },
+                { espacio_codigo: { [Op.iLike]: `%${busqueda}%` } },
+                { solicitante_nombre: { [Op.iLike]: `%${busqueda}%` } },
+                { motivo: { [Op.iLike]: `%${busqueda}%` } }
+            ];
+        }
+
+        const offset = (Number(pagina) - 1) * Number(limite);
+        const { rows: reservas, count: total } = await Reserva.findAndCountAll({
             where: whereClause,
-            order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']]
+            order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']],
+            limit: Number(limite),
+            offset
         });
 
-        res.json({ success: true, reservas });
+        res.json({
+            success: true,
+            reservas,
+            total,
+            pagina: Number(pagina),
+            totalPaginas: Math.ceil(total / Number(limite))
+        });
     } catch (error) {
         console.error("Error al listar todas las reservas:", error);
         res.status(500).json({ error: "Error al obtener reservas" });

@@ -13,6 +13,8 @@ import ProfesorDashboard from './pages/ProfesorDashboard';
 import EstudianteDashboard from './pages/EstudianteDashboard';
 
 import ForcePasswordChange from './pages/ForcePasswordChange';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // Componente interno que usa el contexto
 const AppRoutes = () => {
@@ -61,6 +63,14 @@ const AppRoutes = () => {
         <Route
           path="/register"
           element={token ? <Navigate to={getDefaultRoute()} replace /> : <Register />}
+        />
+        <Route
+          path="/forgot-password"
+          element={token ? <Navigate to={getDefaultRoute()} replace /> : <ForgotPassword />}
+        />
+        <Route
+          path="/recuperar-password"
+          element={token ? <Navigate to={getDefaultRoute()} replace /> : <ResetPassword />}
         />
         <Route
           path="/admin"

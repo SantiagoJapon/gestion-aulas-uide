@@ -7,14 +7,18 @@ const {
   actualizarPerfil,
   cambiarPassword,
   cambiarPasswordPrimerIngreso,
-  crearDirector
+  crearDirector,
+  solicitarRecuperacionPassword,
+  resetearPassword
 } = require('../controllers/authController');
 const { verificarAuth, verificarRol } = require('../middleware/auth');
 const {
   validarRegistro,
   validarLogin,
   validarActualizarPerfil,
-  validarCambiarPassword
+  validarCambiarPassword,
+  validarSolicitarRecuperacion,
+  validarResetearPassword
 } = require('../middleware/validators');
 
 // Validación adicional con Joi (más robusta) - Opcional
@@ -54,6 +58,20 @@ router.post('/register', validarRegistro, validateRegisterJoi, registrarUsuario)
 // Validación doble: express-validator + Joi
 router.post('/login', validarLogin, validateLoginJoi, loginUsuario);
 
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Solicitar recuperación de contraseña
+ * @access  Public
+ */
+router.post('/forgot-password', validarSolicitarRecuperacion, solicitarRecuperacionPassword);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Restablecer contraseña con token
+ * @access  Public
+ */
+router.post('/reset-password', validarResetearPassword, resetearPassword);
+
 // ========================================
 // RUTAS PROTEGIDAS (requieren autenticación)
 // ========================================
@@ -92,5 +110,31 @@ router.put('/primer-ingreso', verificarAuth, cambiarPasswordPrimerIngreso);
  * @access  Private (solo admin)
  */
 router.post('/crear-director', verificarAuth, verificarRol('admin'), crearDirector);
+
+/**
+ * @route   POST /api/auth/test-email
+ * @desc    Prueba la entrega de email a una dirección específica (diagnóstico SMTP)
+ * @access  Private (solo admin)
+ */
+router.post('/test-email', verificarAuth, verificarRol('admin'), async (req, res) => {
+  const emailService = require('../services/emailService');
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Se requiere el campo "email"' });
+  }
+
+  // Verificar conexión de ambos SMTP primero
+  const conexion = await emailService.verificarConexion();
+
+  // Intentar envío de prueba
+  const resultado = await emailService.enviarCorreoPrueba(email);
+
+  res.json({
+    email,
+    smtpConexion: conexion,
+    envio: resultado,
+  });
+});
 
 module.exports = router;

@@ -272,6 +272,164 @@ const ClassActionModal = ({ isOpen, onClose, clase }: { isOpen: boolean; onClose
   );
 };
 
+// --- Aviso General Modal ---
+
+const MENSAJES_PREDEFINIDOS = [
+  { text: 'Llegaré 5 minutos tarde, espérenme en el aula.', icon: 'timer_5' },
+  { text: 'La clase de hoy será en laboratorio.', icon: 'science' },
+  { text: 'El enlace para la clase virtual está en el EVEA.', icon: 'videocam' },
+  { text: 'La clase de hoy ha sido cancelada.', icon: 'cancel' },
+];
+
+const AvisoGeneralModal = ({ isOpen, onClose, schedule }: { isOpen: boolean; onClose: () => void; schedule: any[] }) => {
+  const [claseId, setClaseId] = useState('');
+  const [mensaje, setMensaje] = useState('');
+  const [prioridad, setPrioridad] = useState('MEDIA');
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMensaje('');
+      setPrioridad('MEDIA');
+      if (schedule.length > 0) setClaseId(String(schedule[0].id));
+    }
+  }, [isOpen, schedule]);
+
+  if (!isOpen) return null;
+
+  const handleSend = async () => {
+    if (!mensaje.trim() || !claseId) return;
+    setSending(true);
+    try {
+      const claseSeleccionada = schedule.find(c => String(c.id) === claseId);
+      await notificacionService.crear({
+        titulo: `Aviso — ${claseSeleccionada?.materia || 'Clase'}`,
+        mensaje,
+        tipo: 'CLASE',
+        prioridad,
+        clase_id: Number(claseId),
+      });
+      alert('Aviso enviado correctamente a los estudiantes de la clase.');
+      onClose();
+    } catch (error) {
+      console.error(error);
+      alert('Error al enviar el aviso.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="p-6 bg-brand-navy text-white relative shrink-0">
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+          <div className="flex items-center gap-2 mb-1 opacity-80">
+            <span className="material-symbols-outlined text-uide-gold text-lg">campaign</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Aviso General</span>
+          </div>
+          <h3 className="text-xl font-black leading-tight">Notificar a Estudiantes</h3>
+          <p className="text-sm text-white/70 mt-1">Selecciona la clase y el mensaje.</p>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto custom-scrollbar space-y-5">
+          {/* Selector de clase */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Clase</label>
+            <select
+              value={claseId}
+              onChange={e => setClaseId(e.target.value)}
+              className="w-full p-3 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+            >
+              {schedule.length === 0 && <option value="">Sin clases asignadas</option>}
+              {schedule.map(c => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.materia} · {c.dia} {c.hora_inicio}–{c.hora_fin}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Mensajes predefinidos */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Mensajes rápidos</label>
+            <div className="grid grid-cols-2 gap-2">
+              {MENSAJES_PREDEFINIDOS.map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={() => setMensaje(opt.text)}
+                  className={`p-3 rounded-2xl text-left border transition-all group active:scale-95 ${mensaje === opt.text
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'bg-muted/50 border-border hover:bg-primary/5 hover:border-primary/20'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-xl block mb-1 group-hover:scale-110 transition-transform">{opt.icon}</span>
+                  <span className="text-[10px] font-bold leading-tight">{opt.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mensaje personalizado */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Mensaje personalizado</label>
+            <textarea
+              value={mensaje}
+              onChange={e => setMensaje(e.target.value)}
+              placeholder="Escribe un mensaje personalizado..."
+              className="w-full p-3 bg-muted/30 border border-border rounded-xl text-sm h-24 resize-none focus:ring-2 focus:ring-primary/20 outline-none"
+            />
+          </div>
+
+          {/* Prioridad */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Prioridad</label>
+            <div className="flex gap-2">
+              {[
+                { val: 'BAJA', label: 'Baja' },
+                { val: 'MEDIA', label: 'Media' },
+                { val: 'ALTA', label: 'Alta (Urgente)' },
+              ].map(p => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => setPrioridad(p.val)}
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${prioridad === p.val
+                    ? (p.val === 'ALTA' ? 'bg-red-500 text-white border-red-600' : p.val === 'MEDIA' ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-500 text-white border-slate-600')
+                    : 'bg-muted/20 text-muted-foreground border-transparent hover:bg-muted/40'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Enviar */}
+          <button
+            onClick={handleSend}
+            disabled={!mensaje.trim() || !claseId || sending}
+            className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-black uppercase tracking-widest text-xs hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {sending ? (
+              <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-sm">send</span>
+                Enviar notificación
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Components ---
 
 const TimelineDocente = ({ classes, onClassClick }: { classes: any[], onClassClick: (c: any) => void }) => {
@@ -356,6 +514,7 @@ export default function ProfesorDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState<any>(null);
+  const [isAvisoOpen, setIsAvisoOpen] = useState(false);
 
   useEffect(() => {
     const fetchSchedule = async () => {
@@ -484,7 +643,7 @@ export default function ProfesorDashboard() {
                         Recorrido Docente
                       </button>
                       <button
-                        onClick={() => alert("Aviso General NO disponible: En desarrollo")}
+                        onClick={() => setIsAvisoOpen(true)}
                         className="text-[11px] font-black bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-all shadow-lg"
                       >
                         <span className="material-symbols-outlined text-xs mr-1 align-middle">campaign</span>
@@ -571,8 +730,24 @@ export default function ProfesorDashboard() {
         return <UserSettings />;
 
       default:
-        setActiveTab('general');
-        return null;
+        // No llamar setActiveTab aquí — sería setState-durante-render (causa pantalla en blanco).
+        // Si el tab no existe, mostrar el contenido principal.
+        return (
+          <div className="space-y-6 animate-fade-in">
+            <GuidedTour steps={tourSteps} run={runTour} onFinish={handleTourFinish} />
+            {/* Si llegamos aquí con un tab desconocido, redirigir al inicio */}
+            <div className="p-8 text-center text-muted-foreground">
+              <span className="material-symbols-outlined text-5xl mb-2 block">error_outline</span>
+              <p className="font-bold">Sección no encontrada</p>
+              <button
+                onClick={() => setActiveTab('general')}
+                className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-bold"
+              >
+                Volver al inicio
+              </button>
+            </div>
+          </div>
+        );
     }
   };
 
@@ -589,6 +764,13 @@ export default function ProfesorDashboard() {
         isOpen={!!selectedClass}
         onClose={() => setSelectedClass(null)}
         clase={selectedClass}
+      />
+
+      {/* Modal de Aviso General */}
+      <AvisoGeneralModal
+        isOpen={isAvisoOpen}
+        onClose={() => setIsAvisoOpen(false)}
+        schedule={schedule}
       />
     </DashboardLayout>
   );

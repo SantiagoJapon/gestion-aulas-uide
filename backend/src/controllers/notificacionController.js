@@ -1,4 +1,4 @@
-const { Notificacion, User, Carrera, Clase, Estudiante } = require('../models');
+const { Notificacion, User, Carrera, Clase, Estudiante, Docente } = require('../models');
 const { Op } = require('sequelize');
 
 exports.crearNotificacion = async (req, res) => {
@@ -84,10 +84,6 @@ exports.misNotificaciones = async (req, res) => {
 
         // 3. Notificaciones por Carrera
         if (rol === 'estudiante' && req.usuario.escuela) {
-            // Buscar ID de carrera basado en nombre escuela (normalizado) si es necesario
-            // Por simplicidad asumo que el frontend o lógica previa vincula carrera_id. 
-            // Si el estudiante tiene vinculado carrera_id en su modelo sería directo.
-            // Aquí haremos un pequeño hack: buscar carreras cuyo nombre coincida con la escuela del estudiante.
             const carreras = await Carrera.findAll({
                 where: { carrera: { [Op.iLike]: req.usuario.escuela } }
             });
@@ -95,14 +91,17 @@ exports.misNotificaciones = async (req, res) => {
             if (carreraIds.length > 0) {
                 whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: { [Op.in]: carreraIds } });
             }
-        } else if (req.usuario.carrera_id) {
-            // Profesores o directores vinculados a una carrera específica en User
-            whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: req.usuario.carrera_id });
         } else if (rol === 'director' && req.usuario.carrera_director) {
-            // Director: buscar carrera por nombre si carrera_id no está poblada (depende de cómo se inicializó req.usuario)
+            // Director: buscar carrera por nombre en carrera_director
             const carrera = await Carrera.findOne({ where: { carrera: req.usuario.carrera_director } });
             if (carrera) {
                 whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: carrera.id });
+            }
+        } else if (rol === 'profesor' || rol === 'docente') {
+            // Profesor/Docente: buscar su carrera_id via la tabla docentes (vinculada por usuario_id)
+            const docentePerfil = await Docente.findOne({ where: { usuario_id: req.usuario.id } });
+            if (docentePerfil && docentePerfil.carrera_id) {
+                whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: docentePerfil.carrera_id });
             }
         }
 
@@ -119,7 +118,8 @@ exports.misNotificaciones = async (req, res) => {
             where: whereClause,
             order: [['created_at', 'DESC']],
             include: [
-                { model: User, as: 'remitenteInfo', attributes: ['nombre', 'apellido', 'rol'] }
+                // LEFT JOIN: si remitente_id es NULL (Sistema), no falla la query
+                { model: User, as: 'remitenteInfo', attributes: ['nombre', 'apellido', 'rol'], required: false }
             ],
             limit: 50
         });
@@ -135,23 +135,30 @@ exports.misNotificaciones = async (req, res) => {
 exports.marcarLeida = async (req, res) => {
     try {
         const { id } = req.params;
-        // Solo marcamos como leída si es directa. 
-        // Para notificaciones globales/carrera, se requeriría una tabla pivote "NotificacionLeida".
-        // Por simplicidad de MVP, solo actualizamos el flag en el registro si es directa,
-        // o ignoramos el estado "leída" para globales por ahora.
 
         const notificacion = await Notificacion.findByPk(id);
-        if (!notificacion) return res.status(404).json({ error: "No encontrada" });
+        if (!notificacion) {
+            return res.status(404).json({ error: 'Notificación no encontrada' });
+        }
 
-        // Solo si soy el destinatario directo
-        if ((req.usuarioRol === 'estudiante' && notificacion.estudiante_id === req.usuarioId) ||
-            (notificacion.destinatario_id === req.usuarioId)) {
+        // Permitir marcar como leída si la notificación es:
+        // - directa al usuario (destinatario_id o estudiante_id)
+        // - global / de carrera / de sistema (cualquier usuario autenticado puede marcarla)
+        // El filtro real de "es mi notificación" ya lo hace misNotificaciones en la consulta
+        const esDestinatarioDirecto =
+            notificacion.destinatario_id === req.usuarioId ||
+            (req.usuarioRol === 'estudiante' && notificacion.estudiante_id === req.usuarioId);
+
+        const esNotificacionGeneral = ['GLOBAL', 'CARRERA', 'SISTEMA'].includes(notificacion.tipo);
+
+        if (esDestinatarioDirecto || esNotificacionGeneral) {
             notificacion.leida = true;
             await notificacion.save();
         }
 
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: "Error al actualizar" });
+        console.error('Error al marcar notificación:', error);
+        res.status(500).json({ error: 'Error al actualizar notificación' });
     }
 };

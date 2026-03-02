@@ -19,6 +19,7 @@ const handle500 = (res, error, context) => {
 };
 
 const { fixEncoding } = require('../utils/encoding');
+const { convertirHora, normalizarTexto } = require('../utils/textUtils');
 
 const getEstadoDistribucion = async (req, res) => {
   try {
@@ -417,11 +418,8 @@ const getClasesDistribucion = async (req, res) => {
   }
 };
 
-function convertirHora(hora) {
-  if (!hora || typeof hora !== 'string') return 0;
-  const partes = hora.split(':');
-  return (parseInt(partes[0]) || 0) * 60 + (parseInt(partes[1]) || 0);
-}
+// convertirHora y normalizarTexto ahora vienen de utils/textUtils.js
+
 
 /**
  * Normaliza un ciclo/nivel a número entero.
@@ -453,14 +451,7 @@ function normalizarCiclo(valor) {
   return textoANumero[v] || null;
 }
 
-/**
- * Normaliza texto removiendo tildes y pasando a minúsculas para comparación flexible.
- */
-function normalizarTexto(texto) {
-  if (!texto) return '';
-  return texto.toString().trim().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
+
 
 const updateClase = async (req, res) => {
   const transaction = await sequelize.transaction();

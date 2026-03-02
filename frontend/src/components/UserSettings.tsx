@@ -48,9 +48,10 @@ export default function UserSettings() {
         }
     }, [user]);
 
-    // --- Handlers Perfil ---
+    // --- Handlers Perfil --- (solo para usuarios con password / no estudiantes)
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (user?.rol === 'estudiante') return; // guard extra
         setLoadingProfile(true);
         try {
             await authService.updateProfile({
@@ -59,7 +60,6 @@ export default function UserSettings() {
                 telefono: profileData.telefono
             });
             alert('Perfil actualizado correctamente');
-            // Idealmente actualizar el contexto aquí, por ahora recargamos para simplificar o asumimos que el usuario lo nota
         } catch (error: any) {
             alert(error.response?.data?.mensaje || 'Error al actualizar perfil');
         } finally {
@@ -119,8 +119,8 @@ export default function UserSettings() {
                 <button
                     onClick={() => setActiveTab('perfil')}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'perfil'
-                            ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
-                            : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
+                        ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
                         }`}
                 >
                     <FaUser size={16} />
@@ -129,8 +129,8 @@ export default function UserSettings() {
                 <button
                     onClick={() => setActiveTab('seguridad')}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'seguridad'
-                            ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
-                            : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
+                        ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
                         }`}
                 >
                     <FaLock size={16} />
@@ -139,8 +139,8 @@ export default function UserSettings() {
                 <button
                     onClick={() => setActiveTab('apariencia')}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'apariencia'
-                            ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
-                            : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
+                        ? 'bg-uide-blue/10 text-uide-blue shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400'
                         }`}
                 >
                     <FaPalette size={16} />
@@ -156,75 +156,102 @@ export default function UserSettings() {
                     <div className="space-y-8 max-w-2xl">
                         <div>
                             <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Información Personal</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Actualiza tus datos de contacto y visualización.</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                {user?.rol === 'estudiante'
+                                    ? 'Tus datos personales son gestionados por la administración.'
+                                    : 'Actualiza tus datos de contacto y visualización.'}
+                            </p>
                         </div>
 
-                        <form onSubmit={handleProfileUpdate} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre</label>
-                                    <input
-                                        type="text"
-                                        value={profileData.nombre}
-                                        onChange={(e) => setProfileData({ ...profileData, nombre: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
-                                    />
+                        {/* Vista solo-lectura para estudiantes */}
+                        {user?.rol === 'estudiante' ? (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-xl flex gap-3 items-start">
+                                    <span className="material-symbols-outlined text-amber-500 shrink-0">info</span>
+                                    <div className="text-sm text-amber-800 dark:text-amber-300">
+                                        <p className="font-bold mb-1">Perfil de solo lectura</p>
+                                        <p className="text-xs opacity-80">Los datos de los estudiantes son gestionados por la administración a través de la carga masiva de Excel. Para actualizar tus datos contacta a la secretaría.</p>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Apellido</label>
-                                    <input
-                                        type="text"
-                                        value={profileData.apellido}
-                                        onChange={(e) => setProfileData({ ...profileData, apellido: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {[{ label: 'Nombre', value: profileData.nombre }, { label: 'Apellido', value: profileData.apellido }, { label: 'Email / Cédula', value: profileData.email || profileData.cedula }].map(({ label, value }) => (
+                                        <div key={label} className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
+                                            <div className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-sm">
+                                                {value || <span className="italic opacity-50">No registrado</span>}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Correo Electrónico</label>
-                                <input
-                                    type="email"
-                                    value={profileData.email}
-                                    disabled
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-500 cursor-not-allowed"
-                                />
-                                <p className="text-[10px] text-slate-400 italic">El correo institucional no se puede modificar.</p>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Teléfono</label>
-                                    <input
-                                        type="tel"
-                                        value={profileData.telefono}
-                                        onChange={(e) => setProfileData({ ...profileData, telefono: e.target.value })}
-                                        placeholder="+593 99 999 9999"
-                                        className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
-                                    />
+                        ) : (
+                            <form onSubmit={handleProfileUpdate} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre</label>
+                                        <input
+                                            type="text"
+                                            value={profileData.nombre}
+                                            onChange={(e) => setProfileData({ ...profileData, nombre: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Apellido</label>
+                                        <input
+                                            type="text"
+                                            value={profileData.apellido}
+                                            onChange={(e) => setProfileData({ ...profileData, apellido: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
+                                        />
+                                    </div>
                                 </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cédula</label>
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Correo Electrónico</label>
                                     <input
-                                        type="text"
-                                        value={profileData.cedula}
+                                        type="email"
+                                        value={profileData.email}
                                         disabled
                                         className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-500 cursor-not-allowed"
                                     />
+                                    <p className="text-[10px] text-slate-400 italic">El correo institucional no se puede modificar.</p>
                                 </div>
-                            </div>
 
-                            <div className="pt-4 flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={loadingProfile}
-                                    className="flex items-center gap-2 px-6 py-3 bg-uide-blue hover:bg-uide-blue-dark text-white rounded-xl font-bold shadow-lg shadow-uide-blue/20 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loadingProfile ? <span className="animate-spin material-symbols-outlined text-sm">sync</span> : <FaSave />}
-                                    Guardar Cambios
-                                </button>
-                            </div>
-                        </form>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Teléfono</label>
+                                        <input
+                                            type="tel"
+                                            value={profileData.telefono}
+                                            onChange={(e) => setProfileData({ ...profileData, telefono: e.target.value })}
+                                            placeholder="+593 99 999 9999"
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cédula</label>
+                                        <input
+                                            type="text"
+                                            value={profileData.cedula}
+                                            disabled
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-slate-500 cursor-not-allowed"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={loadingProfile}
+                                        className="flex items-center gap-2 px-6 py-3 bg-uide-blue hover:bg-uide-blue-dark text-white rounded-xl font-bold shadow-lg shadow-uide-blue/20 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loadingProfile ? <span className="animate-spin material-symbols-outlined text-sm">sync</span> : <FaSave />}
+                                        Guardar Cambios
+                                    </button>
+                                </div>
+                            </form>
+                        )}
                     </div>
                 )}
 
@@ -236,56 +263,70 @@ export default function UserSettings() {
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona tu contraseña y sesiones activas.</p>
                         </div>
 
-                        <form onSubmit={handlePasswordChange} className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Contraseña Actual</label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={securityData.currentPassword}
-                                    onChange={(e) => setSecurityData({ ...securityData, currentPassword: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
-                                />
+                        {/* Panel informativo para estudiantes */}
+                        {user?.rol === 'estudiante' ? (
+                            <div className="p-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30 rounded-2xl flex gap-4 items-start">
+                                <div className="size-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-blue-600 dark:text-blue-400">id_card</span>
+                                </div>
+                                <div>
+                                    <p className="font-bold text-blue-900 dark:text-blue-200 mb-1">Acceso con cédula</p>
+                                    <p className="text-sm text-blue-700 dark:text-blue-300 opacity-80">Los estudiantes acceden al sistema únicamente con su número de cédula. No se requiere contraseña.</p>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 opacity-70">Si tienes problemas de acceso, contacta a la administración.</p>
+                                </div>
                             </div>
-
-                            <hr className="border-slate-200 dark:border-slate-700" />
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        ) : (
+                            <form onSubmit={handlePasswordChange} className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nueva Contraseña</label>
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Contraseña Actual</label>
                                     <input
                                         type="password"
                                         required
-                                        minLength={6}
-                                        value={securityData.newPassword}
-                                        onChange={(e) => setSecurityData({ ...securityData, newPassword: e.target.value })}
+                                        value={securityData.currentPassword}
+                                        onChange={(e) => setSecurityData({ ...securityData, currentPassword: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Confirmar Nueva Contraseña</label>
-                                    <input
-                                        type="password"
-                                        required
-                                        minLength={6}
-                                        value={securityData.confirmPassword}
-                                        onChange={(e) => setSecurityData({ ...securityData, confirmPassword: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="pt-2 flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={loadingSecurity}
-                                    className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white hover:bg-black dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loadingSecurity ? <span className="animate-spin material-symbols-outlined text-sm">sync</span> : <FaLock />}
-                                    Actualizar Contraseña
-                                </button>
-                            </div>
-                        </form>
+                                <hr className="border-slate-200 dark:border-slate-700" />
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nueva Contraseña</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            minLength={6}
+                                            value={securityData.newPassword}
+                                            onChange={(e) => setSecurityData({ ...securityData, newPassword: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Confirmar Nueva Contraseña</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            minLength={6}
+                                            value={securityData.confirmPassword}
+                                            onChange={(e) => setSecurityData({ ...securityData, confirmPassword: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-uide-blue outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={loadingSecurity}
+                                        className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white hover:bg-black dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loadingSecurity ? <span className="animate-spin material-symbols-outlined text-sm">sync</span> : <FaLock />}
+                                        Actualizar Contraseña
+                                    </button>
+                                </div>
+                            </form>
+                        )}
                     </div>
                 )}
 

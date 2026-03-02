@@ -1,5 +1,6 @@
 const { Clase, Aula, Distribucion, Carrera } = require('../models');
 const { Op } = require('sequelize');
+const { normalizarTexto } = require('../utils/textUtils');
 
 // ============================================
 // REGLAS DE DISTRIBUCIÓN UIDE
@@ -13,20 +14,14 @@ const { Op } = require('sequelize');
 // - Cualquier otra carrera SÍ puede usar el aula si hay disponibilidad
 // ============================================
 
-function normalizarTexto(texto) {
-  if (!texto) return '';
-  return texto.toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim();
-}
-
 // Excluye de la distribución automática solo el Auditorio
 // (tipo AUDITORIO o restriccion_carrera = 'AUDITORIO_INSTITUCIONAL')
 function aulaExcluidaDeDistribucion(aula) {
   const tipo = normalizarTexto(aula.tipo || '');
   const restriccion = normalizarTexto(aula.restriccion_carrera || '');
-  return tipo === 'AUDITORIO' || restriccion === 'AUDITORIO_INSTITUCIONAL';
+  return tipo === 'auditorio' || restriccion === 'auditorio_institucional';
 }
+
 
 class DistribucionService {
 
@@ -207,12 +202,12 @@ class DistribucionService {
     const aulaSugerida = clase.aula_sugerida ? normalizarTexto(clase.aula_sugerida) : null;
     const aulasFiltradas = aulaSugerida
       ? aulas.filter(aula => {
-          const nombreAula = normalizarTexto(aula.nombre);
-          const codigoAula = normalizarTexto(aula.codigo);
-          return aulaSugerida.split(' ').some(p =>
-            p.length > 3 && (nombreAula.includes(p) || codigoAula.includes(p))
-          );
-        })
+        const nombreAula = normalizarTexto(aula.nombre);
+        const codigoAula = normalizarTexto(aula.codigo);
+        return aulaSugerida.split(' ').some(p =>
+          p.length > 3 && (nombreAula.includes(p) || codigoAula.includes(p))
+        );
+      })
       : aulas;
 
     const aulasParaBuscar = aulasFiltradas.length > 0 ? aulasFiltradas : aulas;

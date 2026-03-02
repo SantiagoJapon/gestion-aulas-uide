@@ -11,11 +11,17 @@ const ESTADO_BADGE: Record<string, { label: string; className: string }> = {
 
 type FiltroEstado = 'pendiente_aprobacion' | 'activa' | 'rechazada' | 'todas';
 
+const PAGINA_LIMITE = 20;
+
 export default function ReservasAdminView() {
     const [reservas, setReservas] = useState<Reserva[]>([]);
     const [loading, setLoading] = useState(false);
     const [filtro, setFiltro] = useState<FiltroEstado>('pendiente_aprobacion');
     const [procesando, setProcesando] = useState<number | null>(null);
+    const [busqueda, setBusqueda] = useState('');
+    const [pagina, setPagina] = useState(1);
+    const [totalPaginas, setTotalPaginas] = useState(1);
+    const [total, setTotal] = useState(0);
 
     // Modal de rechazo
     const [rechazandoId, setRechazandoId] = useState<number | null>(null);
@@ -24,20 +30,32 @@ export default function ReservasAdminView() {
     const cargar = useCallback(async () => {
         setLoading(true);
         try {
-            const params: { estado?: string } = {};
+            const params: Parameters<typeof reservaService.listarTodas>[0] = {
+                pagina,
+                limite: PAGINA_LIMITE,
+            };
             if (filtro !== 'todas') params.estado = filtro;
+            if (busqueda.trim()) params.busqueda = busqueda.trim();
+
             const res = await reservaService.listarTodas(params);
             setReservas(res.reservas || []);
+            setTotal(res.total ?? 0);
+            setTotalPaginas(res.totalPaginas ?? 1);
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
         }
-    }, [filtro]);
+    }, [filtro, busqueda, pagina]);
 
     useEffect(() => {
         cargar();
     }, [cargar]);
+
+    // Resetear a página 1 cuando cambia filtro o búsqueda
+    useEffect(() => {
+        setPagina(1);
+    }, [filtro, busqueda]);
 
     const aprobar = async (id: number) => {
         setProcesando(id);
@@ -67,7 +85,7 @@ export default function ReservasAdminView() {
     };
 
     const cancelar = async (id: number) => {
-        if (!confirm('¿Cancelar esta reserva?')) return;
+        if (!confirm('¿Cancelar esta reserva? El solicitante recibirá una notificación.')) return;
         setProcesando(id);
         try {
             await reservaService.cambiarEstado(id, 'cancelada');
@@ -87,7 +105,9 @@ export default function ReservasAdminView() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-foreground">Gestión de Reservas</h2>
-                    <p className="text-sm text-muted-foreground">Aprueba, rechaza o cancela reservas de espacios</p>
+                    <p className="text-sm text-muted-foreground">
+                        {total > 0 ? `${total} reserva${total !== 1 ? 's' : ''} encontrada${total !== 1 ? 's' : ''}` : 'Sin reservas en esta categoría'}
+                    </p>
                 </div>
                 <button
                     onClick={cargar}
@@ -111,32 +131,54 @@ export default function ReservasAdminView() {
                 </button>
             )}
 
-            {/* Filtros */}
-            <div className="flex flex-wrap gap-2">
-                {([
-                    { key: 'pendiente_aprobacion', label: 'Pendientes', icon: 'pending_actions' },
-                    { key: 'activa', label: 'Activas', icon: 'event_available' },
-                    { key: 'rechazada', label: 'Rechazadas', icon: 'event_busy' },
-                    { key: 'todas', label: 'Todas', icon: 'list' },
-                ] as { key: FiltroEstado; label: string; icon: string }[]).map(f => (
-                    <button
-                        key={f.key}
-                        onClick={() => setFiltro(f.key)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${
-                            filtro === f.key
-                                ? 'bg-uide-blue text-white border-uide-blue shadow-md'
-                                : 'bg-white dark:bg-slate-800 text-muted-foreground border-border hover:border-uide-blue/40'
-                        }`}
-                    >
-                        <span className="material-symbols-outlined text-[16px]">{f.icon}</span>
-                        {f.label}
-                        {f.key === 'pendiente_aprobacion' && pendientes.length > 0 && (
-                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${filtro === f.key ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                                {pendientes.length}
-                            </span>
-                        )}
-                    </button>
-                ))}
+            {/* Filtros + Búsqueda */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-wrap gap-2">
+                    {([
+                        { key: 'pendiente_aprobacion', label: 'Pendientes', icon: 'pending_actions' },
+                        { key: 'activa', label: 'Activas', icon: 'event_available' },
+                        { key: 'rechazada', label: 'Rechazadas', icon: 'event_busy' },
+                        { key: 'todas', label: 'Todas', icon: 'list' },
+                    ] as { key: FiltroEstado; label: string; icon: string }[]).map(f => (
+                        <button
+                            key={f.key}
+                            onClick={() => setFiltro(f.key)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${
+                                filtro === f.key
+                                    ? 'bg-uide-blue text-white border-uide-blue shadow-md'
+                                    : 'bg-white dark:bg-slate-800 text-muted-foreground border-border hover:border-uide-blue/40'
+                            }`}
+                        >
+                            <span className="material-symbols-outlined text-[16px]">{f.icon}</span>
+                            {f.label}
+                            {f.key === 'pendiente_aprobacion' && pendientes.length > 0 && (
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${filtro === f.key ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                                    {pendientes.length}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Búsqueda */}
+                <div className="relative sm:ml-auto">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-muted-foreground text-[18px]">search</span>
+                    <input
+                        type="text"
+                        value={busqueda}
+                        onChange={e => setBusqueda(e.target.value)}
+                        placeholder="Aula, solicitante o motivo..."
+                        className="pl-9 pr-4 py-2 border border-border rounded-xl text-sm bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-uide-blue/20 w-full sm:w-64"
+                    />
+                    {busqueda && (
+                        <button
+                            onClick={() => setBusqueda('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                            <span className="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Lista */}
@@ -148,14 +190,17 @@ export default function ReservasAdminView() {
                 ) : reservas.length === 0 ? (
                     <div className="text-center py-20 text-muted-foreground">
                         <span className="material-symbols-outlined text-4xl mb-2 block opacity-30">event_busy</span>
-                        <p className="font-medium">No hay reservas en esta categoría</p>
+                        <p className="font-medium">
+                            {busqueda ? `Sin resultados para "${busqueda}"` : 'No hay reservas en esta categoría'}
+                        </p>
                     </div>
                 ) : (
                     reservas.map(r => {
                         const badge = ESTADO_BADGE[r.estado] || { label: r.estado, className: 'bg-slate-100 text-slate-500' };
                         const esPendiente = r.estado === 'pendiente_aprobacion';
                         const esActiva = r.estado === 'activa';
-                        const solicitante = (r as any).solicitante_nombre || '—';
+                        const espacioCodigo = r.aula_codigo || r.espacio_codigo || '—';
+                        const solicitante = r.solicitante_nombre || '—';
 
                         return (
                             <div
@@ -167,7 +212,12 @@ export default function ReservasAdminView() {
                                 {/* Info */}
                                 <div className="flex-1 min-w-0 space-y-1">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-black text-foreground text-sm">{r.aula_codigo}</span>
+                                        <span className="font-black text-foreground text-sm">{espacioCodigo}</span>
+                                        {r.tipo_espacio && (
+                                            <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full uppercase">
+                                                {r.tipo_espacio}
+                                            </span>
+                                        )}
                                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${badge.className}`}>
                                             {badge.label}
                                         </span>
@@ -184,6 +234,9 @@ export default function ReservasAdminView() {
                                         <span className="flex items-center gap-1">
                                             <span className="material-symbols-outlined text-[14px]">person</span>
                                             {solicitante}
+                                            {r.rol_usuario && (
+                                                <span className="text-[9px] uppercase font-bold opacity-60">({r.rol_usuario})</span>
+                                            )}
                                         </span>
                                     </div>
                                     {r.motivo && (
@@ -234,6 +287,29 @@ export default function ReservasAdminView() {
                 )}
             </div>
 
+            {/* Paginación */}
+            {totalPaginas > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-2">
+                    <button
+                        onClick={() => setPagina(p => Math.max(1, p - 1))}
+                        disabled={pagina === 1 || loading}
+                        className="p-2 rounded-xl border border-border hover:bg-muted transition-colors disabled:opacity-40"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                    </button>
+                    <span className="text-sm font-bold text-muted-foreground px-3">
+                        Página {pagina} de {totalPaginas}
+                    </span>
+                    <button
+                        onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                        disabled={pagina === totalPaginas || loading}
+                        className="p-2 rounded-xl border border-border hover:bg-muted transition-colors disabled:opacity-40"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                    </button>
+                </div>
+            )}
+
             {/* Modal de rechazo */}
             {rechazandoId && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
@@ -244,7 +320,7 @@ export default function ReservasAdminView() {
                             </div>
                             <div>
                                 <h3 className="font-black text-foreground">Rechazar reserva</h3>
-                                <p className="text-xs text-muted-foreground">Escribe el motivo (opcional)</p>
+                                <p className="text-xs text-muted-foreground">El solicitante recibirá una notificación con el motivo</p>
                             </div>
                         </div>
                         <textarea

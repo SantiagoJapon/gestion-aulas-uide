@@ -180,10 +180,40 @@ const validarCambiarPassword = [
   manejarErroresValidacion
 ];
 
+/**
+ * Validadores para solicitar recuperación de contraseña
+ */
+const validarSolicitarRecuperacion = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('El email es obligatorio')
+    .isEmail().withMessage('Debe proporcionar un email válido')
+    .normalizeEmail(),
+
+  manejarErroresValidacion
+];
+
+/**
+ * Validadores para resetear contraseña
+ */
+const validarResetearPassword = [
+  body('token')
+    .notEmpty().withMessage('El token es obligatorio'),
+
+  body('password')
+    .notEmpty().withMessage('La nueva contraseña es obligatoria')
+    .isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('La contraseña debe contener al menos una mayúscula, una minúscula y un número'),
+
+  manejarErroresValidacion
+];
+
 module.exports = {
   validarRegistro,
   validarLogin,
   validarActualizarPerfil,
   validarCambiarPassword,
+  validarSolicitarRecuperacion,
+  validarResetearPassword,
   manejarErroresValidacion
 };

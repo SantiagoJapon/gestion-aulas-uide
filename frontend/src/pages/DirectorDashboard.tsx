@@ -622,12 +622,19 @@ const DirectorDashboard = () => {
               <p className="text-base sm:text-lg font-medium text-white/70 max-w-lg leading-relaxed italic">
                 {user?.carrera?.carrera || "Director de Facultad"} • Loja, Ecuador
               </p>
-              <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
+              <div className="mt-4 flex items-center justify-center lg:justify-start gap-3 flex-wrap">
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
                   className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
                 >
                   Reiniciar Guía
+                </button>
+                <button
+                  onClick={() => setIsComunicadoOpen(true)}
+                  className="text-[11px] font-black bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-all shadow-lg active:scale-95 flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">campaign</span>
+                  Comunicado Docentes
                 </button>
                 <p className="text-[11px] text-white/50 font-medium uppercase tracking-widest">
                   {new Date().toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })}

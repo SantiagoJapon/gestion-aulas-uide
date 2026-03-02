@@ -340,30 +340,60 @@ async function getSessionName(session) {
 async function authenticateUser(cedula, jid) {
   const cleanPhone = formatPhone(jid);
 
+  console.log(`[AUTH] Verificando cédula ${cedula} para ${cleanPhone}...`);
+  console.log(`[AUTH] BACKEND_URL = ${BACKEND_URL}`);
+
   // 1. Buscar primero en estudiantes via API del backend
   //    Ruta existente: GET /api/estudiantes/login/:cedula
   try {
     const resp = await axios.get(`${BACKEND_URL}/api/estudiantes/login/${cedula}`, { timeout: 8000 });
     if (resp.data && resp.data.success) {
       const est = resp.data.estudiante;
-      const token = resp.data.token; // JWT para llamadas autenticadas
-      // Guardar sesion en BD local del bot (incluyendo token y cedula)
+      const token = resp.data.token;
+      console.log(`[AUTH] Estudiante encontrado vía API: ${est.nombre} (ID=${est.id})`);
+      // Guardar sesion en BD local del bot
       await pool.query(`
         INSERT INTO bot_sessions (telefono, user_id, user_type, rol)
         VALUES ($1, $2, 'estudiante', 'estudiante')
         ON CONFLICT (telefono)
         DO UPDATE SET user_id = EXCLUDED.user_id, user_type = EXCLUDED.user_type, rol = EXCLUDED.rol
       `, [cleanPhone, est.id]);
-      // Guardar telefono en la tabla estudiantes
-      await pool.query('UPDATE estudiantes SET telefono = $1 WHERE cedula = $2', [cleanPhone, cedula]);
-      // Guardar token y datos en memoria para esta sesion
+      // Guardar telefono en la tabla estudiantes (ignorar si falla)
+      try {
+        await pool.query('UPDATE estudiantes SET telefono = $1 WHERE cedula = $2', [cleanPhone, cedula]);
+      } catch (updateErr) {
+        console.warn('[AUTH] No se pudo actualizar telefono en estudiantes:', updateErr.message);
+      }
       userState.set(cleanPhone, { ...userState.get(cleanPhone), jwtToken: token, cedula, estudianteId: est.id, nombre: est.nombre });
       const nombre = est.nombre || 'Estudiante';
       return { name: nombre.split(' ')[0], rol: 'estudiante', type: 'estudiante', data: est };
     }
   } catch (e) {
-    if (e.response?.status !== 404) {
-      console.error('[AUTH] Error consultando backend estudiantes:', e.message);
+    if (e.response?.status === 404) {
+      console.log(`[AUTH] Estudiante con cédula ${cedula} no encontrado en backend (404)`);
+    } else {
+      console.error('[AUTH] Error consultando backend, intentando SQL directo:', e.message);
+      // Fallback: buscar directamente en la BD del bot
+      try {
+        const result = await pool.query(
+          'SELECT id, nombre, cedula FROM estudiantes WHERE cedula = $1',
+          [cedula]
+        );
+        if (result.rows.length > 0) {
+          const est = result.rows[0];
+          console.log(`[AUTH] Estudiante encontrado vía SQL directo: ${est.nombre}`);
+          await pool.query(`
+            INSERT INTO bot_sessions (telefono, user_id, user_type, rol)
+            VALUES ($1, $2, 'estudiante', 'estudiante')
+            ON CONFLICT (telefono)
+            DO UPDATE SET user_id = EXCLUDED.user_id, user_type = EXCLUDED.user_type, rol = EXCLUDED.rol
+          `, [cleanPhone, est.id]);
+          userState.set(cleanPhone, { ...userState.get(cleanPhone), cedula, estudianteId: est.id, nombre: est.nombre });
+          return { name: (est.nombre || 'Estudiante').split(' ')[0], rol: 'estudiante', type: 'estudiante', data: est };
+        }
+      } catch (sqlErr) {
+        console.error('[AUTH] También falló el SQL directo:', sqlErr.message);
+      }
     }
   }
 
@@ -376,6 +406,7 @@ async function authenticateUser(cedula, jid) {
     );
     if (userRes.rows.length > 0) {
       const user = userRes.rows[0];
+      console.log(`[AUTH] Usuario (no-estudiante) encontrado: ${user.nombre} rol=${user.rol}`);
       await client.query(`
         INSERT INTO bot_sessions (telefono, user_id, user_type, rol)
         VALUES ($1, $2, 'usuario', $3)
@@ -388,6 +419,7 @@ async function authenticateUser(cedula, jid) {
     client.release();
   }
 
+  console.log(`[AUTH] Cédula ${cedula} no encontrada en ningún sistema`);
   return null;
 }
 
@@ -415,10 +447,11 @@ async function findTeacher(queryTerm) {
   return [];
 }
 
-// Buscar horarios de materia — usa GET /api/busqueda con query
+// Buscar horarios de materia — usa GET /api/search/global?q=&tipo=materia
 async function findSubjectClasses(subject) {
   try {
-    const resp = await axios.get(`${BACKEND_URL}/api/busqueda`, {
+    // Ruta correcta del backend: /api/search/global
+    const resp = await axios.get(`${BACKEND_URL}/api/search/global`, {
       params: { q: subject, tipo: 'materia' },
       timeout: 8000
     });
@@ -433,18 +466,22 @@ async function findSubjectClasses(subject) {
       }));
     }
   } catch (e) {
-    // Fallback a SQL directo si la ruta no existe
+    // Fallback a SQL directo si la ruta no responde
     console.error('[findSubjectClasses] Error backend, usando SQL:', e.message);
-    const normalized = subject.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const res = await pool.query(
-      `SELECT c.dia, c.hora_inicio, c.hora_fin, c.materia, c.aula_asignada, c.docente
-       FROM clases c
-       WHERE unaccent(lower(c.materia)) ILIKE '%' || unaccent(lower($1)) || '%'
-         AND c.materia IS NOT NULL
-       ORDER BY c.materia, c.dia, c.hora_inicio LIMIT 10`,
-      [normalized]
-    );
-    return res.rows;
+    try {
+      const normalized = subject.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const res = await pool.query(
+        `SELECT c.dia, c.hora_inicio, c.hora_fin, c.materia, c.aula_asignada, c.docente
+         FROM clases c
+         WHERE lower(c.materia) ILIKE '%' || lower($1) || '%'
+           AND c.materia IS NOT NULL
+         ORDER BY c.materia, c.dia, c.hora_inicio LIMIT 10`,
+        [normalized]
+      );
+      return res.rows;
+    } catch (sqlErr) {
+      console.error('[findSubjectClasses] SQL fallback también falló:', sqlErr.message);
+    }
   }
   return [];
 }

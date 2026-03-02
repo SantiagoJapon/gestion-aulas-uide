@@ -1,7 +1,8 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import CommandKSearch from './CommandKSearch';
+import { notificacionService, Notificacion } from '../../services/api';
 
 interface NavItem {
     label: string;
@@ -29,12 +30,34 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     const [isSidebarRetracted, setIsSidebarRetracted] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-    // Simulación de notificaciones
-    const [notifications] = useState([
-        { id: 1, from: 'Sistema', text: 'Bienvenido al nuevo dashboard', time: 'Hace 5 min', read: false },
-        { id: 2, from: 'Director', text: 'Recuerda subir tus notas', time: 'Hace 2 horas', read: true }
-    ]);
+    // Notificaciones reales desde la API
+    const [notifications, setNotifications] = useState<Notificacion[]>([]);
+    const [loadingNotif, setLoadingNotif] = useState(false);
+
+    const fetchNotifications = useCallback(async () => {
+        setLoadingNotif(true);
+        try {
+            const res = await notificacionService.misNotificaciones();
+            if (res.success) setNotifications(res.notificaciones);
+        } catch {
+            // Silenciar: no es crítico si el panel de notificaciones falla
+        } finally {
+            setLoadingNotif(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchNotifications();
+    }, [fetchNotifications]);
+
+    const handleMarcarTodasLeidas = async () => {
+        const noLeidas = notifications.filter(n => !n.leida);
+        await Promise.allSettled(noLeidas.map(n => notificacionService.marcarLeida(n.id)));
+        setNotifications(prev => prev.map(n => ({ ...n, leida: true })));
+    };
+
     const navigate = useNavigate();
+
 
     const handleLogout = () => {
         logout();
@@ -166,7 +189,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                                         className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all relative"
                                     >
                                         <span className="material-symbols-outlined text-[20px] font-variation-fill">notifications</span>
-                                        {notifications.some(n => !n.read) && (
+                                        {notifications.some(n => !n.leida) && (
                                             <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full border border-background"></span>
                                         )}
                                     </button>
@@ -185,7 +208,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                                     className="p-3 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-2xl transition-all relative"
                                 >
                                     <span className="material-symbols-outlined text-[24px]">notifications</span>
-                                    {notifications.some(n => !n.read) && (
+                                    {notifications.some(n => !n.leida) && (
                                         <span className="absolute top-2.5 right-2.5 size-2 bg-red-500 rounded-full border border-background"></span>
                                     )}
                                 </button>
@@ -202,23 +225,37 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             <div className={`absolute bottom-full mb-5 w-80 bg-card/95 dark:bg-slate-900/95 backdrop-blur-xl border border-border/50 rounded-3xl shadow-[0_20px_70px_rgba(0,0,0,0.3)] overflow-hidden animate-scale-in origin-bottom transition-all duration-300 z-[100] ${isSidebarRetracted ? 'left-full ml-4' : 'left-0'}`}>
                                 <div className="p-4 border-b border-border/50 bg-muted/40 flex justify-between items-center bg-gradient-to-r from-primary/5 to-transparent">
                                     <h4 className="text-[10px] font-black uppercase text-foreground tracking-[0.2em]">Notificaciones</h4>
-                                    <button className="text-[10px] text-primary font-bold hover:text-primary/80 transition-colors bg-primary/10 px-2 py-1 rounded-full px-3">Marcar leídas</button>
+                                    <button
+                                        onClick={handleMarcarTodasLeidas}
+                                        className="text-[10px] text-primary font-bold hover:text-primary/80 transition-colors bg-primary/10 px-3 py-1 rounded-full"
+                                    >
+                                        Marcar leídas
+                                    </button>
                                 </div>
                                 <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
-                                    {notifications.length > 0 ? (
+                                    {loadingNotif ? (
+                                        <div className="flex items-center justify-center p-8">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                                        </div>
+                                    ) : notifications.length > 0 ? (
                                         notifications.map(n => (
-                                            <div key={n.id} className={`p-4 border-b border-border/30 last:border-0 hover:bg-primary/5 transition-all duration-300 relative group cursor-pointer ${!n.read ? 'bg-primary/[0.03]' : ''}`}>
-                                                {!n.read && (
+                                            <div key={n.id} className={`p-4 border-b border-border/30 last:border-0 hover:bg-primary/5 transition-all duration-300 relative group cursor-pointer ${!n.leida ? 'bg-primary/[0.03]' : ''}`}>
+                                                {!n.leida && (
                                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full" />
                                                 )}
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`size-2 rounded-full ${!n.read ? 'bg-primary animate-pulse' : 'bg-muted'}`} />
-                                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{n.from}</span>
+                                                        <div className={`size-2 rounded-full ${!n.leida ? 'bg-primary animate-pulse' : 'bg-muted'}`} />
+                                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
+                                                            {n.remitenteInfo ? `${n.remitenteInfo.nombre} ${n.remitenteInfo.apellido}` : 'Sistema'}
+                                                        </span>
                                                     </div>
-                                                    <span className="text-[9px] text-muted-foreground font-medium">{n.time}</span>
+                                                    <span className="text-[9px] text-muted-foreground font-medium">
+                                                        {new Date(n.created_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
                                                 </div>
-                                                <p className="text-xs text-foreground font-semibold leading-relaxed group-hover:translate-x-1 transition-transform">{n.text}</p>
+                                                <p className="text-[11px] font-bold text-foreground mb-1">{n.titulo}</p>
+                                                <p className="text-xs text-foreground/70 font-semibold leading-relaxed group-hover:translate-x-1 transition-transform">{n.mensaje}</p>
                                             </div>
                                         ))
                                     ) : (
@@ -231,8 +268,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                                     )}
                                 </div>
                                 <div className="p-3 bg-muted/20 border-t border-border/30 text-center">
-                                    <button className="text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors">
-                                        Ver historial completo
+                                    <button
+                                        onClick={fetchNotifications}
+                                        className="text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        Actualizar
                                     </button>
                                 </div>
                             </div>

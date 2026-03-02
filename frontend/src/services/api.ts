@@ -1,42 +1,15 @@
-import axios from 'axios';
+/**
+ * api.ts — Barrel de servicios API del frontend.
+ *
+ * La instancia Axios y sus interceptores están en ./api/axiosInstance.ts
+ * Este archivo centraliza todos los servicios y tipos para que los componentes
+ * puedan importar directamente desde 'services/api' sin cambiar nada.
+ *
+ * Para agregar un nuevo servicio: créalo en ./api/tu-servicio.ts
+ * y re-expórtalo al final de este archivo.
+ */
+import api from './api/axiosInstance';
 
-// Configuración base de Axios
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Interceptor para agregar token a todas las requests
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Interceptor para manejar errores de autenticación
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expirado o inválido
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
 
 // Tipos para las respuestas
 export interface User {
@@ -206,6 +179,19 @@ export const authService = {
     credenciales: { email: string; password: string; whatsapp_enviado: boolean };
   }> => {
     const response = await api.post('/auth/crear-director', data);
+    return response.data;
+  },
+
+  forgotPassword: async (email: string): Promise<{ success: boolean; mensaje: string }> => {
+    const response = await api.post<{ success: boolean; mensaje: string }>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPasswordWithToken: async (token: string, passwordNuevo: string): Promise<{ success: boolean; mensaje: string }> => {
+    const response = await api.post<{ success: boolean; mensaje: string }>('/auth/reset-password', {
+      token,
+      password: passwordNuevo
+    });
     return response.data;
   },
 };
@@ -858,13 +844,22 @@ export const reporteService = {
 
 export interface Reserva {
   id: number;
-  aula_codigo: string;
+  aula_codigo?: string;
+  espacio_codigo?: string;
   dia: string;
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
   motivo?: string;
   estado: 'activa' | 'cancelada' | 'pendiente_aprobacion' | 'rechazada' | 'finalizada';
+  tipo_espacio?: string;
+  usuario_id?: number;
+  estudiante_id?: number;
+  solicitante_nombre?: string;
+  solicitante_cedula?: string;
+  rol_usuario?: string;
+  es_grupal?: boolean;
+  num_personas?: number;
   created_at: string;
 }
 
@@ -901,7 +896,7 @@ export const reservaService = {
   },
 
   // Admin / Director
-  listarTodas: async (params?: { fecha?: string; estado?: string }): Promise<{ success: boolean; reservas: Reserva[] }> => {
+  listarTodas: async (params?: { fecha?: string; estado?: string; busqueda?: string; pagina?: number; limite?: number }): Promise<{ success: boolean; reservas: Reserva[]; total?: number; pagina?: number; totalPaginas?: number }> => {
     const response = await api.get('/reservas/todas', { params });
     return response.data;
   },

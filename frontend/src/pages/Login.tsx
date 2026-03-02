@@ -1,5 +1,5 @@
 import { useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const REMEMBER_EMAIL_KEY = 'login_remember_email';
@@ -168,6 +168,11 @@ export default function Login() {
                       Ingresa los 10 dígitos de tu cédula para acceder a tu portal
                     </p>
                   </div>
+
+                  {/* Nota: no hay "olvidaste tu contraseña" para estudiantes — acceden solo con cédula */}
+                  <p className="text-xs text-muted-foreground text-center bg-muted/50 rounded-lg px-3 py-2">
+                    Si tienes problemas de acceso, contacta a la administración.
+                  </p>
                 </>
               ) : (
                 <>
@@ -223,7 +228,7 @@ export default function Login() {
                     </div>
                   </div>
 
-                  {/* Recordarme + Olvidaste contraseña */}
+                  {/* Recordarme + Olvidaste contraseña — solo modo Docente */}
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input
@@ -234,12 +239,12 @@ export default function Login() {
                       />
                       <span className="text-sm text-muted-foreground">Recordarme</span>
                     </label>
-                    <a
-                      href="/login"
+                    <Link
+                      to="/forgot-password"
                       className="text-sm font-medium text-primary hover:opacity-90 hover:underline transition"
                     >
                       ¿Olvidaste tu contraseña?
-                    </a>
+                    </Link>
                   </div>
                 </>
               )}
@@ -257,16 +262,7 @@ export default function Login() {
               </button>
             </form>
 
-            {mode === 'docente' && (
-              <div className="mt-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  ¿No tienes cuenta?{' '}
-                  <a href="/register" className="text-primary font-medium hover:underline">
-                    Regístrate aquí
-                  </a>
-                </p>
-              </div>
-            )}
+
           </div>
         </div>
       </div>

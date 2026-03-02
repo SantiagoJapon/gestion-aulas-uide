@@ -25,15 +25,16 @@ exports.registrarUsuario = async (req, res) => {
         // const salt = await bcrypt.genSalt(10);
         // const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Crear usuario
+        // Crear usuario — convertir strings vacíos en null para evitar
+        // errores de validación del modelo (cedula/telefono son opcionales)
         const nuevoUsuario = await Usuario.create({
             nombre,
             apellido,
             email,
-            password: password, // El modelo se encargará del hash
+            password: password,
             rol: rol || 'estudiante',
-            cedula,
-            telefono,
+            cedula: cedula?.trim() || null,
+            telefono: telefono?.trim() || null,
             estado: 'activo'
         });
 
@@ -404,7 +405,7 @@ exports.crearDirector = async (req, res) => {
 
         // Enviar también WhatsApp como respaldo (si tiene teléfono)
         if (telefono) {
-            const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, tu cuenta de director ha sido creada.\n\n📧 *Correo:* ${email}\n🔑 *Contraseña temporal:* ${passwordTemporal}\n🏫 *Carrera:* ${carrera_director}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+            const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${nombre} ${apellido}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
             try {
                 await whatsappService.sendMessage(telefono, mensaje);
                 whatsapp_enviado = true;
@@ -435,6 +436,105 @@ exports.crearDirector = async (req, res) => {
         res.status(500).json({
             success: false,
             mensaje: 'Error al crear director',
+            error: error.message
+        });
+    }
+};
+// ==========================================
+// SOLICITAR RECUPERACION DE CONTRASEÑA
+// ==========================================
+exports.solicitarRecuperacionPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        const usuario = await Usuario.findOne({ where: { email } });
+
+        // El usuario pidió validar que el correo sí esté registrado
+        if (!usuario) {
+            return res.status(404).json({
+                success: false,
+                mensaje: 'No existe una cuenta asociada a este correo electrónico'
+            });
+        }
+
+        // Generar un token único
+        const token = require('crypto').randomBytes(20).toString('hex');
+
+        // Guardar token y expiración (1 hora)
+        usuario.token_recuperacion = token;
+        usuario.token_expira = new Date(Date.now() + 3600000); // 1 hora
+        await usuario.save();
+
+        // Enviar email
+        const result = await emailService.enviarRecuperacionPassword({
+            email: usuario.email,
+            nombre: `${usuario.nombre} ${usuario.apellido}`,
+            tokenRecuperacion: token
+        });
+
+        // Si el SMTP falla no bloqueamos al usuario: el token ya está en DB.
+        // El admin puede reenviar manualmente si es necesario.
+        if (!result.success) {
+            console.error('⚠️ Email de recuperación no enviado:', result.error);
+        }
+
+        res.json({
+            success: true,
+            mensaje: 'Se ha enviado un correo con instrucciones para restablecer tu contraseña'
+        });
+
+    } catch (error) {
+        console.error('Error al solicitar recuperación:', error);
+        res.status(500).json({
+            success: false,
+            mensaje: 'Error al procesar la solicitud de recuperación',
+            error: error.message
+        });
+    }
+};
+
+// ==========================================
+// RESETEAR CONTRASEÑA CON TOKEN
+// ==========================================
+exports.resetearPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+
+        const { Op } = require('sequelize');
+        const usuario = await Usuario.findOne({
+            where: {
+                token_recuperacion: token,
+                token_expira: {
+                    [Op.gt]: new Date()
+                }
+            }
+        });
+
+        if (!usuario) {
+            return res.status(400).json({
+                success: false,
+                mensaje: 'El enlace de recuperación es inválido o ha expirado'
+            });
+        }
+
+        // Actualizar contraseña y limpiar token
+        usuario.password = password;
+        usuario.token_recuperacion = null;
+        usuario.token_expira = null;
+        usuario.requiere_cambio_password = false; // Por si acaso era una cuenta nueva
+
+        await usuario.save();
+
+        res.json({
+            success: true,
+            mensaje: 'Contraseña restablecida exitosamente. Ya puedes iniciar sesión.'
+        });
+
+    } catch (error) {
+        console.error('Error al resetear contraseña:', error);
+        res.status(500).json({
+            success: false,
+            mensaje: 'Error al restablecer la contraseña',
             error: error.message
         });
     }

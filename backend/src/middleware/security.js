@@ -35,18 +35,30 @@ const validateOrigin = (req, res, next) => {
  * Valida que los parámetros no contengan patrones peligrosos
  */
 const preventSQLInjection = (req, res, next) => {
+  // Patrones quirúrgicos que detectan SQL injection real sin bloquear
+  // caracteres legítimos como apostrofes en nombres (O'Brien) o guiones
+  // dobles en comentarios de texto normal.
   const dangerousPatterns = [
-    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT|SCRIPT)\b)/gi,
-    /(--|;|\*|'|"|`)/g,
-    /(\bOR\b.*=.*)/gi,
-    /(\bAND\b.*=.*)/gi,
-    /(\b1\s*=\s*1\b)/gi,
-    /(\b1\s*=\s*'1')/gi
+    // UNION SELECT es el ataque de extracción clásico
+    /\bUNION\s+(?:ALL\s+)?SELECT\b/gi,
+    // Punto y coma seguido de instrucción DDL/DML peligrosa
+    /;\s*(?:DROP|DELETE|INSERT|UPDATE|CREATE|ALTER|EXEC|EXECUTE)\b/gi,
+    // Comentario SQL al final de un valor (-- o /*) para truncar queries
+    /(?:--|\/-\*)\s*$/g,
+    // Clásico 1=1 sin comillas
+    /\b1\s*=\s*1\b/g,
+    // EXEC / EXECUTE con paréntesis (stored procedures)
+    /\bEXEC(?:UTE)?\s*\(/gi,
+    // Funciones de sistema peligrosas
+    /\b(?:xp_cmdshell|sp_executesql|OPENROWSET|OPENDATASOURCE)\b/gi,
   ];
 
   const checkValue = (value) => {
     if (typeof value === 'string') {
-      return dangerousPatterns.some(pattern => pattern.test(value));
+      return dangerousPatterns.some(pattern => {
+        pattern.lastIndex = 0; // Resetear estado para flags 'g'
+        return pattern.test(value);
+      });
     }
     if (typeof value === 'object' && value !== null) {
       return Object.values(value).some(checkValue);
@@ -56,21 +68,21 @@ const preventSQLInjection = (req, res, next) => {
 
   // Verificar body, query y params
   if (req.body && checkValue(req.body)) {
-    console.warn(`[SECURITY] Posible SQL injection detectado desde ${req.ip}`);
+    console.warn(`[SECURITY] Posible SQL injection detectado desde ${req.ip} en ${req.path}`);
     return res.status(400).json({
       error: 'Datos inválidos detectados'
     });
   }
 
   if (req.query && checkValue(req.query)) {
-    console.warn(`[SECURITY] Posible SQL injection en query desde ${req.ip}`);
+    console.warn(`[SECURITY] Posible SQL injection en query desde ${req.ip} en ${req.path}`);
     return res.status(400).json({
       error: 'Parámetros de consulta inválidos'
     });
   }
 
   if (req.params && checkValue(req.params)) {
-    console.warn(`[SECURITY] Posible SQL injection en params desde ${req.ip}`);
+    console.warn(`[SECURITY] Posible SQL injection en params desde ${req.ip} en ${req.path}`);
     return res.status(400).json({
       error: 'Parámetros de ruta inválidos'
     });
@@ -109,13 +121,13 @@ const helmetConfig = helmet({
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 1000, // Incrementado de 5 a 1000 para pruebas
+  max: 10, // 10 intentos fallidos por IP — brute-force protection
   message: {
     error: 'Demasiados intentos de autenticación. Por favor intenta de nuevo en 15 minutos.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true, // No contar requests exitosos
+  skipSuccessfulRequests: true, // Los logins exitosos no se cuentan
 });
 
 /**

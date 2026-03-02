@@ -13,12 +13,18 @@ const iniciarServidor = async () => {
     // Cargar todos los modelos y relaciones antes de sincronizar
     require('./models');
 
-    // Sincronizar modelos con la base de datos sin perder datos
+    // Sincronizar modelos con la base de datos
+    // En producción: sync sin ALTER para evitar modificaciones accidentales de esquema
+    // En desarrollo: alter:true para que Sequelize aplique cambios de modelos automáticamente
+    const isProduction = process.env.NODE_ENV === 'production';
     console.log('🔄 Sincronizando modelos con PostgreSQL...');
     await syncDatabase({
-      alter: true,
+      alter: !isProduction,
       force: false
     });
+    if (isProduction) {
+      console.log('🔒 DB: modo seguro (sin ALTER automático en producción)');
+    }
     console.log('✅ Modelos sincronizados');
 
     // Sembrar datos iniciales si es necesario
