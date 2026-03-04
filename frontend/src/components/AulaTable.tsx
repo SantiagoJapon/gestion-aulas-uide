@@ -655,10 +655,10 @@ const AulaTable: React.FC = () => {
 
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                Carreras con Prioridad
+                Carreras con Prioridad (MULTISELECCIÓN)
               </label>
               <p className="text-[10px] text-muted-foreground ml-1 -mt-1">
-                Las carreras elegidas tendrán prioridad en la asignación automática. Las demás carreras también podrán usar el espacio si hay disponibilidad.
+                Haz clic en cada carrera para activarla o desactivarla. Las seleccionadas tendrán prioridad.
               </p>
 
               <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-2xl border border-dashed border-border min-h-[60px]">
