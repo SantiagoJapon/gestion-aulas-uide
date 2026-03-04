@@ -95,7 +95,7 @@ const AulaTable: React.FC = () => {
       if (!formData.capacidad || parseInt(formData.capacidad) < 1) { alert('La capacidad debe ser al menos 1'); return; }
       if (!formData.tipo) { alert('Selecciona la categoría del espacio'); return; }
 
-      // Parsear equipamiento — enviar null si está vacío (JSONB no acepta {})
+      // Parsear equipamiento
       let equipamientoObj: any = null;
       if (formData.equipamiento && formData.equipamiento.trim()) {
         try {
@@ -105,15 +105,26 @@ const AulaTable: React.FC = () => {
         }
       }
 
+      // Procesar restricción_carrera como JSON string si hay múltiples seleccionadas
+      let restriccionCarreraVal = null;
+      if (formData.restriccion_carrera) {
+        if (formData.restriccion_carrera.includes('AUDITORIO_INSTITUCIONAL')) {
+          restriccionCarreraVal = 'AUDITORIO_INSTITUCIONAL';
+        } else {
+          // Si es un string con comas (desde el modal), guardarlo como tal o como JSON
+          const carrers = formData.restriccion_carrera.split(',').map(c => c.trim()).filter(c => c);
+          restriccionCarreraVal = carrers.length > 1 ? JSON.stringify(carrers) : (carrers[0] || null);
+        }
+      }
+
       const data: any = {
         codigo: formData.codigo.trim().toUpperCase(),
         nombre: formData.nombre.trim(),
         capacidad: parseInt(formData.capacidad),
         tipo: formData.tipo,
         equipamiento: equipamientoObj,
-        restriccion_carrera: formData.restriccion_carrera || null,
-        // Prioritaria si tiene carrera asignada (incluyendo auditorio institucional)
-        es_prioritaria: !!formData.restriccion_carrera,
+        restriccion_carrera: restriccionCarreraVal,
+        es_prioritaria: !!restriccionCarreraVal,
         estado: formData.estado,
         notas: formData.notas?.trim() || null,
       };
@@ -155,14 +166,25 @@ const AulaTable: React.FC = () => {
 
   const openEdit = (aula: Aula) => {
     setCurrentAula(aula);
+
+    // Normalizar restriccion_carrera desde la BD (puede ser JSON string o string simple)
+    let restriccionVal = aula.restriccion_carrera || '';
+    if (restriccionVal.startsWith('[') && restriccionVal.endsWith(']')) {
+      try {
+        const arr = JSON.parse(restriccionVal);
+        restriccionVal = Array.isArray(arr) ? arr.join(', ') : arr;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
     setFormData({
       codigo: aula.codigo || '',
       nombre: aula.nombre,
       capacidad: aula.capacidad.toString(),
       tipo: (aula.tipo || 'AULA').toUpperCase(),
       equipamiento: aula.equipamiento ? JSON.stringify(aula.equipamiento, null, 2) : '',
-      restriccion_carrera: aula.restriccion_carrera || '',
-      // Normalizar estado a minúsculas para coincidir con la BD
+      restriccion_carrera: restriccionVal,
       estado: (aula.estado || 'disponible').toLowerCase() as any,
       notas: aula.notas || '',
     });
@@ -406,20 +428,32 @@ const AulaTable: React.FC = () => {
                     </div>
                   </div>
 
-                  {(aula.es_prioritaria || aula.restriccion_carrera) && (
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
-                      {aula.es_prioritaria && (
-                        <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[9px] font-black rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-center gap-1 uppercase tracking-tighter">
-                          <span className="material-symbols-outlined text-[12px] font-bold">star</span> Prioritaria
-                        </span>
-                      )}
-                      {aula.restriccion_carrera && (
-                        <span className="px-2 py-1 bg-uide-blue/5 dark:bg-uide-blue/10 text-uide-blue text-[9px] font-black rounded-lg border border-uide-blue/10 flex items-center gap-1 uppercase tracking-tighter">
-                          <span className="material-symbols-outlined text-[12px] font-bold">school</span> {aula.restriccion_carrera}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                    {aula.es_prioritaria && (
+                      <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[9px] font-black rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-center gap-1 uppercase tracking-tighter">
+                        <span className="material-symbols-outlined text-[12px] font-bold">star</span> Prioridad
+                      </span>
+                    )}
+                    {aula.restriccion_carrera && (
+                      (() => {
+                        let carrers: string[] = [];
+                        try {
+                          if (aula.restriccion_carrera.startsWith('[') && aula.restriccion_carrera.endsWith(']')) {
+                            carrers = JSON.parse(aula.restriccion_carrera);
+                          } else {
+                            carrers = aula.restriccion_carrera.split(',').map(s => s.trim());
+                          }
+                        } catch {
+                          carrers = [aula.restriccion_carrera];
+                        }
+                        return carrers.map((c, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-uide-blue/5 dark:bg-uide-blue/10 text-uide-blue text-[9px] font-black rounded-lg border border-uide-blue/10 flex items-center gap-1 uppercase tracking-tighter">
+                            <span className="material-symbols-outlined text-[12px] font-bold">school</span> {c === 'AUDITORIO_INSTITUCIONAL' ? 'INSTITUCIONAL' : c}
+                          </span>
+                        ));
+                      })()
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -449,12 +483,28 @@ const AulaTable: React.FC = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-900 dark:text-white text-sm">{aula.nombre}</div>
-                          <div className="flex gap-2 mt-1.5">
+                          <div className="flex flex-wrap gap-2 mt-1.5">
                             {aula.es_prioritaria && (
                               <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[9px] font-black rounded border border-amber-100 uppercase">Prioritaria</span>
                             )}
                             {aula.restriccion_carrera && (
-                              <span className="px-1.5 py-0.5 bg-uide-blue/5 text-uide-blue text-[9px] font-black rounded border border-uide-blue/10 uppercase">{aula.restriccion_carrera}</span>
+                              (() => {
+                                let carrers: string[] = [];
+                                try {
+                                  if (aula.restriccion_carrera.startsWith('[') && aula.restriccion_carrera.endsWith(']')) {
+                                    carrers = JSON.parse(aula.restriccion_carrera);
+                                  } else {
+                                    carrers = aula.restriccion_carrera.split(',').map(s => s.trim());
+                                  }
+                                } catch {
+                                  carrers = [aula.restriccion_carrera];
+                                }
+                                return carrers.map((c, idx) => (
+                                  <span key={idx} className="px-1.5 py-0.5 bg-uide-blue/5 text-uide-blue text-[9px] font-black rounded border border-uide-blue/10 uppercase">
+                                    {c === 'AUDITORIO_INSTITUCIONAL' ? 'INSTITUCIONAL' : c}
+                                  </span>
+                                ));
+                              })()
                             )}
                           </div>
                         </td>
@@ -605,37 +655,71 @@ const AulaTable: React.FC = () => {
 
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                Carrera Asignada
+                Carreras con Prioridad
               </label>
               <p className="text-[10px] text-muted-foreground ml-1 -mt-1">
-                La carrera elegida tendrá prioridad en la asignación automática, pero cualquier otra carrera también puede usar el espacio si hay disponibilidad.
-                Selecciona «Auditorio institucional» para excluirlo de la distribución de clases.
+                Las carreras elegidas tendrán prioridad en la asignación automática. Las demás carreras también podrán usar el espacio si hay disponibilidad.
               </p>
-              <select
-                value={formData.restriccion_carrera}
-                onChange={(e) => setFormData({ ...formData, restriccion_carrera: e.target.value })}
-                className="w-full border border-border rounded-xl px-4 py-3 bg-muted/50 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-              >
-                <option value="">🌐 Uso general (sin restricción)</option>
-                {carreras.length === 0 && (
-                  <option disabled>— Cargando carreras... —</option>
-                )}
-                {carreras.map((c) => (
-                  <option key={c.id} value={c.carrera}>🎓 {c.carrera}</option>
-                ))}
-                <option disabled>──────────────</option>
-                <option value="AUDITORIO_INSTITUCIONAL">🏛️ Auditorio (uso institucional, sin clases)</option>
-              </select>
+
+              <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-2xl border border-dashed border-border min-h-[60px]">
+                {/* Opción Auditorio (Exclusivo) */}
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, restriccion_carrera: formData.restriccion_carrera === 'AUDITORIO_INSTITUCIONAL' ? '' : 'AUDITORIO_INSTITUCIONAL' })}
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 border ${formData.restriccion_carrera === 'AUDITORIO_INSTITUCIONAL'
+                    ? 'bg-rose-500 text-white border-rose-600'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-rose-300 hover:text-rose-500'}`}
+                >
+                  🏛️ Auditorio Institucional (Excluir)
+                </button>
+
+                {/* Listado de Carreras como Chips */}
+                {formData.restriccion_carrera !== 'AUDITORIO_INSTITUCIONAL' && carreras.map(c => {
+                  const carrerasSeleccionadas = formData.restriccion_carrera.split(',').map(s => s.trim()).filter(s => s);
+                  const isSelected = carrerasSeleccionadas.includes(c.carrera);
+
+                  const toggleCarrera = () => {
+                    let nuevaLista;
+                    if (isSelected) {
+                      nuevaLista = carrerasSeleccionadas.filter(s => s !== c.carrera);
+                    } else {
+                      nuevaLista = [...carrerasSeleccionadas, c.carrera];
+                    }
+                    setFormData({ ...formData, restriccion_carrera: nuevaLista.join(', ') });
+                  };
+
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={toggleCarrera}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 border ${isSelected
+                        ? 'bg-uide-blue text-white border-uide-blue shadow-sm'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-primary/30 hover:text-primary'}`}
+                    >
+                      🎓 {c.carrera}
+                      {isSelected && <span className="material-symbols-outlined text-[12px] font-bold">close</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
               {formData.restriccion_carrera === 'AUDITORIO_INSTITUCIONAL' && (
-                <p className="text-[10px] text-blue-600 font-bold ml-1 flex items-center gap-1">
+                <p className="text-[10px] text-rose-600 font-bold ml-1 flex items-center gap-1 animate-in zoom-in-95">
                   <span className="material-symbols-outlined text-[12px]">info</span>
-                  Este espacio quedará <strong>excluido de la distribución automática de clases</strong>. Solo se podrá reservar manualmente.
+                  Este espacio quedará <strong>excluido de la distribución automática de clases</strong>.
                 </p>
               )}
               {formData.restriccion_carrera && formData.restriccion_carrera !== 'AUDITORIO_INSTITUCIONAL' && (
-                <p className="text-[10px] text-amber-600 font-bold ml-1 flex items-center gap-1">
+                <p className="text-[10px] text-amber-600 font-bold ml-1 flex items-center gap-1 animate-in slide-in-from-left-2">
                   <span className="material-symbols-outlined text-[12px]">star</span>
-                  Prioridad para <strong>{formData.restriccion_carrera}</strong>. Las demás carreras también pueden usar este espacio.
+                  Prioridad asignada a las carreras marcadas. Las demás pueden usar el espacio si está libre.
+                </p>
+              )}
+              {!formData.restriccion_carrera && (
+                <p className="text-[10px] text-emerald-600 font-bold ml-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">public</span>
+                  Espacio de <strong>uso general</strong> para cualquier carrera sin preferencias.
                 </p>
               )}
             </div>

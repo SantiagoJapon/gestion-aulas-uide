@@ -16,10 +16,16 @@ const { normalizarTexto } = require('../utils/textUtils');
 
 // Excluye de la distribución automática solo el Auditorio
 // (tipo AUDITORIO o restriccion_carrera = 'AUDITORIO_INSTITUCIONAL')
+// Excluye de la distribución automática solo el Auditorio
+// (tipo AUDITORIO o restriccion_carrera incluye 'AUDITORIO_INSTITUCIONAL')
 function aulaExcluidaDeDistribucion(aula) {
-  const tipo = normalizarTexto(aula.tipo || '');
-  const restriccion = normalizarTexto(aula.restriccion_carrera || '');
-  return tipo === 'auditorio' || restriccion === 'auditorio_institucional';
+  const tipo = (aula.tipo || '').toLowerCase();
+  const restriccion = (aula.restriccion_carrera || '').toLowerCase();
+
+  const esAuditorio = tipo === 'auditorio' || tipo === 'sala_magna';
+  const esInstitucional = restriccion.includes('auditorio_institucional');
+
+  return esAuditorio || esInstitucional;
 }
 
 
@@ -236,13 +242,21 @@ class DistribucionService {
       // Menor score = mejor asignación.
       const diferenciaCapacidad = Math.abs(aula.capacidad - numEstudiantes);
 
-      // Bonus de prioridad: el aula tiene una carrera preferente en la BD
-      // y la clase pertenece a esa carrera → se favorece esta asignación.
+      // Bonus de prioridad: el aula tiene una(s) carrera(s) preferente(s) en la BD
+      // y la clase pertenece a alguna de esas carreras → se favorece esta asignación.
       let bonusPrioridad = 0;
       if (aula.es_prioritaria && aula.restriccion_carrera) {
-        const restriccionNorm = normalizarTexto(aula.restriccion_carrera);
-        if (carreraNorm.includes(restriccionNorm) || restriccionNorm.includes(carreraNorm)) {
-          bonusPrioridad = 1000;
+        // Usar el método del modelo para mayor precisión
+        if (typeof aula.tienePrioridad === 'function') {
+          if (aula.tienePrioridad(clase.carrera)) {
+            bonusPrioridad = 1000;
+          }
+        } else {
+          // Fallback por si acaso no es una instancia de modelo completa
+          const restriccionNorm = normalizarTexto(aula.restriccion_carrera);
+          if (restriccionNorm.includes(carreraNorm)) {
+            bonusPrioridad = 1000;
+          }
         }
       }
 
