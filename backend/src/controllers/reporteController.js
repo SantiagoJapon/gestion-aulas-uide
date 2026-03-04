@@ -177,6 +177,28 @@ class ReporteController {
             res.status(500).json({ success: false, error: 'Error al procesar la descarga' });
         }
     }
+
+    /**
+     * Genera y descarga el Excel de la distribución actual (en vivo)
+     */
+    async descargarExcelActual(req, res) {
+        try {
+            const { carrera_id: carreraIdQuery } = req.query;
+            const carrera_id = await resolverCarreraId(req.usuario, carreraIdQuery);
+
+            const buffer = await ReporteService.generarExcel({ carrera_id });
+
+            const fecha = new Date().toISOString().split('T')[0];
+            const filename = `distribucion_${carrera_id || 'total'}_${fecha}.xlsx`;
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+            res.send(buffer);
+        } catch (error) {
+            console.error('Error al descargar Excel:', error);
+            res.status(500).json({ success: false, error: 'Error al generar Excel' });
+        }
+    }
 }
 
 module.exports = new ReporteController();

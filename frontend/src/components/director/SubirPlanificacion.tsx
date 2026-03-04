@@ -250,6 +250,43 @@ export default function SubirPlanificacion() {
           )}
         </div>
 
+        {/* Alerta datos docentes */}
+        <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-xl border-2 border-amber-300 dark:border-amber-700">
+          <h3 className="font-bold mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-400">
+            <AlertCircle size={20} />
+            Incluye los datos de contacto de los docentes en el Excel
+          </h3>
+          <p className="text-sm text-amber-700 dark:text-amber-500 mb-3">
+            Para que el sistema pueda <span className="font-bold">crear las cuentas de acceso automáticamente</span> y enviar las credenciales por correo y WhatsApp, la hoja de docentes debe incluir las siguientes columnas:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="flex items-center gap-2 bg-white dark:bg-amber-900/20 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-700">
+              <span className="text-amber-600 font-black text-lg">@</span>
+              <div>
+                <p className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wide">Correo electrónico</p>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500">Para envío de credenciales</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-white dark:bg-amber-900/20 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-700">
+              <span className="text-amber-600 font-black text-lg">📱</span>
+              <div>
+                <p className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wide">Número de teléfono</p>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500">Para notificación por WhatsApp</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-white dark:bg-amber-900/20 rounded-lg px-3 py-2 border border-amber-200 dark:border-amber-700">
+              <span className="text-amber-600 font-black text-lg">#</span>
+              <div>
+                <p className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-wide">Cédula</p>
+                <p className="text-[10px] text-amber-600 dark:text-amber-500">Como contraseña inicial de acceso</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-amber-600 dark:text-amber-500 mt-3 italic">
+            Sin estos datos, las cuentas deberán crearse manualmente y no se podrán enviar notificaciones automáticas.
+          </p>
+        </div>
+
         {/* Información y Ayuda */}
         <div className="mt-4 p-4 bg-uide-blue/5 dark:bg-uide-blue/10 rounded-xl border border-uide-blue/10">
           <h3 className="font-semibold mb-2 flex items-center gap-2 text-uide-blue">

@@ -7,6 +7,7 @@ import DirectorManagementModal from './DirectorManagementModal';
 interface CarreraData {
     id: number;
     nombre_carrera: string;
+    facultad?: string | null;
     estado: string;
     director_nombre?: string | null;
     director_email?: string | null;
@@ -87,17 +88,6 @@ export default function DirectorAssignmentView() {
         return 'school'; // default
     };
 
-    // Helper to determining Faculty (Mocked logic)
-    const getFacultyName = (name: string) => {
-        const n = name.toLowerCase();
-        if (n.includes('ingenier') || n.includes('tic')) return 'Facultad de Ingeniería';
-        if (n.includes('medic') || n.includes('salud') || n.includes('nutricion')) return 'Facultad de Ciencias de la Salud';
-        if (n.includes('arquitect')) return 'Facultad de Arquitectura';
-        if (n.includes('admin') || n.includes('negocio') || n.includes('marketing')) return 'Business School';
-        if (n.includes('derecho')) return 'Facultad de Jurisprudencia';
-        if (n.includes('gastronom') || n.includes('turismo')) return 'Facultad de Hospitalidad';
-        return 'UIDE General';
-    };
 
     // Helper to get initials
     const getInitials = (name?: string | null) => {
@@ -230,8 +220,8 @@ export default function DirectorAssignmentView() {
                                         <h4 className="text-sm md:text-base font-bold mb-1 text-slate-900 dark:text-white line-clamp-2 md:h-12 group-hover:text-uide-blue transition-colors">
                                             {carrera.nombre_carrera}
                                         </h4>
-                                        <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 mb-4 md:mb-6 font-medium line-clamp-1">
-                                            {getFacultyName(carrera.nombre_carrera)}
+                                        <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 mb-4 md:mb-6 font-medium line-clamp-1 h-4">
+                                            {carrera.facultad || ''}
                                         </p>
 
                                         {isVacant ? (
@@ -338,8 +328,8 @@ export default function DirectorAssignmentView() {
                                             key={director.id}
                                             onClick={() => setSelectedDirectorId(director.id)}
                                             className={`p-3.5 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${isSelected
-                                                    ? 'bg-uide-blue/5 border-uide-blue ring-2 ring-uide-blue/20'
-                                                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300'
+                                                ? 'bg-uide-blue/5 border-uide-blue ring-2 ring-uide-blue/20'
+                                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300'
                                                 }`}
                                         >
                                             <div className={`size-10 rounded-full flex items-center justify-center text-xs font-black text-white shadow-sm flex-shrink-0 ${isSelected ? 'bg-uide-blue' : 'bg-slate-400'}`}>

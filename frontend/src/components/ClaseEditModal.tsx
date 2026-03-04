@@ -12,10 +12,12 @@ interface ClaseEditModalProps {
 const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose, onUpdate }) => {
     const [formData, setFormData] = useState({
         materia: '',
+        ciclo: '',
+        paralelo: '',
+        docente: '',
         dia: '',
         hora_inicio: '',
         hora_fin: '',
-        docente: '',
         aula_asignada: '',
         num_estudiantes: 0
     });
@@ -28,10 +30,12 @@ const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose,
         if (clase) {
             setFormData({
                 materia: clase.materia || '',
+                ciclo: clase.ciclo || '',
+                paralelo: clase.paralelo || '',
+                docente: clase.docente || '',
                 dia: clase.dia || '',
                 hora_inicio: clase.hora_inicio || '',
                 hora_fin: clase.hora_fin || '',
-                docente: clase.docente || '',
                 aula_asignada: clase.aula_asignada || '',
                 num_estudiantes: clase.num_estudiantes || 0
             });
@@ -116,6 +120,40 @@ const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose,
                                 onChange={e => setFormData({ ...formData, materia: e.target.value })}
                                 className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
                             />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Docente</label>
+                            <input
+                                type="text"
+                                value={formData.docente}
+                                onChange={e => setFormData({ ...formData, docente: e.target.value })}
+                                placeholder="Nombre del docente"
+                                className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Ciclo / Nivel</label>
+                                <input
+                                    type="text"
+                                    value={formData.ciclo}
+                                    onChange={e => setFormData({ ...formData, ciclo: e.target.value })}
+                                    placeholder="Ej: Primero, 1"
+                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Paralelo</label>
+                                <input
+                                    type="text"
+                                    value={formData.paralelo}
+                                    onChange={e => setFormData({ ...formData, paralelo: e.target.value })}
+                                    placeholder="Ej: A, B"
+                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none"
+                                />
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">

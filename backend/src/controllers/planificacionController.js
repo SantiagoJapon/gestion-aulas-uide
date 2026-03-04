@@ -84,16 +84,45 @@ exports.subirPlanificacion = async (req, res) => {
     console.log('📁 Procesando planificación de carrera:', nombreCarrera);
 
     // ==========================================
-    // 📊 PARSEAR EXCEL CON NUEVO SERVICIO INTELIGENTE
+    // 📊 PARSEAR EXCEL (Estrategia: n8n > Local > IA)
     // ==========================================
-    let parseResult = processExcel(req.file.buffer);
+    let parseResult = null;
 
-    // ANALISIS DE CALIDAD - Si el parser local da resultados sospechosos, intentar con IA (OpenAI)
+    // 1. Intentar con n8n Maestro (Automatización centralizada)
+    try {
+      console.log('🤖 Solicitando procesamiento a n8n Maestro...');
+      const n8nResponse = await N8nService.processPlanificacion({
+        carrera_id,
+        archivo_base64: req.file.buffer.toString('base64'),
+        nombre_archivo: req.file.originalname,
+        carrera_nombre: nombreCarrera
+      });
+
+      if (n8nResponse && n8nResponse.success && n8nResponse.clases && n8nResponse.clases.length > 0) {
+        parseResult = {
+          clases: n8nResponse.clases,
+          hojaUsada: 'n8n Maestro',
+          totalHojas: n8nResponse.total_filas_excel ? 1 : 0,
+          debug: { method: 'n8n-automation', columns: n8nResponse.columnas_detectadas }
+        };
+        console.log(`✅ n8n Maestro extrajo ${parseResult.clases.length} clases.`);
+      }
+    } catch (n8nError) {
+      console.warn('⚠️ n8n Maestro no respondió o dio error, saltando a parser local...');
+    }
+
+    // 2. Fallback: Parser local del backend (si n8n falló o no devolvió nada)
+    if (!parseResult) {
+      console.log('📄 Usando parser local de respaldo...');
+      parseResult = processExcel(req.file.buffer);
+    }
+
+    // 3. Segundo Fallback: IA Directa si el parser local da resultados sospechosos
     const uniqueMaterias = new Set(parseResult.clases.map(c => c.materia)).size;
-    const isSuspicious = parseResult.clases.length > 5 && uniqueMaterias < (parseResult.clases.length * 0.1); // Menos del 10% de materias únicas es raro
+    const isSuspicious = parseResult.clases.length > 5 && uniqueMaterias < (parseResult.clases.length * 0.1);
 
-    if ((parseResult.clases.length === 0 || isSuspicious) && esOpenAIConfigurado()) {
-      console.log('🤖 Parser local con resultados insuficientes o sospechosos. Reintentando con IA...');
+    if ((parseResult.clases.length === 0 || isSuspicious) && esOpenAIConfigurado() && (!parseResult.debug || parseResult.debug.method !== 'n8n-automation')) {
+      console.log('🤖 Resultados locales sospechosos. Reintentando con IA Directa...');
       try {
         const XLSX = require('xlsx');
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
@@ -106,12 +135,11 @@ exports.subirPlanificacion = async (req, res) => {
             clases: iaResult.clases,
             hojaUsada: workbook.SheetNames[0] + ' (IA)',
             totalHojas: workbook.SheetNames.length,
-            debug: { method: 'openai', columns: iaResult.columnas_detectadas }
+            debug: { method: 'openai-direct', columns: iaResult.columnas_detectadas }
           };
         }
       } catch (iaError) {
-        console.error('❌ Error en análisis de IA:', iaError.message);
-        // Continuamos con el resultado del parser local si la IA falla
+        console.error('❌ Error en análisis de IA Directa:', iaError.message);
       }
     }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { reporteService, ReporteHistorial, carreraService, Carrera } from '../services/api';
 import {
     FaFilePdf,
+    FaFileExcel,
     FaDownload,
     FaTrash,
     FaChartBar,
@@ -83,6 +84,15 @@ export const ReporteEjecutivo = ({ carreraPreseleccionada }: ReporteEjecutivoPro
             alert('Error al generar el reporte');
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleExportarExcel = async () => {
+        try {
+            await reporteService.descargarExcelActual(filtros.carrera_id || undefined);
+        } catch (error) {
+            console.error('Error al exportar Excel:', error);
+            alert('Error al exportar los datos a Excel');
         }
     };
 
@@ -222,6 +232,14 @@ export const ReporteEjecutivo = ({ carreraPreseleccionada }: ReporteEjecutivoPro
                                         <span>Generar PDF Ejecutivo</span>
                                     </>
                                 )}
+                            </button>
+
+                            <button
+                                onClick={handleExportarExcel}
+                                className="w-full mt-2 flex items-center justify-center gap-3 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                            >
+                                <FaFileExcel size={18} />
+                                <span>Exportar Distribución (Excel)</span>
                             </button>
                         </div>
                     </div>

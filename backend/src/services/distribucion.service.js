@@ -134,7 +134,7 @@ class DistribucionService {
           exitosas,
           fallidas,
           sobrecupos,
-          eficiencia: ((exitosas / todasLasClases.length) * 100).toFixed(1) + '%'
+          eficiencia: todasLasClases.length > 0 ? ((exitosas / todasLasClases.length) * 100).toFixed(1) + '%' : '0.0%'
         }
       };
 
@@ -217,15 +217,24 @@ class DistribucionService {
     }
 
     for (const aula of aulasParaBuscar) {
+      const numEstudiantes = clase.num_estudiantes || 1;
+
       // Capacidad mínima en modo estricto
-      if (estrictoCapacidad && aula.capacidad < (clase.num_estudiantes || 1)) continue;
+      if (estrictoCapacidad && aula.capacidad < numEstudiantes) continue;
+
+      // Capacidad mínima INCLUSO en modo NO estricto (Seguridad: no más del 25% de sobrecupo)
+      // Esto evita que clases de 60 terminen en aulas de 20 (300% sobrecupo)
+      const sobrecupoMaximoPermitido = 1.25; // 25% de flexibilidad
+      if (!estrictoCapacidad && (aula.capacidad * sobrecupoMaximoPermitido) < numEstudiantes) {
+        continue;
+      }
 
       // Verificar disponibilidad en el horario
       if (!this.aulaDisponibleEnHorario(aula.codigo, clase, aulasOcupadas)) continue;
 
       // ── SCORING ──────────────────────────────────────────────────────────
       // Menor score = mejor asignación.
-      const diferenciaCapacidad = Math.abs(aula.capacidad - (clase.num_estudiantes || 1));
+      const diferenciaCapacidad = Math.abs(aula.capacidad - numEstudiantes);
 
       // Bonus de prioridad: el aula tiene una carrera preferente en la BD
       // y la clase pertenece a esa carrera → se favorece esta asignación.
@@ -248,7 +257,7 @@ class DistribucionService {
       if (score < menorScore) {
         menorScore = score;
         mejorAula = aula;
-        isOvercapacity = aula.capacidad < (clase.num_estudiantes || 1);
+        isOvercapacity = aula.capacidad < numEstudiantes;
       }
     }
 

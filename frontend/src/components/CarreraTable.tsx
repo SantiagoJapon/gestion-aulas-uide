@@ -9,10 +9,12 @@ const CarreraTable: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [includeInactive, setIncludeInactive] = useState(true);
   const [newCarrera, setNewCarrera] = useState('');
+  const [newFacultad, setNewFacultad] = useState('');
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({ total: 0, activas: 0 });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingFacultad, setEditingFacultad] = useState('');
   const [adding, setAdding] = useState(false);
 
   const loadCarreras = async () => {
@@ -40,9 +42,10 @@ const CarreraTable: React.FC = () => {
     try {
       setAdding(true);
       setError(null);
-      const result = await carreraService.createCarrera(value);
+      const result = await carreraService.createCarrera(value, newFacultad.trim());
       if (result.success) {
         setNewCarrera('');
+        setNewFacultad('');
         await loadCarreras();
         window.dispatchEvent(new CustomEvent('carrera-modified'));
       }
@@ -82,22 +85,28 @@ const CarreraTable: React.FC = () => {
   const handleEditStart = (carrera: Carrera) => {
     setEditingId(carrera.id);
     setEditingValue(carrera.carrera);
+    setEditingFacultad(carrera.facultad || '');
   };
 
   const handleEditCancel = () => {
     setEditingId(null);
     setEditingValue('');
+    setEditingFacultad('');
   };
 
   const handleEditSave = async (id: number) => {
     const value = editingValue.trim();
     if (!value) return;
     try {
-      const res = await carreraService.updateCarrera(id, { carrera: value });
+      const res = await carreraService.updateCarrera(id, {
+        carrera: value,
+        facultad: editingFacultad.trim() || null
+      });
       if (res.success) {
         setEditingId(null);
         setEditingValue('');
-        loadCarreras();
+        setEditingFacultad('');
+        await loadCarreras();
         window.dispatchEvent(new CustomEvent('carrera-modified'));
       }
     } catch (err: any) {
@@ -135,6 +144,14 @@ const CarreraTable: React.FC = () => {
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               className="flex-1 border border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-3.5 bg-white dark:bg-slate-900 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none shadow-sm placeholder:text-slate-400"
               placeholder="Nombre de la nueva carrera..."
+            />
+            <input
+              type="text"
+              value={newFacultad}
+              onChange={(e) => setNewFacultad(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              className="flex-1 border border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-3.5 bg-white dark:bg-slate-900 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none shadow-sm placeholder:text-slate-400"
+              placeholder="Facultad (opcional)..."
             />
             <button
               onClick={handleAdd}
@@ -204,17 +221,30 @@ const CarreraTable: React.FC = () => {
               <div key={carrera.id} className="p-4 sm:p-6 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
                 <div className="flex-1 min-w-0 pr-4">
                   {editingId === carrera.id ? (
-                    <div className="flex gap-2 items-center animate-in slide-in-from-left-2">
-                      <input
-                        type="text"
-                        value={editingValue}
-                        onChange={(e) => setEditingValue(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleEditSave(carrera.id)}
-                        autoFocus
-                        className="w-full border border-primary/30 rounded-xl px-4 py-2.5 bg-white dark:bg-slate-900 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none"
-                      />
-                      <button onClick={() => handleEditSave(carrera.id)} className="size-10 flex items-center justify-center bg-emerald-500 text-white rounded-xl hover:scale-105 active:scale-95 transition-transform"><FaCheck /></button>
-                      <button onClick={handleEditCancel} className="size-10 flex items-center justify-center bg-slate-200 text-slate-600 rounded-xl hover:scale-105 active:scale-95 transition-transform"><FaTimes /></button>
+                    <div className="flex flex-col gap-2 w-full animate-in slide-in-from-left-2">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleEditSave(carrera.id)}
+                          autoFocus
+                          className="flex-1 border border-primary/30 rounded-xl px-4 py-2 bg-white dark:bg-slate-900 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none"
+                          placeholder="Nombre de carrera"
+                        />
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={editingFacultad}
+                          onChange={(e) => setEditingFacultad(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleEditSave(carrera.id)}
+                          className="flex-1 border border-primary/30 rounded-xl px-4 py-2 bg-white dark:bg-slate-900 text-sm font-medium focus:ring-4 focus:ring-primary/10 outline-none"
+                          placeholder="Facultad"
+                        />
+                        <button onClick={() => handleEditSave(carrera.id)} className="size-9 flex items-center justify-center bg-emerald-500 text-white rounded-xl hover:scale-105 active:scale-95 transition-transform"><FaCheck /></button>
+                        <button onClick={handleEditCancel} className="size-9 flex items-center justify-center bg-slate-200 text-slate-600 rounded-xl hover:scale-105 active:scale-95 transition-transform"><FaTimes /></button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-4">
@@ -227,6 +257,11 @@ const CarreraTable: React.FC = () => {
                         <p className={`text-sm font-bold tracking-tight transition-colors ${carrera.activa ? 'text-slate-900 dark:text-white' : 'text-slate-400 line-through decoration-2 opacity-60'}`}>
                           {carrera.carrera}
                         </p>
+                        {carrera.facultad && (
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {carrera.facultad}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-[9px] font-black uppercase tracking-widest ${carrera.activa ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {carrera.activa ? 'Vigente' : 'Inactiva'}

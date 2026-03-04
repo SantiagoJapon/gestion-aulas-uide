@@ -238,7 +238,7 @@ const updateAula = async (req, res) => {
 };
 
 /**
- * @desc    Eliminar/Desactivar aula (cambia estado a 'no_disponible')
+ * @desc    Eliminar aula permanentemente
  * @route   DELETE /api/aulas/:id
  * @access  Private (solo admin)
  */
@@ -253,35 +253,38 @@ const deleteAula = async (req, res) => {
       });
     }
 
-    // Verificar si tiene clases asignadas
-    const clasesAsignadas = await sequelize.query(
-      'SELECT COUNT(*) as total FROM clases WHERE aula_sugerida = :codigo',
-      {
-        replacements: { codigo: aula.codigo },
-        type: QueryTypes.SELECT
-      }
+    // Verificar si tiene clases actualmente asignadas (en distribución o en clases)
+    const [clasesActivas] = await sequelize.query(
+      `SELECT COUNT(*) as total FROM clases
+       WHERE aula_asignada = :codigo OR aula_sugerida = :codigo`,
+      { replacements: { codigo: aula.codigo }, type: QueryTypes.SELECT }
     );
 
-    if (clasesAsignadas && clasesAsignadas[0] && parseInt(clasesAsignadas[0].total) > 0) {
+    if (parseInt(clasesActivas.total) > 0) {
       return res.status(400).json({
         success: false,
         error: 'No se puede eliminar el aula',
-        mensaje: `El aula tiene ${clasesAsignadas[0].total} clases asignadas. Debes reasignar las clases antes de eliminarla.`
+        mensaje: `El aula tiene ${clasesActivas.total} clase(s) asignada(s). Limpia la distribución antes de eliminarla.`
       });
     }
 
-    // En lugar de eliminar, cambiamos el estado a 'no_disponible'
-    await aula.update({ estado: 'no_disponible' });
+    // Eliminar registros relacionados en distribucion primero
+    await sequelize.query(
+      'DELETE FROM distribucion WHERE aula_id = :aulaId',
+      { replacements: { aulaId: aula.id }, type: QueryTypes.DELETE }
+    );
+
+    await aula.destroy();
 
     res.json({
       success: true,
-      message: 'Aula desactivada correctamente'
+      message: 'Aula eliminada correctamente'
     });
   } catch (error) {
-    console.error('Error al desactivar aula:', error);
+    console.error('Error al eliminar aula:', error);
     res.status(500).json({
       success: false,
-      error: 'Error al desactivar el aula',
+      error: 'Error al eliminar el aula',
       message: error.message
     });
   }

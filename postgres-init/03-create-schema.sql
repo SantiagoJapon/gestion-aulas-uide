@@ -87,19 +87,48 @@ CREATE TABLE IF NOT EXISTS distribucion (
   fecha_asignacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla de reservas
+-- Tabla de reservas (esquema actual — compatible con el modelo Sequelize)
+-- NOTA: Si la BD ya tiene la tabla con esquema viejo, ejecutar:
+--   docker exec -it gestion_aulas_backend node /app/scripts/migrate-reservas.js
 CREATE TABLE IF NOT EXISTS reservas (
   id SERIAL PRIMARY KEY,
-  aula_id INT REFERENCES aulas(id),
-  dia VARCHAR(20),
-  hora_inicio TIME,
-  hora_fin TIME,
-  telegram_id BIGINT,
-  cedula VARCHAR(20),
-  usuario_nombre VARCHAR(100),
-  motivo VARCHAR(255),
-  estado VARCHAR(20) DEFAULT 'activa',
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  aula_codigo VARCHAR(50),
+  espacio_codigo VARCHAR(50),
+  dia VARCHAR(20) NOT NULL,
+  fecha DATE,
+  hora_inicio VARCHAR(10) NOT NULL,
+  hora_fin VARCHAR(10) NOT NULL,
+  motivo TEXT,
+  estado VARCHAR(50) DEFAULT 'activa',
+  usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+  estudiante_id INT REFERENCES estudiantes(id) ON DELETE SET NULL,
+  telefono VARCHAR(20),
+  tipo_espacio VARCHAR(50) DEFAULT 'aula',
+  es_grupal BOOLEAN DEFAULT false,
+  num_personas INT DEFAULT 1,
+  rol_usuario VARCHAR(50),
+  solicitante_nombre VARCHAR(100),
+  solicitante_cedula VARCHAR(20),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reservas_aula_codigo ON reservas(aula_codigo);
+CREATE INDEX IF NOT EXISTS idx_reservas_fecha ON reservas(fecha);
+CREATE INDEX IF NOT EXISTS idx_reservas_estado ON reservas(estado);
+CREATE INDEX IF NOT EXISTS idx_reservas_usuario_id ON reservas(usuario_id);
+
+-- Tabla de espacios (biblioteca, salas de estudio, cubículos, etc.)
+CREATE TABLE IF NOT EXISTS espacios (
+  id SERIAL PRIMARY KEY,
+  codigo VARCHAR(20) UNIQUE NOT NULL,
+  nombre VARCHAR(200) NOT NULL,
+  tipo VARCHAR(50) NOT NULL,
+  capacidad INT NOT NULL,
+  estado VARCHAR(50) DEFAULT 'DISPONIBLE',
+  descripcion TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Tabla de configuración del sistema

@@ -77,6 +77,20 @@ services:
       EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
+      # SMTP General (Gmail) — para envío de credenciales
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # SMTP Institucional UIDE (opcional — si se configura, lo usa para @uide.edu.ec)
+      SMTP_UIDE_HOST: ${SMTP_UIDE_HOST:-}
+      SMTP_UIDE_PORT: ${SMTP_UIDE_PORT:-587}
+      SMTP_UIDE_SECURE: ${SMTP_UIDE_SECURE:-false}
+      SMTP_UIDE_USER: ${SMTP_UIDE_USER:-}
+      SMTP_UIDE_PASS: ${SMTP_UIDE_PASS:-}
+      SMTP_UIDE_FROM: ${SMTP_UIDE_FROM:-}
     volumes:
       - uploads_data:/app/uploads
     depends_on:

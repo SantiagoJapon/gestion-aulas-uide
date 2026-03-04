@@ -98,7 +98,7 @@ class N8nService {
         },
         {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 180000 // 3 minutos para distribución compleja
+          timeout: 60000 // 1 minuto — si n8n no responde, cae al algoritmo local
         }
       );
       console.log('✅ n8n completó la distribución');

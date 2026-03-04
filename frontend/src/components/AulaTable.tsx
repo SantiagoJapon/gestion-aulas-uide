@@ -175,16 +175,16 @@ const AulaTable: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('¿Estás seguro de desactivar esta aula?')) {
+    if (window.confirm('¿Estás seguro de eliminar esta aula? Esta acción no se puede deshacer.')) {
       try {
         await aulaService.deleteAula(id);
         loadAulas();
         loadStats();
       } catch (err: any) {
-        const errorMsg = err.response?.data?.mensaje || err.response?.data?.error || 'Error al desactivar el aula';
+        const errorMsg = err.response?.data?.mensaje || err.response?.data?.error || 'Error al eliminar el aula';
         setError(errorMsg);
         alert(errorMsg);
-        console.error('Error al desactivar aula:', err);
+        console.error('Error al eliminar aula:', err);
       }
     }
   };
@@ -484,7 +484,7 @@ const AulaTable: React.FC = () => {
                             <button
                               onClick={() => handleDelete(aula.id)}
                               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                              title="Desactivar"
+                              title="Eliminar"
                             >
                               <FaTrash className="text-sm" />
                             </button>

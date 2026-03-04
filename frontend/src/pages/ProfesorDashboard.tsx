@@ -684,18 +684,87 @@ export default function ProfesorDashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Main Column */}
-              <div id="tour-clases-profe" className="lg:col-span-2 space-y-6">
-                <div className="flex items-center justify-between px-2">
-                  <h3 className="text-lg font-black text-foreground uppercase tracking-tight">Agenda de Hoy</h3>
-                  <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-1 rounded">{new Date().toLocaleDateString()}</span>
+              {/* Main Column: today + full week */}
+              <div id="tour-clases-profe" className="lg:col-span-2 space-y-8">
+
+                {/* Today's classes */}
+                <div>
+                  <div className="flex items-center justify-between px-2 mb-4">
+                    <h3 className="text-lg font-black text-foreground uppercase tracking-tight">Agenda de Hoy</h3>
+                    <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-1 rounded">{new Date().toLocaleDateString()}</span>
+                  </div>
+                  {loading ? (
+                    <div className="p-12 text-center text-muted-foreground">Cargando agenda...</div>
+                  ) : (
+                    <TimelineDocente classes={clasesHoy} onClassClick={(c) => setSelectedClass(c)} />
+                  )}
                 </div>
 
-                {loading ? (
-                  <div className="p-12 text-center text-muted-foreground">Cargando agenda...</div>
-                ) : (
-                  <TimelineDocente classes={clasesHoy} onClassClick={(c) => setSelectedClass(c)} />
-                )}
+                {/* Full weekly schedule */}
+                {!loading && schedule.length > 0 && (() => {
+                  const DIAS_ORDER = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+                  const LABEL: Record<string, string> = { LUNES: 'Lunes', MARTES: 'Martes', MIERCOLES: 'Miércoles', JUEVES: 'Jueves', VIERNES: 'Viernes', SABADO: 'Sábado' };
+                  const clasesPorDia = DIAS_ORDER.reduce<Record<string, any[]>>((acc, dia) => {
+                    acc[dia] = schedule
+                      .filter(c => (c.dia || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === dia)
+                      .sort((a, b) => (a.hora_inicio || '').localeCompare(b.hora_inicio || ''));
+                    return acc;
+                  }, {});
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between px-2 mb-4">
+                        <h3 className="text-lg font-black text-foreground uppercase tracking-tight">Horario Semanal Completo</h3>
+                        <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-1 rounded">{schedule.filter(c => c.aula_asignada).length}/{schedule.length} con aula</span>
+                      </div>
+                      <div className="space-y-4">
+                        {DIAS_ORDER.filter(d => clasesPorDia[d].length > 0).map(dia => (
+                          <div key={dia} className="bg-white dark:bg-slate-900 rounded-3xl border border-border/50 overflow-hidden shadow-sm">
+                            <div className="px-5 py-3 bg-muted/30 border-b border-border/50 flex items-center gap-2">
+                              <span className="material-symbols-outlined text-primary text-base">today</span>
+                              <h4 className="text-[11px] font-black text-foreground uppercase tracking-widest">{LABEL[dia]}</h4>
+                              <span className="ml-auto text-[10px] text-muted-foreground font-bold">{clasesPorDia[dia].length} clase(s)</span>
+                            </div>
+                            <div className="divide-y divide-border/30">
+                              {clasesPorDia[dia].map((clase, i) => (
+                                <div
+                                  key={i}
+                                  onClick={() => setSelectedClass(clase)}
+                                  className="px-5 py-3.5 flex items-center gap-4 hover:bg-muted/20 transition-colors cursor-pointer group"
+                                >
+                                  <div className="text-center shrink-0 w-16">
+                                    <p className="text-xs font-black text-foreground">{clase.hora_inicio?.slice(0, 5)}</p>
+                                    <p className="text-[9px] text-muted-foreground">— {clase.hora_fin?.slice(0, 5)}</p>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black text-foreground truncate">{clase.materia}</p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                      {clase.carrera ? `${clase.carrera} · ` : ''}Ciclo {clase.ciclo} · {clase.paralelo} · {clase.num_estudiantes} alumnos
+                                    </p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    {clase.aula_asignada ? (
+                                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/20 uppercase">
+                                        {clase.aula || clase.aula_asignada}
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-600 text-[10px] font-black border border-orange-500/20 uppercase">
+                                        Sin Aula
+                                      </span>
+                                    )}
+                                    {clase.edificio && (
+                                      <p className="text-[9px] text-muted-foreground mt-0.5">{clase.edificio}</p>
+                                    )}
+                                  </div>
+                                  <span className="material-symbols-outlined text-muted-foreground text-base opacity-0 group-hover:opacity-100 transition-opacity shrink-0">chevron_right</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Sidebar Column */}

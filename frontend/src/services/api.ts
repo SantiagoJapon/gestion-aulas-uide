@@ -122,6 +122,7 @@ export interface AulaStats {
 export interface Carrera {
   id: number;
   carrera: string;
+  facultad?: string | null;
   activa: boolean;
   created_at?: string | null;
   updated_at?: string | null;
@@ -300,8 +301,8 @@ export const carreraService = {
     return response.data;
   },
 
-  createCarrera: async (carrera: string): Promise<{ success: boolean; message: string; carrera: Carrera }> => {
-    const response = await api.post('/carreras', { carrera });
+  createCarrera: async (carrera: string, facultad?: string): Promise<{ success: boolean; message: string; carrera: Carrera }> => {
+    const response = await api.post('/carreras', { carrera, facultad });
     return response.data;
   },
 
@@ -499,6 +500,12 @@ export const distribucionService = {
   getMiDistribucion: async (carreraId?: number): Promise<MiDistribucionResponse> => {
     const params = carreraId ? { carrera_id: carreraId } : {};
     const response = await api.get<MiDistribucionResponse>('/distribucion/mi-distribucion', { params });
+    return response.data;
+  },
+
+  // Para director: obtener SUS PROPIAS clases como docente
+  getMisClasesComoDocente: async (): Promise<MiDistribucionResponse> => {
+    const response = await api.get<MiDistribucionResponse>('/distribucion/mi-distribucion', { params: { como_docente: true } });
     return response.data;
   },
 
@@ -831,6 +838,25 @@ export const reporteService = {
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', nombreArchivo);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  // Descargar el excel de distribución actual (en vivo)
+  descargarExcelActual: async (carreraId?: string) => {
+    const params = carreraId ? { carrera_id: carreraId } : {};
+    const response = await api.get('/reportes/descargar-excel', {
+      params,
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const fecha = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `distribucion_${carreraId || 'total'}_${fecha}.xlsx`);
     document.body.appendChild(link);
     link.click();
     link.remove();

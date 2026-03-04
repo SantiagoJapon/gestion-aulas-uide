@@ -73,6 +73,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'] },
         { label: 'Materias', icon: 'menu_book', tab: 'materias', roles: ['director'] },
         { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'] },
+        { label: 'Mis Clases', icon: 'school', tab: 'mis_clases', roles: ['director'] },
         { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'docente', 'estudiante'] },
         { label: 'Reportes', icon: 'bar_chart', tab: 'reportes', roles: ['admin', 'director'] },
         { label: 'Incidencias', icon: 'warning', tab: 'incidencias', roles: ['admin', 'director', 'profesor', 'docente'] },

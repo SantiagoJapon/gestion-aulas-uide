@@ -2,7 +2,7 @@ const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const distribucionService = require('../services/distribucion.service');
 const N8nService = require('../services/n8n.service');
-const { Carrera, Clase, Aula, Docente, EstudianteMateria } = require('../models');
+const { Carrera, Clase, Aula, Docente, EstudianteMateria, Estudiante } = require('../models');
 const { Op } = require('sequelize');
 
 /**
@@ -61,6 +61,7 @@ const getEstadoDistribucion = async (req, res) => {
       SELECT
         ca.id,
         ca.carrera as nombre_carrera,
+        ca.facultad,
         'activa' as estado,
         COUNT(DISTINCT c.id) as total_clases,
         COUNT(DISTINCT d.clase_id) as clases_asignadas,
@@ -76,7 +77,7 @@ const getEstadoDistribucion = async (req, res) => {
         LIMIT 1
       ) dir ON true
       WHERE ca.activa = true ${carrera_id && !isNaN(carrera_id) ? ' AND ca.id = :carrera_id' : ''}
-      GROUP BY ca.id, ca.carrera, dir.nombre, dir.email
+      GROUP BY ca.id, ca.carrera, ca.facultad, dir.nombre, dir.email
       ORDER BY ca.carrera
     `, {
       replacements,
@@ -457,7 +458,7 @@ const updateClase = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes } = req.body;
+    const { materia, ciclo, paralelo, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes } = req.body;
     const usuario = req.usuario;
 
     // Buscar la clase
@@ -479,12 +480,13 @@ const updateClase = async (req, res) => {
 
     // Actualizar la clase
     await sequelize.query(`
-      UPDATE clases 
-      SET materia = $1, dia = $2, hora_inicio = $3, hora_fin = $4, 
-          aula_asignada = $5, docente = $6, num_estudiantes = $7
-      WHERE id = $8
+      UPDATE clases
+      SET materia = $1, dia = $2, hora_inicio = $3, hora_fin = $4,
+          aula_asignada = $5, docente = $6, num_estudiantes = $7,
+          ciclo = COALESCE($8, ciclo), paralelo = COALESCE($9, paralelo)
+      WHERE id = $10
     `, {
-      bind: [materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes, id],
+      bind: [materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes, ciclo || null, paralelo || null, id],
       type: QueryTypes.UPDATE,
       transaction
     });
@@ -584,11 +586,26 @@ const getMiDistribucion = async (req, res) => {
         }
       }
     } else if (usuario.rol === 'director' && usuario.carrera_director) {
-      whereClause = 'WHERE c.carrera = :carrera';
-      replacements.carrera = usuario.carrera_director;
+      if (req.query.como_docente === 'true') {
+        // El director quiere ver SUS PROPIAS clases como docente
+        const docenteRecord = await Docente.findOne({ where: { usuario_id: usuario.id } });
+        if (docenteRecord) {
+          whereClause = 'WHERE (c.docente_id = :docente_id OR LOWER(c.docente) LIKE LOWER(:docente_nombre))';
+          replacements.docente_id = docenteRecord.id;
+          replacements.docente_nombre = `%${docenteRecord.nombre}%`;
+        } else {
+          const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+          whereClause = nombreCompleto
+            ? 'WHERE LOWER(c.docente) LIKE LOWER(:docente)'
+            : 'WHERE 1=0';
+          if (nombreCompleto) replacements.docente = `%${nombreCompleto}%`;
+        }
+      } else {
+        whereClause = 'WHERE c.carrera = :carrera';
+        replacements.carrera = usuario.carrera_director;
+      }
     } else if (usuario.rol === 'estudiante') {
       // 1. VERIFICACIÓN DE INSCRIPCIONES ESPECÍFICAS
-      // Buscamos si el estudiante tiene materias asignadas directamente
       const inscripciones = await EstudianteMateria.findAll({
         where: { estudiante_id: usuario.id }
       });
@@ -599,9 +616,30 @@ const getMiDistribucion = async (req, res) => {
         replacements.claseIds = claseIds;
         console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id}`);
       } else {
-        // Si no tiene inscripciones, NO mostrar nada (no usar fallback por nivel)
-        console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones específicas. No se muestra horario.`);
-        whereClause = 'WHERE 1=0';
+        // FALLBACK: buscar por nivel (ciclo) y carrera del estudiante
+        const estRecord = await Estudiante.findOne({ where: { email: usuario.email } });
+        if (estRecord && estRecord.nivel && estRecord.escuela) {
+          const cicloNum = normalizarCiclo(estRecord.nivel);
+          // Pre-query: obtener IDs de clases del ciclo de la carrera del estudiante
+          const clasesCarrera = await sequelize.query(
+            `SELECT id, ciclo FROM clases WHERE LOWER(carrera) LIKE LOWER(:carrera)`,
+            { replacements: { carrera: `%${estRecord.escuela}%` }, type: QueryTypes.SELECT }
+          );
+          const idsFiltrados = cicloNum
+            ? clasesCarrera.filter(c => normalizarCiclo(c.ciclo) === cicloNum).map(c => c.id)
+            : clasesCarrera.map(c => c.id);
+
+          if (idsFiltrados.length > 0) {
+            whereClause = 'WHERE c.id IN (:claseIds)';
+            replacements.claseIds = idsFiltrados;
+            console.log(`📚 Estudiante ${usuario.email}: ciclo ${cicloNum}, ${idsFiltrados.length} clases encontradas en ${estRecord.escuela}`);
+          } else {
+            whereClause = 'WHERE 1=0';
+          }
+        } else {
+          console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones ni datos de ciclo.`);
+          whereClause = 'WHERE 1=0';
+        }
       }
     }
 

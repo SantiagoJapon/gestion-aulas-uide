@@ -14,5 +14,6 @@ router.get('/historial', verificarRol('admin', 'director'), ReporteController.ob
 router.post('/generar', verificarRol('admin', 'director'), ReporteController.generarReporte);
 router.get('/descargar/:id', ReporteController.descargarReporte);
 router.delete('/:id', verificarAdmin, ReporteController.eliminarReporte);
+router.get('/descargar-excel', verificarRol('admin', 'director'), ReporteController.descargarExcelActual);
 
 module.exports = router;
