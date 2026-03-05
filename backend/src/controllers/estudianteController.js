@@ -82,8 +82,8 @@ const loginEstudianteByCedula = async (req, res) => {
       });
     }
 
-    // Obtener materias inscritas via service
-    const materias = await estudianteService.getMateriasByEstudianteId(estudiante.id);
+    // Obtener materias inscritas via service, filtrando por carrera del estudiante
+    const materias = await estudianteService.getMateriasByEstudianteId(estudiante.id, estudiante.escuela);
 
     // Generar JWT para el estudiante
     const token = generarToken({
@@ -351,7 +351,7 @@ const subirEstudiantes = async (req, res) => {
                 encabezadosEncontrados.email = key;
               } else if (valor.includes('telefono') || valor.includes('celular') || valor.includes('phone')) {
                 encabezadosEncontrados.telefono = key;
-              } else if (valor.includes('escuela') || valor.includes('carrera') || valor.includes('facultad')) {
+              } else if (valor.includes('escuela') || valor.includes('carrera') || valor.includes('facultad') || valor.includes('programa') || valor.includes('plan de estudio')) {
                 encabezadosEncontrados.escuela = key;
               } else if (valor.includes('nivel') || valor.includes('semestre') || valor.includes('ciclo')) {
                 encabezadosEncontrados.nivel = key;
@@ -422,20 +422,24 @@ const subirEstudiantes = async (req, res) => {
       // Solo verificar columnas manualmente si NO se detectaron headers automáticamente
       if (!usandoDeteccionAutomatica) {
         // Verificar columnas requeridas (buscar variantes comunes)
+        // IMPORTANTE: devuelve la clave REAL del Excel (con su casing original), no el alias
         const buscarColumna = (nombreBuscado, aliases = []) => {
           const todasOpciones = [nombreBuscado, ...aliases];
-          return todasOpciones.find(opt =>
-            Object.keys(primeraFila).some(k =>
-              k.toLowerCase().trim() === opt.toLowerCase()
-            )
-          ) || Object.keys(primeraFila).find(k =>
-            k.toLowerCase().includes(nombreBuscado.toLowerCase())
+          // 1. Coincidencia exacta (case-insensitive) → devuelve la clave real
+          const exactKey = Object.keys(primeraFila).find(k =>
+            todasOpciones.some(opt => k.toLowerCase().trim() === opt.toLowerCase())
           );
+          if (exactKey) return exactKey;
+          // 2. Coincidencia parcial → devuelve la clave real
+          return Object.keys(primeraFila).find(k =>
+            k.toLowerCase().includes(nombreBuscado.toLowerCase())
+          ) || null;
         };
 
         const cedulaCol = buscarColumna('cedula', ['cédula', 'ci', 'identificacion']);
         const nombresCol = buscarColumna('nombres', ['nombre', 'name']);
         const apellidosCol = buscarColumna('apellidos', ['apellido', 'surname']);
+        const escuelaColManual = buscarColumna('carrera', ['escuela', 'facultad', 'programa', 'carrera academica', 'carrera académica']);
 
         if (!cedulaCol || !nombresCol || !apellidosCol) {
           const faltantes = [];
@@ -453,16 +457,56 @@ const subirEstudiantes = async (req, res) => {
           });
         }
 
-        console.log(`✅ Columnas mapeadas: cedula="${cedulaCol}", nombres="${nombresCol}", apellidos="${apellidosCol}"`);
+        console.log(`✅ Columnas mapeadas: cedula="${cedulaCol}", nombres="${nombresCol}", apellidos="${apellidosCol}", escuela="${escuelaColManual || 'no detectada'}"`);;
 
         // Actualizar mapeo con columnas detectadas
-        columnMap = { cedulaCol, nombresCol, apellidosCol };
+        columnMap = { cedulaCol, nombresCol, apellidosCol, escuelaCol: escuelaColManual };
       }
     }
+
+    // Helper: comparación flexible de nombres de carrera (ignora tildes, mayúsculas y espacios extra)
+    const normCarrera = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const carrerasCoinciden = (a, b) => {
+      if (!a || !b) return false;
+      const na = normCarrera(a);
+      const nb = normCarrera(b);
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
+
+    // ========================================
+    // PRE-CARGA: Carreras canónicas para normalizar escuela
+    // ========================================
+    const { Carrera } = require('../models');
+    const carrerasCanonics = await Carrera.findAll({ where: { activa: true }, attributes: ['carrera'] });
+    const normStr = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const stripLocation = (s) => (s || '').replace(/\s*-\s*(?:loja|quito|guayaquil|cuenca|ambato|riobamba)\s*$/i, '').replace(/\s+(?:loja|quito|guayaquil|cuenca|ambato|riobamba)\s*$/i, '').trim();
+
+    // Intenta mapear un nombre de escuela del Excel al nombre canónico de uploads_carreras.
+    // Estrategia: quitar sufijo de ciudad, normalizar y ver si uno contiene al otro.
+    const normalizarEscuela = (escuelaExcelRaw) => {
+      if (!escuelaExcelRaw) return escuelaExcelRaw;
+      const stripped = normStr(stripLocation(escuelaExcelRaw));
+      if (!stripped) return escuelaExcelRaw;
+
+      let bestMatch = null;
+      let bestLen = 0;
+      for (const c of carrerasCanonics) {
+        const cn = normStr(c.carrera);
+        if (!cn) continue;
+        // Coincidencia si uno contiene al otro (mínimo 5 chars para evitar falsos positivos)
+        const matches = (stripped.includes(cn) || cn.includes(stripped)) && Math.min(stripped.length, cn.length) >= 5;
+        if (matches && cn.length > bestLen) {
+          bestLen = cn.length;
+          bestMatch = c.carrera;
+        }
+      }
+      return bestMatch || escuelaExcelRaw;
+    };
 
     // Contadores
     let estudiantesGuardados = 0;
     let estudiantesActualizados = 0;
+    let estudiantesSaltados = 0;
     let inscripcionesGuardadas = 0;
     let errores = [];
 
@@ -539,22 +583,43 @@ const subirEstudiantes = async (req, res) => {
           : (row['Nivel Actual'] || row.nivel || row.Nivel || row.semestre || row.Semestre || '1');
         const nivel = String(nivelRaw).trim();
 
-        // Detectar escuela en el Excel
-        const escuelaRaw = columnMap.escuelaCol
-          ? row[columnMap.escuelaCol]
-          : (row.Escuela || row.escuela || row.Carrera || row.carrera);
+        // Detectar escuela en el Excel — búsqueda robusta
+        const escuelaRaw = (() => {
+          // 1. Columna ya mapeada (más precisa)
+          if (columnMap.escuelaCol && row[columnMap.escuelaCol] != null) return row[columnMap.escuelaCol];
+          // 2. Buscar en cualquier clave del row que contenga palabras de carrera
+          const termsCarrera = ['carrera', 'escuela', 'facultad', 'programa'];
+          const carreraKey = Object.keys(row).find(k =>
+            termsCarrera.some(t => k.toLowerCase().includes(t))
+          );
+          return carreraKey ? row[carreraKey] : null;
+        })();
 
         // Lógica de asignación de escuela:
-        // 1. Prioridad: Si el usuario es director, forzamos su carrera propia
-        // 2. Si es admin y envió escuela por body (desde el selector), usamos esa
-        // 3. Por último, lo que venga en el Excel
+        // - Director: si el Excel tiene columna de carrera, saltar estudiantes de otras carreras.
+        //   Si no tiene columna de carrera, asumir todos son de su carrera.
+        // - Admin con escuela en body: usar esa escuela para todos.
+        // - Admin sin escuela en body: leer del Excel (cada estudiante con su propia carrera).
+        const escuelaExcel = escuelaRaw ? String(escuelaRaw).trim() : null;
         let escuela = 'Sin especificar';
+
         if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
-          escuela = req.usuario.carrera_director;
+          const directorCarrera = req.usuario.carrera_director;
+          if (escuelaExcel) {
+            // El Excel tiene columna de carrera: normalizar y filtrar por carrera del director
+            const escuelaNorm = normalizarEscuela(escuelaExcel);
+            if (!carrerasCoinciden(escuelaNorm, directorCarrera)) {
+              estudiantesSaltados++;
+              continue; // Saltar estudiante de otra carrera
+            }
+          }
+          // Sin columna de carrera en Excel, o coincide: asignar la carrera canónica del director
+          escuela = directorCarrera;
         } else if (req.body.escuela) {
           escuela = String(req.body.escuela).trim();
-        } else if (escuelaRaw) {
-          escuela = String(escuelaRaw).trim();
+        } else if (escuelaExcel) {
+          // Admin sin escuela en body: normalizar contra carreras canónicas
+          escuela = normalizarEscuela(escuelaExcel);
         }
 
         // Validar formato de cédula
@@ -577,11 +642,11 @@ const subirEstudiantes = async (req, res) => {
         // Insertar o actualizar estudiante usando raw query
         // NOTA: La tabla estudiantes solo tiene: cedula, nombre, email, nivel, escuela, edad, telegram_id, fecha_registro
         const result = await sequelize.query(
-          `INSERT INTO estudiantes 
+          `INSERT INTO estudiantes
            (cedula, nombre, email, nivel, escuela)
            VALUES (:cedula, :nombre, :email, :nivel, :escuela)
-           ON CONFLICT (cedula) 
-           DO UPDATE SET 
+           ON CONFLICT (cedula)
+           DO UPDATE SET
              nombre = EXCLUDED.nombre,
              email = EXCLUDED.email,
              nivel = EXCLUDED.nivel,
@@ -660,6 +725,9 @@ const subirEstudiantes = async (req, res) => {
 
     console.log(`✅ Estudiantes nuevos: ${estudiantesGuardados}`);
     console.log(`🔄 Estudiantes actualizados: ${estudiantesActualizados}`);
+    if (estudiantesSaltados > 0) {
+      console.log(`⏭️  Estudiantes saltados (otra carrera): ${estudiantesSaltados}`);
+    }
     if (errores.length > 0) {
       console.log(`⚠️  Errores encontrados: ${errores.length}`);
       console.log(`⚠️  Primeros errores:`);
@@ -784,6 +852,7 @@ const subirEstudiantes = async (req, res) => {
             detalles: JSON.stringify({
               estudiantes_nuevos: estudiantesGuardados,
               estudiantes_actualizados: estudiantesActualizados,
+              estudiantes_saltados: estudiantesSaltados,
               inscripciones: inscripcionesGuardadas,
               errores: errores.length > 0 ? errores : null
             }),
@@ -841,6 +910,7 @@ const subirEstudiantes = async (req, res) => {
       resultado: {
         estudiantes_nuevos: estudiantesGuardados,
         estudiantes_actualizados: estudiantesActualizados,
+        estudiantes_saltados: estudiantesSaltados,
         total_estudiantes: estudiantesGuardados + estudiantesActualizados,
         inscripciones_guardadas: inscripcionesGuardadas,
         total_filas_procesadas: estudiantesData.length,
@@ -1225,7 +1295,7 @@ const subirProyeccionCupos = async (req, res) => {
         continue;
       }
 
-      // 2. Buscar la clase (materia + paralelo)
+      // 2. Buscar la clase (materia + paralelo), filtrando por carrera del estudiante
       const { Clase } = require('../models');
       const whereClase = {
         [Op.or]: [
@@ -1233,6 +1303,11 @@ const subirProyeccionCupos = async (req, res) => {
           { codigo: { [Op.iLike]: `%${materiaNombre}%` } }
         ]
       };
+
+      // Filtrar por carrera del estudiante para evitar vínculos cruzados entre carreras
+      if (estudiante.escuela && estudiante.escuela !== 'Sin especificar') {
+        whereClase.carrera = { [Op.iLike]: `%${estudiante.escuela}%` };
+      }
 
       if (paralelo) {
         whereClase.paralelo = paralelo;

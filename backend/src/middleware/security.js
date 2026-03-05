@@ -6,11 +6,13 @@ const { sanitizeInput: sanitizeInputUtil } = require('./inputSanitizer');
  * Middleware para validar que las requests vengan de orígenes permitidos
  */
 const validateOrigin = (req, res, next) => {
-  const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ];
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [
+        process.env.FRONTEND_URL || 'http://localhost:5173',
+        'http://localhost:5173',
+        'http://localhost:3000'
+      ];
 
   const origin = req.get('origin');
 

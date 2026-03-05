@@ -61,7 +61,6 @@ const getEstadoDistribucion = async (req, res) => {
       SELECT
         ca.id,
         ca.carrera as nombre_carrera,
-        ca.facultad,
         'activa' as estado,
         COUNT(DISTINCT c.id) as total_clases,
         COUNT(DISTINCT d.clase_id) as clases_asignadas,
@@ -77,7 +76,7 @@ const getEstadoDistribucion = async (req, res) => {
         LIMIT 1
       ) dir ON true
       WHERE ca.activa = true ${carrera_id && !isNaN(carrera_id) ? ' AND ca.id = :carrera_id' : ''}
-      GROUP BY ca.id, ca.carrera, ca.facultad, dir.nombre, dir.email
+      GROUP BY ca.id, ca.carrera, dir.nombre, dir.email
       ORDER BY ca.carrera
     `, {
       replacements,
@@ -121,17 +120,21 @@ const ejecutarDistribucionViaN8n = async (req, res) => {
   try {
     console.log('🎯 Solicitada distribución de aulas...');
 
-    // Intentar via n8n primero
+    // Intentar via n8n primero, solo si devuelve resultado válido
     try {
       console.log('📤 Enviando a n8n...');
-      const resultado = await N8nService.ejecutarDistribucion();
-      console.log('✅ Distribución completada via n8n');
-      return res.json(resultado);
+      const n8nResultado = await N8nService.ejecutarDistribucion();
+      // Validar que n8n realmente ejecutó la distribución
+      if (n8nResultado && n8nResultado.success === true && n8nResultado.estadisticas) {
+        console.log('✅ Distribución completada via n8n');
+        return res.json(n8nResultado);
+      }
+      console.warn('⚠️ n8n respondió pero sin datos de distribución, usando algoritmo local');
     } catch (n8nError) {
       console.warn('⚠️ n8n no disponible, usando algoritmo local:', n8nError.message);
     }
 
-    // Fallback: algoritmo local del backend
+    // Algoritmo local del backend
     const carreraId = req.query.carrera_id || req.body.carrera_id;
     const resultado = await distribucionService.ejecutarDistribucion(carreraId);
     res.json(resultado);
@@ -605,6 +608,9 @@ const getMiDistribucion = async (req, res) => {
         replacements.carrera = usuario.carrera_director;
       }
     } else if (usuario.rol === 'estudiante') {
+      // Cargar datos del estudiante para filtrar por carrera
+      const estRecord = await Estudiante.findByPk(usuario.id);
+
       // 1. VERIFICACIÓN DE INSCRIPCIONES ESPECÍFICAS
       const inscripciones = await EstudianteMateria.findAll({
         where: { estudiante_id: usuario.id }
@@ -612,14 +618,22 @@ const getMiDistribucion = async (req, res) => {
 
       if (inscripciones.length > 0) {
         const claseIds = inscripciones.map(ins => ins.clase_id);
-        whereClause = 'WHERE c.id IN (:claseIds)';
-        replacements.claseIds = claseIds;
-        console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id}`);
+        // Filtrar por carrera del estudiante para evitar mostrar clases de otras carreras
+        if (estRecord && estRecord.escuela) {
+          whereClause = 'WHERE c.id IN (:claseIds) AND LOWER(c.carrera) LIKE LOWER(:carreraEst)';
+          replacements.claseIds = claseIds;
+          replacements.carreraEst = `%${estRecord.escuela}%`;
+          console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id} (${estRecord.escuela})`);
+        } else {
+          whereClause = 'WHERE c.id IN (:claseIds)';
+          replacements.claseIds = claseIds;
+          console.log(`🎯 Filtrando ${claseIds.length} materias específicas para el estudiante ${usuario.id}`);
+        }
       } else {
         // FALLBACK: buscar por nivel (ciclo) y carrera del estudiante
-        const estRecord = await Estudiante.findOne({ where: { email: usuario.email } });
-        if (estRecord && estRecord.nivel && estRecord.escuela) {
-          const cicloNum = normalizarCiclo(estRecord.nivel);
+        // Usar findByPk porque usuario.id es el id de la tabla estudiantes
+        if (estRecord && estRecord.escuela) {
+          const cicloNum = estRecord.nivel ? normalizarCiclo(estRecord.nivel) : null;
           // Pre-query: obtener IDs de clases del ciclo de la carrera del estudiante
           const clasesCarrera = await sequelize.query(
             `SELECT id, ciclo FROM clases WHERE LOWER(carrera) LIKE LOWER(:carrera)`,
@@ -632,12 +646,12 @@ const getMiDistribucion = async (req, res) => {
           if (idsFiltrados.length > 0) {
             whereClause = 'WHERE c.id IN (:claseIds)';
             replacements.claseIds = idsFiltrados;
-            console.log(`📚 Estudiante ${usuario.email}: ciclo ${cicloNum}, ${idsFiltrados.length} clases encontradas en ${estRecord.escuela}`);
+            console.log(`📚 Estudiante ${usuario.id}: ciclo ${cicloNum || 'todos'}, ${idsFiltrados.length} clases encontradas en ${estRecord.escuela}`);
           } else {
             whereClause = 'WHERE 1=0';
           }
         } else {
-          console.log(`⚠️  Estudiante ${usuario.id} sin inscripciones ni datos de ciclo.`);
+          console.log(`⚠️  Estudiante ${usuario.id} sin datos de escuela/carrera.`);
           whereClause = 'WHERE 1=0';
         }
       }

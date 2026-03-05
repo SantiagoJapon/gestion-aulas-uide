@@ -91,7 +91,7 @@ class ReporteService {
                         carrera,
                         COUNT(id) as total_clases,
                         COUNT(CASE WHEN aula_asignada IS NOT NULL THEN 1 END) as asignadas,
-                        ROUND(COUNT(CASE WHEN aula_asignada IS NOT NULL THEN 1 END)::float / NULLIF(COUNT(id), 0) * 100, 1) as porcentaje
+                        ROUND((COUNT(CASE WHEN aula_asignada IS NOT NULL THEN 1 END)::numeric / NULLIF(COUNT(id), 0) * 100), 1) as porcentaje
                     FROM clases
                     GROUP BY carrera
                     ORDER BY total_clases DESC
@@ -106,6 +106,7 @@ class ReporteService {
             });
 
             // 8. Conflictos de Horario por Aula
+            const conflictoCarreraFilter = carrera_id ? 'AND c1.carrera_id = :carrera_id' : '';
             const conflictosAula = await sequelize.query(`
                 SELECT
                     c1.aula_asignada as aula,
@@ -126,7 +127,7 @@ class ReporteService {
                     AND c1.hora_inicio < c2.hora_fin
                     AND c1.hora_fin > c2.hora_inicio
                 WHERE c1.aula_asignada IS NOT NULL
-                ${carreraFilter}
+                ${conflictoCarreraFilter}
                 ORDER BY c1.aula_asignada, c1.dia
                 LIMIT 15
             `, { replacements, type: QueryTypes.SELECT });
@@ -142,7 +143,7 @@ class ReporteService {
                     c.num_estudiantes,
                     a.nombre as aula_nombre,
                     a.capacidad,
-                    ROUND((c.num_estudiantes::float / NULLIF(a.capacidad, 0)) * 100, 1) as porcentaje_uso
+                    ROUND((c.num_estudiantes::numeric / NULLIF(a.capacidad, 0)) * 100, 1) as porcentaje_uso
                 FROM clases c
                 JOIN aulas a ON a.codigo = c.aula_asignada
                 WHERE c.aula_asignada IS NOT NULL

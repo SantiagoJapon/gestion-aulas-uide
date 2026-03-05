@@ -1,0 +1,6 @@
+FROM atendai/evolution-api:v2.2.3
+
+WORKDIR /evolution
+
+RUN npm install baileys@6.7.15 --save --legacy-peer-deps
+

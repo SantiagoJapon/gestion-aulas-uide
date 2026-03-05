@@ -11,17 +11,19 @@ class EstudianteService {
         return await Estudiante.findOne({ where: { cedula } });
     }
 
-    async getMateriasByEstudianteId(estudianteId) {
+    async getMateriasByEstudianteId(estudianteId, escuela = null) {
+        const escuelaParam = (escuela && escuela !== 'Sin especificar') ? `%${escuela}%` : null;
         return await sequelize.query(`
-      SELECT c.id, c.materia, c.dia, c.hora_inicio, c.hora_fin, 
+      SELECT c.id, c.materia, c.dia, c.hora_inicio, c.hora_fin,
              COALESCE(a.nombre, c.aula_asignada, 'S/A') as aula,
              c.docente
       FROM clases c
       INNER JOIN estudiantes_materias em ON em.clase_id = c.id
       LEFT JOIN aulas a ON a.codigo = c.aula_asignada
       WHERE em.estudiante_id = :id
+        AND (:escuela IS NULL OR c.carrera ILIKE :escuela)
     `, {
-            replacements: { id: estudianteId },
+            replacements: { id: estudianteId, escuela: escuelaParam },
             type: QueryTypes.SELECT
         });
     }
@@ -50,11 +52,11 @@ class EstudianteService {
     async upsertEstudiante(data, transaction) {
         const { cedula, nombre, email, nivel, escuela } = data;
         const result = await sequelize.query(
-            `INSERT INTO estudiantes 
+            `INSERT INTO estudiantes
        (cedula, nombre, email, nivel, escuela)
        VALUES (:cedula, :nombre, :email, :nivel, :escuela)
-       ON CONFLICT (cedula) 
-       DO UPDATE SET 
+       ON CONFLICT (cedula)
+       DO UPDATE SET
          nombre = EXCLUDED.nombre,
          email = EXCLUDED.email,
          nivel = EXCLUDED.nivel,
