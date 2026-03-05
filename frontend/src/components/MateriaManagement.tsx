@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { materiaCatalogoService, MateriaCatalogo } from '../services/api';
+import { materiaCatalogoService, MateriaCatalogo, docenteService, Docente } from '../services/api';
 import { Button } from './common/Button';
 import { Modal } from './common/Modal';
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaBookOpen } from 'react-icons/fa';
@@ -10,6 +10,7 @@ interface MateriaManagementProps {
 
 export default function MateriaManagement({ carreraId }: MateriaManagementProps) {
     const [materias, setMaterias] = useState<MateriaCatalogo[]>([]);
+    const [docentes, setDocentes] = useState<Docente[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,7 +23,9 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
         nombre: '',
         creditos: 2,
         ciclo: 1,
-        carrera_id: carreraId
+        carrera_id: carreraId,
+        docente_id: '' as string | number,
+        docente_nombre: ''
     });
 
     useEffect(() => {
@@ -32,9 +35,15 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
     const loadMaterias = async () => {
         try {
             setLoading(true);
-            const res = await materiaCatalogoService.getMaterias({ carrera_id: carreraId, search });
+            const [res, docRes] = await Promise.all([
+                materiaCatalogoService.getMaterias({ carrera_id: carreraId, search }),
+                docenteService.getDocentes({ carrera_id: carreraId })
+            ]);
             if (res.success) {
                 setMaterias(res.materias);
+            }
+            if (docRes.success) {
+                setDocentes(docRes.docentes);
             }
         } catch (err) {
             console.error('Error al cargar materias:', err);
@@ -51,7 +60,9 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
                 nombre: materia.nombre,
                 creditos: materia.creditos,
                 ciclo: materia.ciclo,
-                carrera_id: materia.carrera_id
+                carrera_id: materia.carrera_id,
+                docente_id: materia.docente_id || '',
+                docente_nombre: materia.docente_nombre || ''
             });
         } else {
             setEditingMateria(null);
@@ -60,7 +71,9 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
                 nombre: '',
                 creditos: 2,
                 ciclo: 1,
-                carrera_id: carreraId
+                carrera_id: carreraId,
+                docente_id: '',
+                docente_nombre: ''
             });
         }
         setIsModalOpen(true);
@@ -176,6 +189,21 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
                                         </p>
                                     </div>
                                 </div>
+                                {m.docenteAsignado && (
+                                    <div className="mt-4 flex items-center gap-2">
+                                        <div className="size-6 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center font-bold text-[10px] uppercase">
+                                            {m.docenteAsignado.nombre.slice(0, 2)}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-foreground truncate max-w-[150px]">
+                                                {m.docenteAsignado.nombre}
+                                            </p>
+                                            <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">
+                                                Docente Asignado
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="mt-6 pt-4 border-t border-border flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => handleOpenModal(m)} className="size-9 rounded-xl bg-muted text-muted-foreground hover:bg-primary hover:text-white transition-all flex items-center justify-center shadow-sm border border-border">
                                         <FaEdit />
@@ -244,6 +272,27 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
                                 value={formData.creditos}
                                 onChange={e => setFormData({ ...formData, creditos: parseInt(e.target.value) })}
                             />
+                        </div>
+                        <div className="col-span-1 md:col-span-2 space-y-2">
+                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Docente Asignado</label>
+                            <select
+                                className="w-full h-12 bg-muted/30 border border-border rounded-xl px-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                value={formData.docente_id}
+                                onChange={e => {
+                                    const id = e.target.value;
+                                    const d = docentes.find(doc => doc.id.toString() === id);
+                                    setFormData({
+                                        ...formData,
+                                        docente_id: id ? parseInt(id) : '',
+                                        docente_nombre: d ? `${d.nombre} ${d.apellido}` : ''
+                                    });
+                                }}
+                            >
+                                <option value="">Sin Asignar</option>
+                                {docentes.map(d => (
+                                    <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-6 border-t border-border">

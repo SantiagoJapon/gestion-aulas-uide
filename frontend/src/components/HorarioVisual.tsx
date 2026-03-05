@@ -101,7 +101,11 @@ export default function HorarioVisual({ mode = 'general', carreraId, title }: Ho
 
       let response;
       if (mode === 'personal') {
-        response = await distribucionService.getMiDistribucion();
+        if (user?.rol === 'director') {
+          response = await distribucionService.getMisClasesComoDocente();
+        } else {
+          response = await distribucionService.getMiDistribucion();
+        }
         const rawClases = response.clases || (Array.isArray(response) ? response : []);
         const normalizedClases = rawClases.map((c: any) => ({
           ...c,

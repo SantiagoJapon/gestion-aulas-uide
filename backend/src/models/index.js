@@ -101,6 +101,10 @@ Clase.belongsTo(Docente, { foreignKey: 'docente_id', as: 'docenteInfo' });
 Carrera.hasMany(MateriaCatalogo, { foreignKey: 'carrera_id', as: 'materias' });
 MateriaCatalogo.belongsTo(Carrera, { foreignKey: 'carrera_id', as: 'carrera' });
 
+// MateriaCatalogo <-> Docente
+Docente.hasMany(MateriaCatalogo, { foreignKey: 'docente_id', as: 'materiasAsignadas' });
+MateriaCatalogo.belongsTo(Docente, { foreignKey: 'docente_id', as: 'docenteAsignado' });
+
 // MateriaCatalogo <-> Clase
 MateriaCatalogo.hasMany(Clase, { foreignKey: 'materia_catalogo_id', as: 'clases' });
 Clase.belongsTo(MateriaCatalogo, { foreignKey: 'materia_catalogo_id', as: 'materiaCatalogo' });

@@ -518,100 +518,21 @@ const DirectorDashboard = () => {
             </div>
           </div>
         );
-      case 'mis_clases': {
-        // Cargar datos la primera vez que se abre este tab
-        if (!loadingMisClases && misClasesDocente.length === 0) loadMisClasesDocente();
-        const DIAS_ORDER = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
-        const clasesPorDia = DIAS_ORDER.reduce<Record<string, any[]>>((acc, dia) => {
-          acc[dia] = misClasesDocente
-            .filter(c => (c.dia || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === dia)
-            .sort((a, b) => (a.hora_inicio || '').localeCompare(b.hora_inicio || ''));
-          return acc;
-        }, {});
-        const LABEL: Record<string, string> = { LUNES: 'Lunes', MARTES: 'Martes', MIERCOLES: 'Miércoles', JUEVES: 'Jueves', VIERNES: 'Viernes', SABADO: 'Sábado' };
+      case 'mis_clases':
         return (
           <div className="space-y-8 animate-fade-in pb-20">
-            <div className="flex items-center gap-4">
-              <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary text-2xl">school</span>
+            <DashboardWidget
+              title="Mis Clases como Docente"
+              subtitle="Horario detallado de las materias que usted imparte"
+              icon="school"
+              noPadding
+            >
+              <div className="p-4 min-h-[500px] overflow-hidden rounded-[2rem] bg-background border border-border">
+                <HorarioVisual mode="personal" />
               </div>
-              <div>
-                <h2 className="text-2xl font-black text-foreground">Mis Clases como Docente</h2>
-                <p className="text-xs text-muted-foreground font-medium">Materias que usted imparte en la planificación vigente</p>
-              </div>
-            </div>
-
-            {loadingMisClases ? (
-              <div className="py-24 text-center text-muted-foreground text-sm">Cargando clases...</div>
-            ) : misClasesDocente.length === 0 ? (
-              <div className="py-24 flex flex-col items-center justify-center text-center opacity-60">
-                <span className="material-symbols-outlined text-5xl mb-3 text-muted-foreground/40">event_busy</span>
-                <p className="text-sm font-bold text-muted-foreground">No se encontraron clases asignadas a su nombre.</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Verifique que su nombre en el sistema coincide con el de la planificación.</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Resumen rápido */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {[
-                    { label: 'Clases Totales', value: misClasesDocente.length, icon: 'menu_book', color: 'blue' },
-                    { label: 'Con Aula', value: misClasesDocente.filter(c => c.aula_asignada).length, icon: 'meeting_room', color: 'emerald' },
-                    { label: 'Sin Aula', value: misClasesDocente.filter(c => !c.aula_asignada).length, icon: 'event_busy', color: 'orange' },
-                    { label: 'Días con Clase', value: DIAS_ORDER.filter(d => clasesPorDia[d].length > 0).length, icon: 'calendar_month', color: 'purple' },
-                  ].map((kpi, i) => (
-                    <div key={i} className="bg-white dark:bg-slate-900 border border-border/50 p-5 rounded-3xl shadow-sm">
-                      <div className={`size-9 rounded-xl bg-${kpi.color}-500/10 flex items-center justify-center mb-3`}>
-                        <span className={`material-symbols-outlined text-${kpi.color}-600 text-lg`}>{kpi.icon}</span>
-                      </div>
-                      <p className="text-2xl font-black">{kpi.value}</p>
-                      <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">{kpi.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Clases por día */}
-                {DIAS_ORDER.filter(d => clasesPorDia[d].length > 0).map(dia => (
-                  <div key={dia} className="bg-white dark:bg-slate-900 rounded-3xl border border-border/50 overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 bg-muted/30 border-b border-border/50 flex items-center gap-3">
-                      <span className="material-symbols-outlined text-primary text-lg">today</span>
-                      <h3 className="text-xs font-black text-foreground uppercase tracking-widest">{LABEL[dia]}</h3>
-                      <span className="ml-auto text-[10px] text-muted-foreground font-bold">{clasesPorDia[dia].length} clase(s)</span>
-                    </div>
-                    <div className="divide-y divide-border/40">
-                      {clasesPorDia[dia].map((clase, i) => (
-                        <div key={i} className="px-6 py-4 flex items-center gap-4 hover:bg-muted/20 transition-colors">
-                          <div className="text-center shrink-0 w-20">
-                            <p className="text-sm font-black text-foreground">{clase.hora_inicio?.slice(0, 5)}</p>
-                            <p className="text-[10px] text-muted-foreground">— {clase.hora_fin?.slice(0, 5)}</p>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-black text-foreground truncate">{clase.materia}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Ciclo {clase.ciclo} · {clase.paralelo} · {clase.num_estudiantes} alumnos</p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            {clase.aula_asignada ? (
-                              <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/20 uppercase">
-                                {clase.aula || clase.aula_asignada}
-                              </span>
-                            ) : (
-                              <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-600 text-[10px] font-black border border-orange-500/20 uppercase">
-                                Sin Aula
-                              </span>
-                            )}
-                            {clase.edificio && (
-                              <p className="text-[9px] text-muted-foreground mt-1">{clase.edificio}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            </DashboardWidget>
           </div>
         );
-      }
 
       case 'heatmap':
         return <MapaCalor />;

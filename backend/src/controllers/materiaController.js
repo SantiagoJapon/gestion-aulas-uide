@@ -39,6 +39,11 @@ exports.getMaterias = async (req, res) => {
                     model: Carrera,
                     as: 'carrera',
                     attributes: ['id', 'carrera']
+                },
+                {
+                    model: require('../models').Docente,
+                    as: 'docenteAsignado',
+                    attributes: ['id', 'nombre']
                 }
             ],
             order: [['ciclo', 'ASC'], ['nombre', 'ASC']]
@@ -91,7 +96,7 @@ exports.getMateriaById = async (req, res) => {
  */
 exports.createMateria = async (req, res) => {
     try {
-        const { codigo, nombre, creditos, ciclo, carrera_id } = req.body;
+        const { codigo, nombre, creditos, ciclo, carrera_id, docente_id, docente_nombre } = req.body;
 
         // Si es director, validar que la carrera le pertenezca
         if (req.usuario.rol === 'director') {
@@ -107,6 +112,8 @@ exports.createMateria = async (req, res) => {
             creditos,
             ciclo,
             carrera_id,
+            docente_id,
+            docente_nombre,
             activo: true
         });
 
@@ -127,7 +134,7 @@ exports.createMateria = async (req, res) => {
 exports.updateMateria = async (req, res) => {
     try {
         const { id } = req.params;
-        const { codigo, nombre, creditos, ciclo } = req.body;
+        const { codigo, nombre, creditos, ciclo, docente_id, docente_nombre } = req.body;
 
         const materia = await MateriaCatalogo.findByPk(id);
         if (!materia) return res.status(404).json({ success: false, message: 'Materia no encontrada' });
@@ -140,7 +147,7 @@ exports.updateMateria = async (req, res) => {
             }
         }
 
-        await materia.update({ codigo, nombre, creditos, ciclo });
+        await materia.update({ codigo, nombre, creditos, ciclo, docente_id, docente_nombre });
 
         res.json({
             success: true,

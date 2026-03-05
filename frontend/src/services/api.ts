@@ -1153,10 +1153,16 @@ export interface MateriaCatalogo {
   creditos: number;
   ciclo: number;
   carrera_id: number;
+  docente_id?: number | null;
+  docente_nombre?: string | null;
   activo: boolean;
   carrera?: {
     id: number;
     carrera: string;
+  };
+  docenteAsignado?: {
+    id: number;
+    nombre: string;
   };
 }
 

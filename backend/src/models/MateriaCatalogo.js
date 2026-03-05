@@ -46,6 +46,18 @@ const MateriaCatalogo = sequelize.define('MateriaCatalogo', {
       model: 'uploads_carreras',
       key: 'id'
     }
+  },
+  docente_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'docentes',
+      key: 'id'
+    }
+  },
+  docente_nombre: {
+    type: DataTypes.STRING(200),
+    allowNull: true
   }
 }, {
   tableName: 'materias_catalogo',
