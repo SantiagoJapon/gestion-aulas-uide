@@ -22,6 +22,9 @@ const app = express();
 // ========================================
 app.use(compression());
 
+// Trust nginx proxy para obtener IP real del cliente (X-Forwarded-For)
+app.set('trust proxy', 1);
+
 // ========================================
 // CORS - DEBE IR PRIMERO
 // ========================================
@@ -51,9 +54,7 @@ app.use(preventSQLInjection);
 app.use(sanitizeInput);
 app.use(securityLogger);
 
-// Rate Limiting
-app.use('/api/auth/', authLimiter);
-app.use('/api/', apiLimiter);
+// Rate Limiting desactivado
 
 // ========================================
 // MIDDLEWARES DE PARSEO

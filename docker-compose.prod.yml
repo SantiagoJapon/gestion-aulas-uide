@@ -91,6 +91,8 @@ services:
       SMTP_UIDE_USER: ${SMTP_UIDE_USER:-}
       SMTP_UIDE_PASS: ${SMTP_UIDE_PASS:-}
       SMTP_UIDE_FROM: ${SMTP_UIDE_FROM:-}
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -136,7 +138,7 @@ services:
     volumes:
       - frontend_dist:/usr/share/nginx/html:ro
       - certbot_data:/var/www/certbot:ro
-      - certbot_certs:/etc/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
       - frontend
@@ -154,10 +156,12 @@ services:
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:?N8N_PASSWORD es requerido}
-      N8N_HOST: n8n
+      N8N_HOST: miespacioideal.es
       N8N_PORT: 5678
-      N8N_PROTOCOL: http
-      WEBHOOK_URL: http://n8n:5678/
+      N8N_PROTOCOL: https
+      N8N_PATH: /n8n/
+      N8N_EDITOR_BASE_URL: https://miespacioideal.es/n8n/
+      WEBHOOK_URL: https://miespacioideal.es/
       GENERIC_TIMEZONE: America/Guayaquil
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -169,16 +173,16 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      N8N_EDITOR_BASE_URL: http://n8n:5678
       N8N_RUNNERS_TASK_TIMEOUT: 600
       N8N_RUNNERS_MAX_PAYLOAD: 104857600
       NODE_ENV: production
+    ports:
+      - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
       postgres:
         condition: service_started
-    # NO exponemos puerto - solo accesible internamente
     networks:
       - app_network
     restart: always

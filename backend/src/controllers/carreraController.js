@@ -110,17 +110,12 @@ const createCarrera = async (req, res) => {
       defaults: {
         carrera: normalized,
         carrera_normalizada: normalizedKey,
-        facultad: req.body.facultad || null,
         activa: true
       }
     });
 
     if (!created) {
-      const updates = { activa: true, carrera: normalized, carrera_normalizada: normalizedKey };
-      if (req.body.facultad !== undefined) {
-        updates.facultad = req.body.facultad;
-      }
-      await registro.update(updates);
+      await registro.update({ activa: true, carrera: normalized, carrera_normalizada: normalizedKey });
     }
 
     await updateCarreraCountConfig();
@@ -143,7 +138,7 @@ const createCarrera = async (req, res) => {
 const updateCarrera = async (req, res) => {
   try {
     const { id } = req.params;
-    const { carrera, facultad, activa } = req.body;
+    const { carrera, activa } = req.body;
 
     const registro = await Carrera.findByPk(id);
     if (!registro) {
@@ -174,10 +169,6 @@ const updateCarrera = async (req, res) => {
 
     if (typeof activa === 'boolean') {
       updates.activa = activa;
-    }
-
-    if (facultad !== undefined) {
-      updates.facultad = facultad;
     }
 
     await registro.update(updates);

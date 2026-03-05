@@ -29,11 +29,6 @@ const Carrera = sequelize.define('Carrera', {
     allowNull: true,
     comment: 'Nombre de carrera normalizado para comparaciones'
   },
-  facultad: {
-    type: DataTypes.STRING(150),
-    allowNull: true,
-    comment: 'Nombre de la facultad a la que pertenece la carrera'
-  },
   activa: {
     type: DataTypes.BOOLEAN,
     allowNull: true,

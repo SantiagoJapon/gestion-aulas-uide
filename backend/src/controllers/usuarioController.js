@@ -235,7 +235,7 @@ const createUsuario = async (req, res) => {
       try {
         const whatsappService = require('../services/whatsappService');
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, bienvenido al sistema institucional.\n\n📧 *Correo:* ${email}\n🔑 *Contraseña temporal:* ${passwordFinal}\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá establecer tu contraseña personal._`;
+        const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, tu cuenta ha sido creada.\n\n✅ Tus credenciales de acceso han sido enviadas a tu correo institucional: *${email}*\n\nRevisa tu bandeja de entrada (y la carpeta de spam si no aparece).\n\n🌐 *Sistema:* ${frontendUrl}`;
         whatsapp_enviado = await whatsappService.sendMessage(newUsuario.telefono, msg);
       } catch (wErr) {
         console.warn('⚠️ WhatsApp no disponible al crear usuario:', wErr.message);
@@ -327,7 +327,7 @@ const generarCredencialesUsuario = async (req, res) => {
     let whatsapp_enviado = false;
     if (usuario.telefono) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${usuario.nombre} ${usuario.apellido}*, tus credenciales de acceso han sido generadas.\n\n📧 *Correo:* ${usuario.email}\n🔑 *Contraseña temporal:* uide2026\n\n🌐 *Ingresa aquí:* ${frontendUrl}\n\n_Al ingresar por primera vez, el sistema te pedirá cambiar tu contraseña._`;
+      const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${usuario.nombre} ${usuario.apellido}*, tus credenciales de acceso han sido generadas.\n\n✅ Los datos de ingreso han sido enviados a tu correo: *${usuario.email}*\n\nRevisa tu bandeja de entrada (y la carpeta de spam si no aparece).\n\n🌐 *Sistema:* ${frontendUrl}`;
       whatsapp_enviado = await whatsappService.sendMessage(usuario.telefono, msg);
     }
 

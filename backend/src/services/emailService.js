@@ -420,13 +420,9 @@ const emailService = {
     const expiraEn = '24 horas';
 
     try {
-      // Validar email institucional
+      // Advertir si no es email institucional, pero permitir el envío siempre
       if (!email.endsWith('@uide.edu.ec') && !email.endsWith('@docente.uide.edu.ec')) {
-        console.warn(`⚠️ Email no institucional: ${email}`);
-        // Permitir en desarrollo, marcar en producción
-        if (process.env.NODE_ENV === 'production') {
-          return { success: false, error: 'El email debe ser institucional (@uide.edu.ec)' };
-        }
+        console.warn(`⚠️ Email no institucional (se enviará igualmente): ${email}`);
       }
 
       const html = getPlantillaCredenciales({

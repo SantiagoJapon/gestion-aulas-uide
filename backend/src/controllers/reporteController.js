@@ -23,7 +23,11 @@ class ReporteController {
      */
     async generarReporte(req, res) {
         try {
-            const { carrera_id: carreraIdBody, nombre, tipo = 'GENERAL' } = req.body;
+            const { carrera_id: carreraIdBody, nombre, tipo: tipoRaw = 'GENERAL' } = req.body;
+            const TIPOS_VALIDOS = ['GENERAL', 'CARRERA', 'AULA', 'ESPACIOS'];
+            const tipo = TIPOS_VALIDOS.includes((tipoRaw || '').toUpperCase())
+                ? tipoRaw.toUpperCase()
+                : 'GENERAL';
             const usuario_id = req.usuario.id;
             const carrera_id = await resolverCarreraId(req.usuario, carreraIdBody);
 

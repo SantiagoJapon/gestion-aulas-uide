@@ -426,15 +426,27 @@ exports.updateDocente = async (req, res) => {
 
         // Si el docente no tenía cuenta y ahora tiene email o teléfono → crear cuenta
         if (!tenia_cuenta && (email || telefono)) {
-            const user = await crearUsuarioParaDocente(docente);
-            if (user) {
+            const result = await crearUsuarioParaDocente(docente);
+            if (result) {
+                const { user, passwordTemporal } = result;
                 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                let email_enviado = false;
                 let whatsapp_enviado = false;
+
+                const emailResult = await emailService.enviarCredenciales({
+                    email: user.email,
+                    nombre: docente.nombre,
+                    passwordTemporal,
+                    rol: 'docente',
+                    linkAcceso: frontendUrl
+                });
+                email_enviado = emailResult.success;
+
                 if (telefono) {
                     const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
-                    whatsapp_enviado = await whatsappService.sendMessage(telefono, msg);
+                    whatsapp_enviado = await whatsappService.sendMessage(telefono, msg).catch(() => false);
                 }
-                credenciales = { email: user.email, password: 'uide2026', whatsapp_enviado };
+                credenciales = { email: user.email, password: passwordTemporal, email_enviado, whatsapp_enviado };
             }
         } else if (tenia_cuenta && telefono && !tenia_telefono) {
             // Tenía cuenta pero acaba de recibir teléfono → recordatorio de acceso
@@ -669,22 +681,35 @@ exports.generarCredencialesMasivo = async (req, res) => {
         const docentes = await Docente.findAll({ where, transaction });
         let creados = 0;
         let conTelefono = 0;
+        const cuentasCreadas = [];
 
         for (const docente of docentes) {
-            const user = await crearUsuarioParaDocente(docente, transaction);
-            if (user) {
+            const result = await crearUsuarioParaDocente(docente, transaction);
+            if (result) {
                 creados++;
-                // Enviar WhatsApp si tiene teléfono
-                if (docente.telefono) {
-                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-                    const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
-                    whatsappService.sendMessage(docente.telefono, mensaje).catch(e => console.warn('WA error:', e.message));
-                    conTelefono++;
-                }
+                cuentasCreadas.push({ docente, user: result.user, passwordTemporal: result.passwordTemporal });
             }
         }
 
         await transaction.commit();
+
+        // Enviar notificaciones después del commit
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        for (const { docente, user, passwordTemporal } of cuentasCreadas) {
+            emailService.enviarCredenciales({
+                email: user.email,
+                nombre: docente.nombre,
+                passwordTemporal,
+                rol: 'docente',
+                linkAcceso: frontendUrl
+            }).catch(e => console.warn(`⚠️ Email no enviado a ${user.email}:`, e.message));
+
+            if (docente.telefono) {
+                const mensaje = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nBuenas tardes *${docente.nombre}*, tus credenciales han sido generadas. Por favor revisa tu correo para obtener tu acceso al sistema.`;
+                whatsappService.sendMessage(docente.telefono, mensaje).catch(e => console.warn('WA error:', e.message));
+                conTelefono++;
+            }
+        }
         res.json({
             success: true,
             mensaje: `Se crearon ${creados} cuentas de usuario. ${conTelefono} notificaciones enviadas por WhatsApp.`,

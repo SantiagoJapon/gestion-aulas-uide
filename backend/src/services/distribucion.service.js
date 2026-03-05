@@ -1,5 +1,6 @@
 const { Clase, Aula, Distribucion, Carrera } = require('../models');
-const { Op } = require('sequelize');
+const { Op, fn, col, where: seqWhere } = require('sequelize');
+const sequelize = { where: seqWhere, fn, col };
 const { normalizarTexto } = require('../utils/textUtils');
 
 // ============================================
@@ -57,7 +58,7 @@ class DistribucionService {
 
       const todasLasClases = await Clase.findAll({ where: whereClases });
       const todasAulas = await Aula.findAll({
-        where: { estado: 'disponible' },
+        where: sequelize.where(sequelize.fn('UPPER', sequelize.col('estado')), 'DISPONIBLE'),
         order: [['capacidad', 'ASC']]
       });
       const aulas = todasAulas.filter(a => !aulaExcluidaDeDistribucion(a));
