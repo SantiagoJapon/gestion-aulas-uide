@@ -154,37 +154,42 @@ class ReporteService {
             `, { replacements, type: QueryTypes.SELECT });
 
             // 10. Carga Horaria por Docente (con conflictos)
-            const cargaDocentes = await sequelize.query(`
-                SELECT
-                    d.docente,
-                    COUNT(d.id) as total_clases,
-                    COUNT(CASE WHEN d.aula_asignada IS NOT NULL THEN 1 END) as clases_asignadas,
-                    SUM(
-                        (EXTRACT(HOUR FROM CAST(d.hora_fin AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(d.hora_fin AS TIME))) -
-                        (EXTRACT(HOUR FROM CAST(d.hora_inicio AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(d.hora_inicio AS TIME)))
-                    ) / 60.0 as horas_totales,
-                    COALESCE((
-                        SELECT COUNT(*)
-                        FROM clases c1
-                        INNER JOIN clases c2
-                            ON LOWER(c1.docente) = LOWER(c2.docente)
-                            AND c1.dia = c2.dia
-                            AND c1.id < c2.id
-                            AND c1.hora_inicio < c2.hora_fin
-                            AND c1.hora_fin > c2.hora_inicio
-                        WHERE LOWER(c1.docente) = LOWER(d.docente)
-                    ), 0) as conflictos
-                FROM clases d
-                WHERE d.docente IS NOT NULL AND TRIM(d.docente) <> ''
-                    AND d.hora_inicio IS NOT NULL AND TRIM(d.hora_inicio) <> ''
-                    AND d.hora_fin IS NOT NULL AND TRIM(d.hora_fin) <> ''
-                    AND d.hora_inicio ~ '^[0-9]{1,2}:[0-9]{2}'
-                    AND d.hora_fin ~ '^[0-9]{1,2}:[0-9]{2}'
-                ${carreraFilterSimple}
-                GROUP BY d.docente
-                ORDER BY horas_totales DESC
-                LIMIT 15
-            `, { replacements, type: QueryTypes.SELECT });
+            let cargaDocentes = [];
+            try {
+                cargaDocentes = await sequelize.query(`
+                    SELECT
+                        d.docente,
+                        COUNT(d.id) as total_clases,
+                        COUNT(CASE WHEN d.aula_asignada IS NOT NULL THEN 1 END) as clases_asignadas,
+                        SUM(
+                            (EXTRACT(HOUR FROM CAST(d.hora_fin AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(d.hora_fin AS TIME))) -
+                            (EXTRACT(HOUR FROM CAST(d.hora_inicio AS TIME)) * 60 + EXTRACT(MINUTE FROM CAST(d.hora_inicio AS TIME)))
+                        ) / 60.0 as horas_totales,
+                        COALESCE((
+                            SELECT COUNT(*)
+                            FROM clases c1
+                            INNER JOIN clases c2
+                                ON LOWER(c1.docente) = LOWER(c2.docente)
+                                AND c1.dia = c2.dia
+                                AND c1.id < c2.id
+                                AND c1.hora_inicio < c2.hora_fin
+                                AND c1.hora_fin > c2.hora_inicio
+                            WHERE LOWER(c1.docente) = LOWER(d.docente)
+                        ), 0) as conflictos
+                    FROM clases d
+                    WHERE d.docente IS NOT NULL AND TRIM(d.docente) <> ''
+                        AND d.hora_inicio IS NOT NULL AND TRIM(d.hora_inicio) <> ''
+                        AND d.hora_fin IS NOT NULL AND TRIM(d.hora_fin) <> ''
+                        AND d.hora_inicio ~ '^[0-9]{1,2}:[0-9]{2}'
+                        AND d.hora_fin ~ '^[0-9]{1,2}:[0-9]{2}'
+                    ${carreraFilterSimple}
+                    GROUP BY d.docente
+                    ORDER BY horas_totales DESC
+                    LIMIT 15
+                `, { replacements, type: QueryTypes.SELECT });
+            } catch (e) {
+                console.warn('Error al calcular carga docente:', e.message);
+            }
 
             // 11. Estadísticas de Espacios Especiales
             let statsEspacios = [];
@@ -204,20 +209,26 @@ class ReporteService {
             }
 
             // 12. Estadísticas de Reservas por Espacio
-            const statsReservas = await sequelize.query(`
-                SELECT
-                    tipo_espacio,
-                    COUNT(*) as total,
-                    SUM(CASE WHEN es_grupal THEN 1 ELSE 0 END) as grupales,
-                    SUM(CASE WHEN NOT es_grupal THEN 1 ELSE 0 END) as individuales,
-                    AVG(num_personas) as promedio_personas,
-                    COUNT(CASE WHEN estado = 'activa' THEN 1 END) as activas,
-                    COUNT(CASE WHEN estado = 'finalizada' THEN 1 END) as finalizadas
-                FROM reservas
-                WHERE estado IN ('activa', 'finalizada')
-                GROUP BY tipo_espacio
-                ORDER BY total DESC
-            `, { type: QueryTypes.SELECT });
+            let statsReservas = [];
+            try {
+                statsReservas = await sequelize.query(`
+                    SELECT
+                        tipo_espacio,
+                        COUNT(*) as total,
+                        SUM(CASE WHEN es_grupal THEN 1 ELSE 0 END) as grupales,
+                        SUM(CASE WHEN NOT es_grupal THEN 1 ELSE 0 END) as individuales,
+                        AVG(num_personas) as promedio_personas,
+                        COUNT(CASE WHEN estado = 'activa' THEN 1 END) as activas,
+                        COUNT(CASE WHEN estado = 'finalizada' THEN 1 END) as finalizadas
+                    FROM reservas
+                    WHERE estado IN ('activa', 'finalizada')
+                    GROUP BY tipo_espacio
+                    ORDER BY total DESC
+                    LIMIT 10
+                `, { type: QueryTypes.SELECT });
+            } catch (e) {
+                console.warn('Error al obtener estadísticas de reservas:', e.message);
+            }
 
             // 13. Reservas por día de la semana
             let reservasPorDia = [];

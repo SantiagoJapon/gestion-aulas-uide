@@ -135,20 +135,20 @@ const authLimiter = rateLimit({
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'production' ? 100 : 500, // más permisivo en desarrollo
+  max: process.env.NODE_ENV === 'production' ? 1000 : 2000, // Aumentado significativamente
   message: {
-    error: 'Demasiadas peticiones desde esta IP. Por favor intenta de nuevo más tarde.'
+    error: 'Demasiadas peticiones desde esta IP. Por favor intenta de nuevo en unos minutos.'
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 /**
- * Rate limiting para endpoints de creación/modificación
+ * Rate limiting para endpoints de creación/modificación (más preventivo que restrictivo)
  */
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 20, // 20 operaciones de escritura por IP cada 15 minutos
+  max: 200, // Aumentado de 20 a 200
   message: {
     error: 'Demasiadas operaciones de escritura. Por favor intenta de nuevo más tarde.'
   },
