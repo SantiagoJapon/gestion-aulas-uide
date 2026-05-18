@@ -284,13 +284,13 @@ export default function MateriaManagement({ carreraId }: MateriaManagementProps)
                                     setFormData({
                                         ...formData,
                                         docente_id: id ? parseInt(id) : '',
-                                        docente_nombre: d ? `${d.nombre} ${d.apellido}` : ''
+                                        docente_nombre: d ? d.nombre : ''
                                     });
                                 }}
                             >
                                 <option value="">Sin Asignar</option>
                                 {docentes.map(d => (
-                                    <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                                    <option key={d.id} value={d.id}>{d.nombre}</option>
                                 ))}
                             </select>
                         </div>
