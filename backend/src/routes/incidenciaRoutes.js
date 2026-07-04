@@ -4,7 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const router = express.Router();
 const incidenciaController = require('../controllers/incidenciaController');
-const { verificarAuth } = require('../middleware/auth');
+const { verificarAuth, verificarRol } = require('../middleware/auth');
 
 // ── Multer diskStorage para fotos de evidencia ────────────────────────────────
 const uploadDir = path.join(__dirname, '../../uploads/incidencias');
@@ -34,7 +34,7 @@ const upload = multer({
 router.use(verificarAuth);
 
 router.post('/', upload.single('foto'), incidenciaController.crearIncidencia);
-router.get('/', incidenciaController.listarIncidencias);
-router.put('/:id/estado', incidenciaController.actualizarEstado);
+router.get('/', verificarRol('admin', 'director'), incidenciaController.listarIncidencias);
+router.put('/:id/estado', verificarRol('admin', 'director'), incidenciaController.actualizarEstado);
 
 module.exports = router;

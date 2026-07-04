@@ -1,101 +1,58 @@
+#!/bin/sh
 # ============================================
-# Nginx Reverse Proxy - Gestion Aulas UIDE
+# Entrypoint para Nginx - Gestion Aulas UIDE
+# Reemplaza variables de entorno en la config
 # ============================================
-# El dominio se pasa via variable de entorno DOMAIN
-# Si DOMAIN está vacío, usa IP directa (sin SSL)
 
-upstream backend_upstream {
-    server backend:3000;
-}
+set -e
 
-upstream n8n_upstream {
-    server n8n:5678;
-}
-
-# HTTP server (redirección a HTTPS o directo)
+# Si DOMAIN está vacío, usar config sin SSL (solo HTTP)
+if [ -z "$DOMAIN" ]; then
+    echo "⚠️  DOMAIN no configurado — usando config sin SSL (solo HTTP)"
+    cat > /etc/nginx/conf.d/default.conf << 'EOF'
 server {
     listen 80;
-    server_name ${DOMAIN} www.${DOMAIN};
+    server_name _;
 
-    # Certbot challenge (renovación SSL) — siempre disponible
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    # Si DOMAIN está configurado, redirigir a HTTPS
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name ${DOMAIN} www.${DOMAIN};
-
-    # --- SSL (solo si DOMAIN está configurado) ---
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    # --- Headers de seguridad ---
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    # --- Gzip ---
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
-
-    # --- API: Proxy al backend ---
     location /api/ {
-        proxy_pass http://backend_upstream;
+        proxy_pass http://backend:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
         proxy_connect_timeout 60s;
         proxy_send_timeout 120s;
         proxy_read_timeout 120s;
         client_max_body_size 10M;
     }
 
-    # --- Distribución: timeout extendido ---
     location ~ ^/api/distribucion/(ejecutar|forzar) {
-        proxy_pass http://backend_upstream;
+        proxy_pass http://backend:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
         proxy_connect_timeout 60s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
         client_max_body_size 10M;
     }
 
-    # --- Health check del backend ---
     location /health {
-        proxy_pass http://backend_upstream;
+        proxy_pass http://backend:3000;
         proxy_set_header Host $host;
     }
 
-    # --- n8n healthz ---
     location = /healthz {
-        proxy_pass http://n8n_upstream;
+        proxy_pass http://n8n:5678;
         proxy_set_header Host $host;
     }
 
-    # --- n8n Workflow Editor ---
     location /n8n/ {
         rewrite ^/n8n/(.*) /$1 break;
-        proxy_pass http://n8n_upstream;
+        proxy_pass http://n8n:5678;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -109,7 +66,6 @@ server {
         proxy_buffering off;
     }
 
-    # --- Frontend: archivos estaticos ---
     location / {
         root /usr/share/nginx/html;
         index index.html;
@@ -121,3 +77,11 @@ server {
         }
     }
 }
+EOF
+else
+    echo "✅ DOMAIN=${DOMAIN} — usando config SSL"
+    export DOMAIN
+    envsubst '${DOMAIN}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+fi
+
+exec nginx -g "daemon off;"

@@ -1,0 +1,123 @@
+name: CI/CD - Gestion Aulas UIDE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres_test
+          POSTGRES_DB: gestion_aulas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres_test
+          DB_NAME: gestion_aulas_test
+          DB_SSL: "false"
+          JWT_SECRET: test-jwt-secret
+          SMTP_HOST: smtp.office365.com
+          SMTP_PORT: 587
+          SMTP_USER: ""
+          SMTP_PASS: ""
+
+      - name: Setup Node.js for frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy to Production
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config << EOF
+          Host vps
+            HostName ${{ secrets.VPS_HOST }}
+            User ${{ secrets.VPS_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+          EOF
+
+      - name: Build Evolution API (if needed)
+        run: |
+          ssh vps "cd /opt/gestion-aulas-uide && bash scripts/build-evolution.sh"
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh vps "
+            cd /opt/gestion-aulas-uide &&
+            git pull origin main &&
+            docker compose -f docker-compose.prod.yml up -d --build
+          "
+
+      - name: Health Check
+        run: |
+          sleep 15
+          for i in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://${{ secrets.VPS_HOST }}/api/health || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Backend healthy"
+              exit 0
+            fi
+            echo "   Intento $i/5 - HTTP $HTTP_CODE, esperando..."
+            sleep 5
+          done
+          echo "❌ Backend no responde después de 5 intentos"
+          exit 1

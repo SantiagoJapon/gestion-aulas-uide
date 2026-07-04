@@ -1,0 +1,110 @@
+{
+  "name": "Sistema UIDE - Reportes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reporte",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "rep-webhook-001",
+      "name": "Webhook Reportes",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-496, 336],
+      "webhookId": "reportes-uide"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\nreturn {\n  tipo: body.tipo || 'desconocido',\n  evento_id: body.evento_id,\n  timestamp: body.timestamp,\n  datos: body\n};"
+      },
+      "id": "rep-router-001",
+      "name": "Router - Tipo Reporte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-272, 336]
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $json.datos;\nconst est = datos.estadisticas || {};\nconst mensaje = datos.mensaje || 'Sin detalle';\nconst usarIa = datos.usar_ia === true;\n\nreturn {\n  carrera_id: datos.carrera_id,\n  estadisticas: est,\n  mensaje,\n  usar_ia: usarIa,\n  total: est.total || 0,\n  exitosas: est.exitosas || 0,\n  fallidas: est.fallidas || 0\n};"
+      },
+      "id": "rep-extract-001",
+      "name": "Extraer Datos Reporte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-48, 336]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.carrera as nombre_carrera, u.nombre as director_nombre, u.telefono as director_telefono FROM uploads_carreras c LEFT JOIN usuarios u ON u.carrera_director = c.carrera AND u.rol = 'director' WHERE c.id = COALESCE({{ $json.carrera_id }}, 0) LIMIT 1",
+        "options": {}
+      },
+      "id": "rep-db-001",
+      "name": "Obtener Director",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [176, 240],
+      "credentials": {
+        "postgres": {
+          "id": "5tJ62Xtyr8vBpyCQ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"number\": \"{{ $json.director_telefono }}\", \"text\": \"{{ $('Extraer Datos Reporte').first().json.mensaje }}\"}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "rep-wa-001",
+      "name": "Enviar WhatsApp Director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { success: true, processed: true, carrera_id: $json.carrera_id };"
+      },
+      "id": "rep-success-001",
+      "name": "Respuesta Éxito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [624, 240]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Reportes": {
+      "main": [[{ "node": "Router - Tipo Reporte", "type": "main", "index": 0 }]]
+    },
+    "Router - Tipo Reporte": {
+      "main": [[{ "node": "Extraer Datos Reporte", "type": "main", "index": 0 }]]
+    },
+    "Extraer Datos Reporte": {
+      "main": [[{ "node": "Obtener Director", "type": "main", "index": 0 }]]
+    },
+    "Obtener Director": {
+      "main": [[{ "node": "Enviar WhatsApp Director", "type": "main", "index": 0 }]]
+    },
+    "Enviar WhatsApp Director": {
+      "main": [[{ "node": "Respuesta Éxito", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}

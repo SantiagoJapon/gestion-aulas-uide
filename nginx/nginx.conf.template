@@ -1,8 +1,7 @@
 # ============================================
 # Nginx Reverse Proxy - Gestion Aulas UIDE
 # ============================================
-# El dominio se pasa via variable de entorno DOMAIN
-# Si DOMAIN está vacío, usa IP directa (sin SSL)
+# Template — DOMAIN se reemplaza via envsubst al iniciar
 
 upstream backend_upstream {
     server backend:3000;
@@ -17,12 +16,10 @@ server {
     listen 80;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    # Certbot challenge (renovación SSL) — siempre disponible
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
-    # Si DOMAIN está configurado, redirigir a HTTPS
     location / {
         return 301 https://$host$request_uri;
     }
@@ -32,7 +29,7 @@ server {
     listen 443 ssl;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    # --- SSL (solo si DOMAIN está configurado) ---
+    # --- SSL ---
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
@@ -58,7 +55,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
         proxy_connect_timeout 60s;
         proxy_send_timeout 120s;
         proxy_read_timeout 120s;
@@ -73,7 +69,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
         proxy_connect_timeout 60s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;

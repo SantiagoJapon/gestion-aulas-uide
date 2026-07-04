@@ -42,7 +42,7 @@ function crearTransporterGeneral() {
   }
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: process.env.SMTP_HOST || 'smtp.office365.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
@@ -439,7 +439,7 @@ const emailService = {
         ? (process.env.SMTP_UIDE_FROM || process.env.SMTP_FROM || '"Sistema de Gestion Aulas UIDE" <no-reply@uide.edu.ec>')
         : (process.env.SMTP_FROM || '"Sistema de Gestion Aulas UIDE" <no-reply@uide.edu.ec>');
 
-      console.log(`📤 Enviando a ${email} usando SMTP: ${esCorreoUide(email) && process.env.SMTP_UIDE_HOST ? process.env.SMTP_UIDE_HOST : process.env.SMTP_HOST || 'smtp.gmail.com'}`);
+      console.log(`📤 Enviando a ${email} usando SMTP: ${esCorreoUide(email) && process.env.SMTP_UIDE_HOST ? process.env.SMTP_UIDE_HOST : process.env.SMTP_HOST || 'smtp.office365.com'}`);
 
       const info = await t.sendMail({
         from: fromAddress,
@@ -568,7 +568,7 @@ Sistema de Gestion de Aulas
     try {
       if (!transporterGeneral) transporterGeneral = crearTransporterGeneral();
       await transporterGeneral.verify();
-      console.log(`✅ SMTP general (${process.env.SMTP_HOST || 'smtp.gmail.com'}) conectado correctamente`);
+      console.log(`✅ SMTP general (${process.env.SMTP_HOST || 'smtp.office365.com'}) conectado correctamente`);
       resultado.general = true;
     } catch (err) {
       console.error(`❌ SMTP general: ${err.message}`);

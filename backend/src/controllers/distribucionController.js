@@ -1,7 +1,6 @@
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const distribucionService = require('../services/distribucion.service');
-const N8nService = require('../services/n8n.service');
 const { Carrera, Clase, Aula, Docente, EstudianteMateria, Estudiante } = require('../models');
 const { Op } = require('sequelize');
 
@@ -113,28 +112,14 @@ const getEstadoDistribucion = async (req, res) => {
 };
 
 /**
- * Ejecutar distribución via n8n (con fallback al algoritmo local)
+ * Ejecutar distribución (solo algoritmo local)
+ * n8n ya NO participa en el flujo crítico de distribución.
  * Usado por ambos endpoints: /ejecutar y /forzar
  */
-const ejecutarDistribucionViaN8n = async (req, res) => {
+const ejecutarDistribucionLocal = async (req, res) => {
   try {
-    console.log('🎯 Solicitada distribución de aulas...');
+    console.log('🎯 Ejecutando distribución de aulas (algoritmo local)...');
 
-    // Intentar via n8n primero, solo si devuelve resultado válido
-    try {
-      console.log('📤 Enviando a n8n...');
-      const n8nResultado = await N8nService.ejecutarDistribucion();
-      // Validar que n8n realmente ejecutó la distribución
-      if (n8nResultado && n8nResultado.success === true && n8nResultado.estadisticas) {
-        console.log('✅ Distribución completada via n8n');
-        return res.json(n8nResultado);
-      }
-      console.warn('⚠️ n8n respondió pero sin datos de distribución, usando algoritmo local');
-    } catch (n8nError) {
-      console.warn('⚠️ n8n no disponible, usando algoritmo local:', n8nError.message);
-    }
-
-    // Algoritmo local del backend
     const carreraId = req.query.carrera_id || req.body.carrera_id;
     const resultado = await distribucionService.ejecutarDistribucion(carreraId);
     res.json(resultado);
@@ -149,8 +134,8 @@ const ejecutarDistribucionViaN8n = async (req, res) => {
 };
 
 // Alias: ambos endpoints usan el mismo handler
-const forzarDistribucion = ejecutarDistribucionViaN8n;
-const ejecutarDistribucionAutomatica = ejecutarDistribucionViaN8n;
+const forzarDistribucion = ejecutarDistribucionLocal;
+const ejecutarDistribucionAutomatica = ejecutarDistribucionLocal;
 
 // ============================================
 // OBTENER HORARIO

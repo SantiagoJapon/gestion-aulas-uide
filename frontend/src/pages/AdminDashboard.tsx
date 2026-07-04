@@ -7,6 +7,7 @@ import DirectorAssignmentView from '../components/DirectorAssignmentView';
 import SubirEstudiantes from '../components/SubirEstudiantes';
 import MapaCalor from '../components/MapaCalor';
 import PlanificacionesTable from '../components/PlanificacionesTable';
+import SystemHealthWidget from '../components/SystemHealthWidget';
 import CentroControlDistribucion from '../components/CentroControlDistribucion';
 import HorarioVisual from '../components/HorarioVisual';
 import EspacioTable from '../components/EspacioTable';
@@ -224,6 +225,9 @@ export default function AdminDashboard() {
                     </div>
                   </DashboardWidget>
                 </div>
+
+                {/* System Health Widget */}
+                <SystemHealthWidget />
 
                 {/* Info Card Quick Action */}
                 <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">

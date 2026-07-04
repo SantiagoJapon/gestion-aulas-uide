@@ -1,0 +1,167 @@
+{
+  "name": "Sistema UIDE - Notificaciones",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notificacion",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "notif-webhook-001",
+      "name": "Webhook Notificaciones",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-496, 336],
+      "webhookId": "notificacion-uide"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\nreturn {\n  tipo: body.tipo || 'desconocido',\n  evento_id: body.evento_id,\n  timestamp: body.timestamp,\n  version: body.version,\n  datos: body\n};"
+      },
+      "id": "notif-router-001",
+      "name": "Router - Tipo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-272, 336]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "" },
+                "conditions": [
+                  { "leftValue": "={{ $json.tipo }}", "rightValue": "reserva_creada", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reserva_creada"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "" },
+                "conditions": [
+                  { "leftValue": "={{ $json.tipo }}", "rightValue": "reserva_aprobada", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reserva_aprobada"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "" },
+                "conditions": [
+                  { "leftValue": "={{ $json.tipo }}", "rightValue": "reserva_rechazada", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reserva_rechazada"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "" },
+                "conditions": [
+                  { "leftValue": "={{ $json.tipo }}", "rightValue": "director_notificado", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "director_notificado"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "notif-switch-001",
+      "name": "Switch Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-48, 336]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"number\": \"{{ $json.reserva.telefono || $json.datos.telefono }}\", \"text\": \"{{ 'Nueva reserva: ' + $json.reserva.espacio + ' el ' + $json.reserva.fecha + ' de ' + $json.reserva.hora_inicio + ' a ' + $json.reserva.hora_fin }}\"}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "notif-wa-reserva-001",
+      "name": "WhatsApp - Reserva",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [176, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"number\": \"{{ $json.datos.telefono }}\", \"text\": \"{{ 'Hola ' + $json.datos.nombre + ', has sido asignado como director de ' + $json.datos.carrera + '. Tu contraseña actual sigue siendo la misma.' }}\"}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "notif-wa-director-001",
+      "name": "WhatsApp - Director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [176, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { success: true, processed: true, tipo: $json.tipo };"
+      },
+      "id": "notif-success-001",
+      "name": "Respuesta Éxito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 240]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Notificaciones": {
+      "main": [[{ "node": "Router - Tipo", "type": "main", "index": 0 }]]
+    },
+    "Router - Tipo": {
+      "main": [[{ "node": "Switch Tipo", "type": "main", "index": 0 }]]
+    },
+    "Switch Tipo": {
+      "main": [
+        [{ "node": "WhatsApp - Reserva", "type": "main", "index": 0 }],
+        [{ "node": "WhatsApp - Reserva", "type": "main", "index": 0 }],
+        [{ "node": "WhatsApp - Reserva", "type": "main", "index": 0 }],
+        [{ "node": "WhatsApp - Director", "type": "main", "index": 0 }]
+      ]
+    },
+    "WhatsApp - Reserva": {
+      "main": [[{ "node": "Respuesta Éxito", "type": "main", "index": 0 }]]
+    },
+    "WhatsApp - Director": {
+      "main": [[{ "node": "Respuesta Éxito", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}

@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('../scripts/validate-env.js');
 const app = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { seedData } = require('./utils/seed');
@@ -14,8 +15,8 @@ const iniciarServidor = async () => {
     require('./models');
 
     // Sincronizar modelos con la base de datos
-    // En producción: sync sin ALTER para evitar modificaciones accidentales de esquema
-    // En desarrollo: alter:true para que Sequelize aplique cambios de modelos automáticamente
+    // En producción: usar migraciones (npx sequelize-cli db:migrate)
+    // En desarrollo: alter:true para que Sequelize aplique cambios automáticamente
     const isProduction = process.env.NODE_ENV === 'production';
     console.log('🔄 Sincronizando modelos con PostgreSQL...');
     await syncDatabase({
@@ -23,7 +24,7 @@ const iniciarServidor = async () => {
       force: false
     });
     if (isProduction) {
-      console.log('🔒 DB: modo seguro (sin ALTER automático en producción)');
+      console.log('🔒 DB: modo seguro (usar migraciones en producción: npm run db:migrate)');
     }
     console.log('✅ Modelos sincronizados');
 

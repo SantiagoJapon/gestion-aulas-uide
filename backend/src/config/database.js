@@ -53,6 +53,10 @@ const syncDatabase = async (options = {}) => {
       throw new Error('No se puede usar force:true en producción');
     }
 
+    if (process.env.NODE_ENV === 'production' && alter) {
+      throw new Error('No se puede usar alter:true en producción. Usa migraciones: npx sequelize-cli db:migrate');
+    }
+
     await sequelize.sync({ force, alter });
     console.log('✅ Modelos sincronizados con la base de datos PostgreSQL');
   } catch (error) {

@@ -101,6 +101,36 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/api/health', async (req, res) => {
+    try {
+        const dbConnected = await testConnection();
+        const dbStatus = dbConnected ? 'connected' : 'disconnected';
+        const overall = dbConnected ? 'healthy' : 'degraded';
+
+        res.json({
+            status: overall,
+            version: '2.6.0',
+            environment: process.env.NODE_ENV || 'development',
+            timestamp: new Date().toISOString(),
+            uptime: Math.floor(process.uptime()),
+            checks: {
+                database: dbStatus,
+                redis: process.env.REDIS_PASSWORD ? 'configured' : 'not_configured',
+                smtp: process.env.SMTP_USER ? 'configured' : 'not_configured',
+                evolution_api: process.env.EVOLUTION_API_URL ? 'configured' : 'not_configured'
+            }
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            version: '2.6.0',
+            environment: process.env.NODE_ENV || 'development',
+            timestamp: new Date().toISOString(),
+            error: error.message
+        });
+    }
+});
+
 app.get('/api/status', async (req, res) => {
     try {
         const dbConnected = await testConnection();

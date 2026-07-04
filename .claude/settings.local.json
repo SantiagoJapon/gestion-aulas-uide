@@ -31,7 +31,9 @@
       "Bash(docker network inspect:*)",
       "Bash(grep:*)",
       "Bash(powershell -Command \"\\(Invoke-WebRequest -Uri http://localhost:5173 -UseBasicParsing -ErrorAction SilentlyContinue\\).StatusCode\")",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "PowerShell(head -40)",
+      "PowerShell($proc = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if \\($proc\\) { Stop-Process -Id $proc -Force; \"Proceso $proc terminado\" } else { \"No hay proceso en 3001\" })"
     ],
     "deny": [],
     "ask": [],

@@ -12,7 +12,7 @@ router.get('/metricas', ReporteController.obtenerMetricasActuales);
 // Historial y generación: Admin y directores pueden ver/generar
 router.get('/historial', verificarRol('admin', 'director'), ReporteController.obtenerHistorial);
 router.post('/generar', verificarRol('admin', 'director'), ReporteController.generarReporte);
-router.get('/descargar/:id', ReporteController.descargarReporte);
+router.get('/descargar/:id', verificarRol('admin', 'director'), ReporteController.descargarReporte);
 router.delete('/:id', verificarAdmin, ReporteController.eliminarReporte);
 router.get('/descargar-excel', verificarRol('admin', 'director'), ReporteController.descargarExcelActual);
 

@@ -1,0 +1,103 @@
+{
+  "name": "Sistema UIDE - IA Consultas",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ia-consulta",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ia-webhook-001",
+      "name": "Webhook IA Consulta",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-496, 336],
+      "webhookId": "ia-consulta-uide"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\nreturn {\n  prompt: body.prompt || 'Sin consulta',\n  contexto: body.contexto || null,\n  evento_id: body.evento_id\n};"
+      },
+      "id": "ia-parse-001",
+      "name": "Parsear Consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-272, 336]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Eres un asistente experto en gestión académica universitaria de la UIDE. Ayudas a administradores y directores con análisis, recomendaciones y reportes. Responde en español, sé conciso y profesional. Máximo 400 palabras."
+            },
+            {
+              "role": "user",
+              "content": "=Contexto del sistema:\n{{ $json.contexto ? JSON.stringify($json.contexto) : 'Sin contexto adicional' }}\n\nConsulta del administrador:\n{{ $json.prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 800
+        }
+      },
+      "id": "ia-gpt-001",
+      "name": "GPT-4o",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [-48, 336],
+      "credentials": {
+        "openAiApi": {
+          "id": "CREAR_EN_N8N_PRIMERO",
+          "name": "OpenAI UIDE"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const gptResponse = $json;\nreturn {\n  success: true,\n  respuesta: gptResponse.message.content,\n  modelo: 'gpt-4o',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "ia-response-001",
+      "name": "Formatear Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 336]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "ia-respond-001",
+      "name": "Responder Consulta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [400, 336]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook IA Consulta": {
+      "main": [[{ "node": "Parsear Consulta", "type": "main", "index": 0 }]]
+    },
+    "Parsear Consulta": {
+      "main": [[{ "node": "GPT-4o", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o": {
+      "main": [[{ "node": "Formatear Respuesta", "type": "main", "index": 0 }]]
+    },
+    "Formatear Respuesta": {
+      "main": [[{ "node": "Responder Consulta", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}

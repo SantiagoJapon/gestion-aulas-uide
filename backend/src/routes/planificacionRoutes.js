@@ -20,6 +20,7 @@ router.post(
 router.get(
   '/distribucion',
   verificarAuth,
+  verificarRol('director', 'admin'),
   planificacionController.obtenerEstadoDistribucion
 );
 
@@ -27,6 +28,7 @@ router.get(
 router.get(
   '/distribucion/:carrera_id',
   verificarAuth,
+  verificarRol('director', 'admin'),
   planificacionController.obtenerEstadoDistribucion
 );
 

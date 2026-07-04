@@ -1,6 +1,7 @@
-const { Reserva, Aula, Clase, Distribucion, Espacio, Notificacion } = require('../models');
+const { Reserva, Aula, Clase, Distribucion, Espacio, Notificacion, User } = require('../models');
 const { Op } = require('sequelize');
 const N8nService = require('../services/n8n.service');
+const { getDirectorCarreraFilter } = require('../middleware/auth');
 
 /**
  * Construye el payload de reserva para el contrato de eventos n8n (sección 3.3).
@@ -215,12 +216,12 @@ exports.crearReserva = async (req, res) => {
             console.error('⚠️ Error al enviar notificación de reserva:', notifErr.message);
         }
 
-        // ── Orquestación n8n (fire-and-forget, contrato sección 3.3) ──────────
-        // n8n hace fan-out a WhatsApp + Email. Si n8n está caído, no afecta la reserva.
-        N8nService.notificarReserva({
-            tipo: 'creada',
+        // ── n8n event (fire-and-forget, vía event queue) ─────────────────────
+        // n8n consume el evento desde Redis y hace fan-out a WhatsApp + Email.
+        N8nService.emit('notificacion', {
+            tipo: 'reserva_creada',
             reserva: buildReservaPayload(nuevaReserva)
-        }).catch(err => console.warn('⚠️ n8n no disponible para notificar reserva creada:', err.message));
+        });
 
         res.status(201).json({
             success: true,
@@ -457,8 +458,29 @@ exports.listarPendientes = async (req, res) => {
             whereClause.estado = 'pendiente_aprobacion';
         }
 
+        // Director solo ve reservas de su carrera
+        const includeFilter = [];
+        if (req.usuarioRol === 'director') {
+            const carreraFilter = await getDirectorCarreraFilter(req);
+            if (carreraFilter.carrera_id) {
+                includeFilter.push({
+                    model: User,
+                    as: 'usuario',
+                    where: { carrera_director: req.usuario.carrera_director },
+                    attributes: ['id', 'nombre', 'email', 'carrera_director']
+                });
+            }
+        } else {
+            includeFilter.push({
+                model: User,
+                as: 'usuario',
+                attributes: ['id', 'nombre', 'email', 'carrera_director']
+            });
+        }
+
         const reservas = await Reserva.findAll({
             where: whereClause,
+            include: includeFilter,
             order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']]
         });
 
@@ -480,9 +502,19 @@ exports.cambiarEstado = async (req, res) => {
             return res.status(400).json({ error: `Estado inválido. Valores permitidos: ${estadosValidos.join(', ')}` });
         }
 
-        const reserva = await Reserva.findByPk(id);
+        const reserva = await Reserva.findByPk(id, {
+            include: [{ model: User, as: 'usuario', attributes: ['id', 'carrera_director'] }]
+        });
         if (!reserva) {
             return res.status(404).json({ error: "Reserva no encontrada" });
+        }
+
+        // Director solo puede modificar reservas de su carrera
+        if (req.usuarioRol === 'director') {
+            const reservaCarrera = reserva.usuario?.carrera_director;
+            if (!reservaCarrera || reservaCarrera !== req.usuario.carrera_director) {
+                return res.status(403).json({ error: "No tiene permisos para modificar esta reserva" });
+            }
         }
 
         if (reserva.estado !== 'pendiente_aprobacion' && req.usuarioRol !== 'admin') {
@@ -528,15 +560,15 @@ exports.cambiarEstado = async (req, res) => {
             console.error('⚠️ Error al enviar notificación de cambio de estado:', notifErr.message);
         }
 
-        // ── Orquestación n8n (fire-and-forget, contrato sección 3.3) ──────────
-        // Solo aprobación y rechazo se orquestan por n8n (multicanal).
+        // ── n8n event (fire-and-forget, vía event queue) ─────────────────────
+        // Solo aprobación y rechazo se notifican por n8n.
         // 'cancelada' queda como notificación in-app únicamente.
-        const tipoN8n = estado === 'activa' ? 'aprobada' : (estado === 'rechazada' ? 'rechazada' : null);
+        const tipoN8n = estado === 'activa' ? 'reserva_aprobada' : (estado === 'rechazada' ? 'reserva_rechazada' : null);
         if (tipoN8n) {
-            N8nService.notificarReserva({
+            N8nService.emit('notificacion', {
                 tipo: tipoN8n,
                 reserva: buildReservaPayload(reserva)
-            }).catch(err => console.warn(`⚠️ n8n no disponible para notificar reserva ${tipoN8n}:`, err.message));
+            });
         }
 
         const mensaje = estado === 'activa' ? 'Reserva aprobada' :
@@ -578,9 +610,27 @@ exports.listarTodas = async (req, res) => {
             ];
         }
 
+        // Director solo ve reservas de su carrera
+        const includeFilter = [];
+        if (req.usuarioRol === 'director') {
+            includeFilter.push({
+                model: User,
+                as: 'usuario',
+                where: { carrera_director: req.usuario.carrera_director },
+                attributes: ['id', 'nombre', 'email', 'carrera_director']
+            });
+        } else {
+            includeFilter.push({
+                model: User,
+                as: 'usuario',
+                attributes: ['id', 'nombre', 'email', 'carrera_director']
+            });
+        }
+
         const offset = (Number(pagina) - 1) * Number(limite);
         const { rows: reservas, count: total } = await Reserva.findAndCountAll({
             where: whereClause,
+            include: includeFilter,
             order: [['fecha', 'ASC'], ['hora_inicio', 'ASC']],
             limit: Number(limite),
             offset

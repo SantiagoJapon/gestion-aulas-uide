@@ -1,68 +1,73 @@
 const axios = require('axios');
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
+const redisQueue = require('./redisQueue');
 
 const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
-/**
- * Normaliza un número de teléfono al formato internacional para Ecuador (593XXXXXXXXX).
- * Si el número ya tiene código de país, lo mantiene.
- */
 function normalizarTelefono(phone) {
     if (!phone) return null;
-    // Quitar todo lo que no sea dígito
     let digits = String(phone).replace(/\D/g, '');
-    // Si empieza con 0 (formato local Ecuador), reemplazar con 593
     if (digits.startsWith('0')) digits = '593' + digits.slice(1);
-    // Si no tiene prefijo de país, asumir Ecuador
     if (!digits.startsWith('593') && digits.length === 9) digits = '593' + digits;
     return digits;
 }
 
-/**
- * Servicio para emitir alertas en tiempo real via WhatsApp (Evolution API)
- * Mantiene la misma interfaz publica para no romper controllers existentes.
- */
+async function sendWithRetry(fn, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (err) {
+            if (i === maxRetries - 1) throw err;
+            const delay = Math.pow(2, i) * 1000;
+            console.warn(`   Reintento ${i + 1}/${maxRetries} en ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
+
 const whatsappService = {
 
-    /**
-     * Enviar mensaje a un numero de telefono via WhatsApp
-     * @param {string} phone - Numero de telefono (o telefono del usuario)
-     * @param {string} text - Texto del mensaje (soporta *bold* de WhatsApp)
-     */
     async sendMessage(phone, text) {
         if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return false;
         if (!phone) return false;
         const number = normalizarTelefono(phone);
         if (!number) return false;
+
         try {
-            await axios.post(
-                `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-                { number, text },
-                {
-                    headers: {
-                        apikey: EVOLUTION_API_KEY,
-                        'Content-Type': 'application/json'
-                    },
-                    timeout: 15000
-                }
+            await sendWithRetry(() =>
+                axios.post(
+                    `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
+                    { number, text },
+                    {
+                        headers: {
+                            apikey: EVOLUTION_API_KEY,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 15000
+                    }
+                )
             );
             return true;
         } catch (error) {
             console.error(`Error enviando WhatsApp a ${number}:`, error.response?.data || error.message);
+
+            await redisQueue.push('whatsapp:pending', {
+                phone: number,
+                text,
+                timestamp: Date.now(),
+                retries: 0
+            });
+            console.log(`📥 Mensaje encolado en Redis para reintento posterior: ${number}`);
+
             return false;
         }
     },
 
-    /**
-     * Busca los telefonos vinculados a un Usuario de la plataforma
-     * Busca primero en bot_sessions (campo telefono), luego en usuarios (campo telefono)
-     */
     async getPhonesByUserId(userId) {
         try {
-            // Buscar en bot_sessions por telefono
             const sessions = await sequelize.query(
                 `SELECT telefono FROM bot_sessions WHERE user_id = :userId AND telefono IS NOT NULL`,
                 { replacements: { userId }, type: QueryTypes.SELECT }
@@ -71,7 +76,6 @@ const whatsappService = {
                 return sessions.map(r => r.telefono).filter(Boolean);
             }
 
-            // Fallback: buscar en tabla usuarios directamente
             const users = await sequelize.query(
                 `SELECT telefono FROM usuarios WHERE id = :userId AND telefono IS NOT NULL`,
                 { replacements: { userId }, type: QueryTypes.SELECT }
@@ -83,14 +87,10 @@ const whatsappService = {
         }
     },
 
-    // Backward compat alias
     async getChatIdsByUserId(userId) {
         return this.getPhonesByUserId(userId);
     },
 
-    /**
-     * Alerta a un usuario especifico via WhatsApp
-     */
     async notifyUser(userId, message) {
         const phones = await this.getPhonesByUserId(userId);
         for (const phone of phones) {
@@ -98,12 +98,8 @@ const whatsappService = {
         }
     },
 
-    /**
-     * Alerta a todos los estudiantes de una carrera via WhatsApp
-     */
     async notifyCareer(careerId, message) {
         try {
-            // Buscar telefonos de estudiantes vinculados a la carrera
             const users = await sequelize.query(`
                 SELECT bs.telefono
                 FROM bot_sessions bs
@@ -123,9 +119,6 @@ const whatsappService = {
         }
     },
 
-    /**
-     * Alerta a todos los estudiantes de una clase especifica via WhatsApp
-     */
     async notifyClass(claseId, message) {
         try {
             const [clase] = await sequelize.query('SELECT carrera, ciclo FROM clases WHERE id = :claseId', {
@@ -135,7 +128,6 @@ const whatsappService = {
 
             if (!clase) return;
 
-            // Buscar estudiantes con telefono que coincidan con la carrera y nivel
             const users = await sequelize.query(`
                 SELECT DISTINCT e.telefono
                 FROM estudiantes e
@@ -156,6 +148,22 @@ const whatsappService = {
             }
         } catch (error) {
             console.error("Error notifyClass:", error.message);
+        }
+    },
+
+    async processPendingQueue() {
+        try {
+            const pending = await redisQueue.pop('whatsapp:pending', 1);
+            if (!pending) return;
+
+            if (Date.now() - pending.timestamp > 86400000) {
+                console.warn(`🧹 Mensaje expirado (24h): ${pending.phone}`);
+                return;
+            }
+
+            await this.sendMessage(pending.phone, pending.text);
+        } catch (err) {
+            console.error('Error processing pending queue:', err.message);
         }
     }
 };

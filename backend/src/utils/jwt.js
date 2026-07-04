@@ -1,10 +1,19 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.warn('⚠️  ADVERTENCIA: JWT_SECRET no está definido. Usando secreto por defecto. NO usar en producción.');
+function getSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    const msg = 'FATAL: JWT_SECRET no está definido en variables de entorno.';
+    const hint = 'Genera uno con: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64\'))"';
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`❌ ${msg}`);
+      console.error(`   ${hint}`);
+      process.exit(1);
+    }
+    throw new Error(`${msg} ${hint}`);
+  }
+  return secret;
 }
-const SECRET = JWT_SECRET || 'dev-only-secret-cambiar-en-produccion';
 
 /**
  * Genera un token JWT para un usuario
@@ -16,9 +25,9 @@ const generarToken = (payload, expiresIn = null) => {
 
   return jwt.sign(
     { id, email, rol },
-    SECRET,
+    getSecret(),
     {
-      expiresIn: expiresIn || process.env.JWT_EXPIRES_IN || '1h', // Usar el proporcionado o el default
+      expiresIn: expiresIn || process.env.JWT_EXPIRES_IN || '1h',
       issuer: 'gestion-aulas-uide',
       audience: 'gestion-aulas-uide-users',
       algorithm: 'HS256'
@@ -34,7 +43,7 @@ const generarToken = (payload, expiresIn = null) => {
  */
 const verificarToken = (token) => {
   try {
-    return jwt.verify(token, SECRET, {
+    return jwt.verify(token, getSecret(), {
       issuer: 'gestion-aulas-uide',
       audience: 'gestion-aulas-uide-users',
       algorithms: ['HS256']

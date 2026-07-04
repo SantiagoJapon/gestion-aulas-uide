@@ -141,7 +141,7 @@ export default function ReservaWidget() {
             const hFin = calcularHoraFin(hora, duracion);
             const res = await axios.get(`${API_URL}/reservas/disponibles`, {
                 params: { fecha, hora_inicio: hora, hora_fin: hFin, tipo },
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` }
             });
             if (res.data.success) {
                 // Combinar aulas y espacios en una sola lista
@@ -165,7 +165,7 @@ export default function ReservaWidget() {
         setLoadingMis(true);
         try {
             const res = await axios.get(`${API_URL}/reservas/mis-reservas`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` }
             });
             if (res.data.success) setMisReservas(res.data.reservas);
         } catch {
@@ -196,7 +196,7 @@ export default function ReservaWidget() {
                 motivo: motivo || `Reserva ${tipo}`,
                 tipo_espacio: esFuente
             }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` }
             });
 
             if (res.data.success) {
@@ -228,7 +228,7 @@ export default function ReservaWidget() {
         setCancelingId(id);
         try {
             await axios.delete(`${API_URL}/reservas/${id}`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` }
             });
             setMisReservas(prev => prev.filter(r => r.id !== id));
         } catch (err: any) {

@@ -1238,6 +1238,35 @@ export const gestionAcademicaService = {
   }
 };
 
+// ============================================
+// MONITOREO / HEALTH CHECK
+// ============================================
+
+export interface HealthStatus {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  version: string;
+  environment: string;
+  timestamp: string;
+  uptime: number;
+  checks: {
+    database: string;
+    redis: string;
+    smtp: string;
+    evolution_api: string;
+  };
+}
+
+export const healthService = {
+  getStatus: async (): Promise<{ success: boolean; data?: HealthStatus; error?: string }> => {
+    try {
+      const response = await api.get('/health');
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || error.message };
+    }
+  }
+};
+
 export default api;
 
 

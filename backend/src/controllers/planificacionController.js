@@ -84,38 +84,13 @@ exports.subirPlanificacion = async (req, res) => {
     console.log('📁 Procesando planificación de carrera:', nombreCarrera);
 
     // ==========================================
-    // 📊 PARSEAR EXCEL (Estrategia: n8n > Local > IA)
+    // 📊 PARSEAR EXCEL (Parser local determinista)
+    // n8n ya NO participa en el flujo crítico de parseo.
     // ==========================================
     let parseResult = null;
 
-    // 1. Intentar con n8n Maestro (Automatización centralizada)
-    try {
-      console.log('🤖 Solicitando procesamiento a n8n Maestro...');
-      const n8nResponse = await N8nService.processPlanificacion({
-        carrera_id,
-        archivo_base64: req.file.buffer.toString('base64'),
-        nombre_archivo: req.file.originalname,
-        carrera_nombre: nombreCarrera
-      });
-
-      if (n8nResponse && n8nResponse.success && n8nResponse.clases && n8nResponse.clases.length > 0) {
-        parseResult = {
-          clases: n8nResponse.clases,
-          hojaUsada: 'n8n Maestro',
-          totalHojas: n8nResponse.total_filas_excel ? 1 : 0,
-          debug: { method: 'n8n-automation', columns: n8nResponse.columnas_detectadas }
-        };
-        console.log(`✅ n8n Maestro extrajo ${parseResult.clases.length} clases.`);
-      }
-    } catch (n8nError) {
-      console.warn('⚠️ n8n Maestro no respondió o dio error, saltando a parser local...');
-    }
-
-    // 2. Fallback: Parser local del backend (si n8n falló o no devolvió nada)
-    if (!parseResult) {
-      console.log('📄 Usando parser local de respaldo...');
-      parseResult = processExcel(req.file.buffer);
-    }
+    console.log('📄 Usando parser local...');
+    parseResult = processExcel(req.file.buffer);
 
     // 3. Segundo Fallback: IA Directa si el parser local da resultados sospechosos
     const uniqueMaterias = new Set(parseResult.clases.map(c => c.materia)).size;
@@ -527,6 +502,9 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
     const usuario_id = req.usuario?.id || 1;
     const rol = req.usuario?.rol || 'admin';
 
+    const { getDirectorCarreraFilter } = require('../middleware/auth');
+    const carreraFilter = await getDirectorCarreraFilter(req);
+
     let query = `
       SELECT 
         c.id,
@@ -555,8 +533,8 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
 
     const replacements = {};
 
-    if (rol === 'director' && carrera_id) {
-      replacements.carrera_id = carrera_id;
+    if (carreraFilter.carrera_id) {
+      replacements.carrera_id = carreraFilter.carrera_id;
       query += ` AND c.carrera_id = :carrera_id`;
     } else if (rol === 'admin' && carrera_id && carrera_id !== 'todas') {
       replacements.carrera_id = carrera_id;
@@ -634,7 +612,10 @@ exports.ejecutarDistribucionManual = async (req, res) => {
 // ============================================
 exports.detectarConflictos = async (req, res) => {
   try {
-    const { carrera_id } = req.params;
+    const { carrera_id: carrera_id_param } = req.params;
+    const { getDirectorCarreraFilter } = require('../middleware/auth');
+    const carreraFilter = await getDirectorCarreraFilter(req);
+    const carrera_id = carreraFilter.carrera_id || carrera_id_param;
 
     const conflictos = await sequelize.query(`
       SELECT 
@@ -749,12 +730,15 @@ exports.descargarPlanificacion = async (req, res) => {
     }
 
     // Verificar permisos: Admin ve todas, director solo las de su carrera
-    if (usuario.rol === 'director' &&
-      usuario.carrera_director !== planificacion.carrera_id) {
-      return res.status(403).json({
-        success: false,
-        mensaje: 'No tiene permisos para descargar esta planificación'
-      });
+    if (usuario.rol === 'director') {
+      const { getDirectorCarreraFilter } = require('../middleware/auth');
+      const carreraFilter = await getDirectorCarreraFilter(req);
+      if (carreraFilter.carrera_id !== planificacion.carrera_id) {
+        return res.status(403).json({
+          success: false,
+          mensaje: 'No tiene permisos para descargar esta planificación'
+        });
+      }
     }
 
     // Verificar que el archivo existe
@@ -804,19 +788,17 @@ eventEmitter.on('nueva_planificacion', async (data) => {
     }
 
     // ============================================
-    // 🤖 NOTIFICAR A n8n (fire-and-forget)
-    // n8n genera reporte IA con GPT-4o y notifica
-    // al director por WhatsApp. Si n8n está caído,
-    // el flujo principal NO se ve afectado.
+    // 🤖 NOTIFICAR A n8n (fire-and-forget, vía event queue)
+    // n8n recibe el evento desde Redis y orquesta la notificación.
+    // Si n8n está caído, el evento queda encolado.
     // ============================================
-    N8nService.notificarDistribucionCompletada({
+    N8nService.emit('reporte', {
+      tipo: 'distribucion_completada',
       carrera_id: data.carrera_id,
       usuario_id: data.usuario_id,
       estadisticas: resultado.estadisticas || {},
-      timestamp: new Date().toISOString()
-    }).catch(err => {
-      // Solo log — nunca propagar el error
-      console.warn('⚠️ n8n no disponible para reporte post-distribución:', err.message);
+      mensaje: N8nService.construirReporteDistribucion(resultado.estadisticas || {}),
+      usar_ia: String(process.env.AI_REPORTE_DISTRIBUCION).toLowerCase() === 'true'
     });
 
   } catch (error) {

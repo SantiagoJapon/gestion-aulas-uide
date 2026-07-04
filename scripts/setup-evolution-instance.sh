@@ -16,7 +16,7 @@ fi
 
 # Para este script usamos localhost:8080 (acceso desde el host)
 EVOLUTION_HOST="http://localhost:8080"
-INSTANCE="${EVOLUTION_INSTANCE:-roomie_instancia}"
+INSTANCE="${EVOLUTION_INSTANCE:-botuide}"
 API_KEY="${EVOLUTION_API_KEY}"
 
 if [ -z "$API_KEY" ]; then

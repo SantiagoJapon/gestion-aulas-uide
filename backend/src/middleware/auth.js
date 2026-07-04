@@ -1,5 +1,5 @@
 const { verificarToken } = require('../utils/jwt');
-const { User, Estudiante } = require('../models');
+const { User, Estudiante, Carrera } = require('../models');
 
 /**
  * Middleware para verificar el token JWT en las peticiones
@@ -128,9 +128,33 @@ const verificarAdmin = verificarRol('admin');
  */
 const verificarAdminODocente = verificarRol('admin', 'docente', 'profesor');
 
+/**
+ * Helper: Resuelve el filtro de carrera para directores.
+ * Retorna { carrera_id: X } si es director, o {} si es admin (ve todo).
+ * Lanza error si el director no tiene carrera asignada.
+ */
+const getDirectorCarreraFilter = async (req) => {
+  const usuario = req.usuario;
+  if (usuario.rol === 'admin') return {};
+
+  if (usuario.rol === 'director') {
+    if (!usuario.carrera_director) {
+      throw new Error('Director sin carrera asignada');
+    }
+    const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
+    if (!carreraObj) {
+      throw new Error(`Carrera "${usuario.carrera_director}" no encontrada`);
+    }
+    return { carrera_id: carreraObj.id };
+  }
+
+  throw new Error(`Rol "${usuario.rol}" no tiene acceso a este recurso`);
+};
+
 module.exports = {
   verificarAuth,
   verificarRol,
   verificarAdmin,
-  verificarAdminODocente
+  verificarAdminODocente,
+  getDirectorCarreraFilter
 };

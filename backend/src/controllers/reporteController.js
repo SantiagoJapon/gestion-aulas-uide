@@ -161,10 +161,20 @@ class ReporteController {
     async descargarReporte(req, res) {
         try {
             const { id } = req.params;
-            const reporte = await ReporteHistorial.findByPk(id);
+            const reporte = await ReporteHistorial.findByPk(id, {
+                include: [{ model: User, as: 'usuario', attributes: ['id', 'carrera_director'] }]
+            });
 
             if (!reporte || !reporte.ruta_archivo) {
                 return res.status(404).json({ success: false, error: 'Archivo no encontrado' });
+            }
+
+            // Director solo puede descargar reportes de su carrera
+            if (req.usuarioRol === 'director') {
+                const reporteCarrera = reporte.usuario?.carrera_director;
+                if (!reporteCarrera || reporteCarrera !== req.usuario.carrera_director) {
+                    return res.status(403).json({ success: false, error: 'No tiene permisos para descargar este reporte' });
+                }
             }
 
             const path = require('path');

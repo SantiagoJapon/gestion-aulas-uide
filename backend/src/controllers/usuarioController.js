@@ -170,13 +170,16 @@ const updateDirectorCarrera = async (req, res) => {
 
     await usuario.update({ carrera_director: carreraResult[0].carrera });
 
-    // Notificar al director si tiene telefono
+    // Notificar al director si tiene telefono (fire-and-forget)
     if (usuario.telefono) {
-      N8nService.notificarDirector({
-        nombre: `${usuario.nombre} ${usuario.apellido}`,
-        telefono: usuario.telefono,
-        password: '(usa tu contraseña actual)',
-        carrera: carreraResult[0].carrera
+      N8nService.emit('notificacion', {
+        tipo: 'director_notificado',
+        datos: {
+          nombre: `${usuario.nombre} ${usuario.apellido}`,
+          telefono: usuario.telefono,
+          password: '(usa tu contraseña actual)',
+          carrera: carreraResult[0].carrera
+        }
       });
     }
 

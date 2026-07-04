@@ -77,8 +77,11 @@ services:
       EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
+      # Redis URL para WhatsApp queue
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
       # SMTP General (Gmail) — para envío de credenciales
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_HOST: ${SMTP_HOST:-smtp.office365.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
@@ -135,6 +138,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
     volumes:
       - frontend_dist:/usr/share/nginx/html:ro
       - certbot_data:/var/www/certbot:ro
@@ -173,6 +178,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
       N8N_RUNNERS_TASK_TIMEOUT: 600
       N8N_RUNNERS_MAX_PAYLOAD: 104857600
       NODE_ENV: production
@@ -200,6 +207,7 @@ services:
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-gestion_aulas}
       BOT_PORT: 3020
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
       BACKEND_URL: http://gestion_aulas_backend:3000
       DB_HOST: postgres
       DB_PORT: 5432

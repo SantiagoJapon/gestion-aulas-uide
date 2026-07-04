@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const N8nService = require('../services/n8n.service');
-const { verificarAuth } = require('../middleware/auth');
+const { verificarAuth, verificarRol } = require('../middleware/auth');
 
 /**
  * @route   GET /api/n8n/health
@@ -29,120 +29,80 @@ router.get('/health', verificarAuth, async (req, res) => {
 });
 
 /**
- * @route   POST /api/n8n/test/extract
- * @desc    Probar extracción de datos con IA
- * @access  Private
+ * @route   POST /api/n8n/emit
+ * @desc    Emitir evento a n8n (fire-and-forget)
+ * @access  Private (admin)
  */
-router.post('/test/extract', verificarAuth, async (req, res) => {
+router.post('/emit', verificarAuth, verificarRol('admin'), async (req, res) => {
   try {
-    const { texto } = req.body;
+    const { eventType, payload } = req.body;
 
-    if (!texto) {
-      return res.status(400).json({
-        success: false,
-        message: 'Se requiere el campo "texto" para procesar',
-      });
+    if (!eventType) {
+      return res.status(400).json({ success: false, message: 'eventType es requerido' });
     }
 
-    const result = await N8nService.extractDataFromFile(texto);
+    N8nService.emit(eventType, payload || {});
+
+    res.json({ success: true, message: 'Evento emitido a n8n' });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error al emitir evento',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @route   POST /api/n8n/query
+ * @desc    Consulta IA a n8n (request-response, bajo demanda)
+ * @access  Private (admin)
+ */
+router.post('/query', verificarAuth, verificarRol('admin'), async (req, res) => {
+  try {
+    const { prompt, contexto } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, message: 'prompt es requerido' });
+    }
+
+    const result = await N8nService.query({ prompt, contexto });
 
     res.json({
       success: true,
-      message: 'Extracción completada',
+      message: 'Consulta IA completada',
       data: result,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error al extraer datos',
+      message: 'n8n no disponible para consulta IA',
       error: error.message,
     });
   }
 });
 
 /**
- * @route   POST /api/n8n/test/asignar
- * @desc    Probar asignación automática
- * @access  Private
+ * @route   POST /api/n8n/retry
+ * @desc    Reintentar eventos fallidos en cola Redis
+ * @access  Private (admin)
  */
-router.post('/test/asignar', verificarAuth, async (req, res) => {
+router.post('/retry', verificarAuth, verificarRol('admin'), async (req, res) => {
   try {
-    const { materias, aulas_disponibles } = req.body;
-
-    if (!materias || !aulas_disponibles) {
-      return res.status(400).json({
-        success: false,
-        message: 'Se requieren materias y aulas_disponibles',
-      });
-    }
-
-    const result = await N8nService.asignarAulas({
-      materias,
-      aulas_disponibles,
-      restricciones: req.body.restricciones || {},
-      periodo: req.body.periodo || '2025-1',
-      carrera_id: req.body.carrera_id,
-    });
+    const reenviados = await N8nService.retryFailedEvents();
 
     res.json({
       success: true,
-      message: 'Asignación completada',
-      data: result,
+      message: `${reenviados} eventos reenviados`,
+      reenviados,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error en asignación automática',
-      error: error.message,
-    });
-  }
-});
-
-/**
- * @route   POST /api/n8n/notify
- * @desc    Enviar notificación de evento a n8n
- * @access  Private
- */
-router.post('/notify', verificarAuth, async (req, res) => {
-  try {
-    const { event, data } = req.body;
-
-    await N8nService.notifyEvent(event, data);
-
-    res.json({
-      success: true,
-      message: 'Notificación enviada',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error al enviar notificación',
-      error: error.message,
-    });
-  }
-});
-
-/**
- * @route   GET /api/n8n/status/:executionId
- * @desc    Obtener estado de una ejecución
- * @access  Private
- */
-router.get('/status/:executionId', verificarAuth, async (req, res) => {
-  try {
-    const { executionId } = req.params;
-
-    const status = await N8nService.getWorkflowStatus(executionId);
-
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener estado',
+      message: 'Error al reintentar eventos',
       error: error.message,
     });
   }
 });
 
 module.exports = router;
-
-

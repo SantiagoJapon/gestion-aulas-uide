@@ -3,17 +3,11 @@ const { Pool } = require('pg');
 const axios = require('axios');
 const FormData = require('form-data');
 require('dotenv').config();
+require('./scripts/validate-env.js');
 
 // ==========================================
 // CONFIGURACION Y CONEXION
 // ==========================================
-
-const requiredEnv = ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'EVOLUTION_INSTANCE', 'DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
-const missingEnv = requiredEnv.filter((key) => !process.env[key]);
-if (missingEnv.length) {
-  console.error(`Faltan variables de entorno: ${missingEnv.join(', ')}`);
-  process.exit(1);
-}
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL.replace(/\/+$/, '');
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
