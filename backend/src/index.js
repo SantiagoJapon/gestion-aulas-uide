@@ -3,6 +3,7 @@ require('../scripts/validate-env.js');
 const app = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { seedData } = require('./utils/seed');
+const expirarPendientes = require('./cron/expirePendientes');
 
 const PORT = process.env.PORT || 3000;
 
@@ -38,6 +39,14 @@ const iniciarServidor = async () => {
       console.log(`📍 URL: http://localhost:${PORT}`);
       console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
       console.log('========================================');
+
+      // Cron: expirar reservas pendientes cada hora
+      setInterval(() => {
+        expirarPendientes().catch(err =>
+          console.error('[CRON] Error en expirarPendientes:', err.message)
+        );
+      }, 60 * 60 * 1000); // cada 1 hora
+      console.log('⏰ Cron de expiración de pendientes activado (cada 1h)');
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);

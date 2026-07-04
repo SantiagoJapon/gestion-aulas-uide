@@ -3,6 +3,20 @@ const { Op } = require('sequelize');
 const N8nService = require('../services/n8n.service');
 const { getDirectorCarreraFilter } = require('../middleware/auth');
 
+// Máquina de estados para reservas
+const TRANSICIONES_VALIDAS = {
+    activa: ['cancelada'],                        // solo puede cancelarse
+    pendiente_aprobacion: ['activa', 'rechazada', 'cancelada'], // admin/director aprueba o rechaza
+    rechazada: [],   // terminal — sin transiciones
+    cancelada: [],   // terminal — sin transiciones
+    finalizada: [],  // terminal — sin transiciones
+};
+
+const esTransicionValida = (estadoActual, nuevoEstado) => {
+    const permitidos = TRANSICIONES_VALIDAS[estadoActual];
+    return permitidos && permitidos.includes(nuevoEstado);
+};
+
 /**
  * Construye el payload de reserva para el contrato de eventos n8n (sección 3.3).
  * Centralizado para que 'creada', 'aprobada' y 'rechazada' usen la misma forma.
@@ -416,6 +430,13 @@ exports.cancelarReserva = async (req, res) => {
             return res.status(403).json({ error: "No tienes permiso para cancelar esta reserva" });
         }
 
+        // Máquina de estados: bloquear transiciones desde estados terminales
+        if (!esTransicionValida(reserva.estado, 'cancelada')) {
+            return res.status(400).json({
+                error: `No se puede cancelar una reserva en estado "${reserva.estado}". Estados terminales: rechazada, cancelada, finalizada.`
+            });
+        }
+
         reserva.estado = 'cancelada';
         await reserva.save();
 
@@ -509,16 +530,19 @@ exports.cambiarEstado = async (req, res) => {
             return res.status(404).json({ error: "Reserva no encontrada" });
         }
 
+        // Máquina de estados: verificar transición válida
+        if (!esTransicionValida(reserva.estado, estado)) {
+            return res.status(400).json({
+                error: `Transición inválida: "${reserva.estado}" → "${estado}". No se puede modificar una reserva en estado terminal (rechazada/cancelada/finalizada).`
+            });
+        }
+
         // Director solo puede modificar reservas de su carrera
         if (req.usuarioRol === 'director') {
             const reservaCarrera = reserva.usuario?.carrera_director;
             if (!reservaCarrera || reservaCarrera !== req.usuario.carrera_director) {
                 return res.status(403).json({ error: "No tiene permisos para modificar esta reserva" });
             }
-        }
-
-        if (reserva.estado !== 'pendiente_aprobacion' && req.usuarioRol !== 'admin') {
-            return res.status(400).json({ error: "Solo se pueden modificar reservas en estado pendiente" });
         }
 
         reserva.estado = estado;

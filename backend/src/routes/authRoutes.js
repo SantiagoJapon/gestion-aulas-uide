@@ -20,6 +20,7 @@ const {
   validarSolicitarRecuperacion,
   validarResetearPassword
 } = require('../middleware/validators');
+const { authLimiter } = require('../middleware/security');
 
 // Validación adicional con Joi (más robusta) - Opcional
 let validateRegisterJoi, validateLoginJoi, validateUpdateProfileJoi, validateChangePasswordJoi;
@@ -48,7 +49,7 @@ try {
  * @access  Public
  */
 // Validación doble: express-validator + Joi para máxima seguridad
-router.post('/register', validarRegistro, validateRegisterJoi, registrarUsuario);
+router.post('/register', authLimiter, validarRegistro, validateRegisterJoi, registrarUsuario);
 
 /**
  * @route   POST /api/auth/login
@@ -56,21 +57,21 @@ router.post('/register', validarRegistro, validateRegisterJoi, registrarUsuario)
  * @access  Public
  */
 // Validación doble: express-validator + Joi
-router.post('/login', validarLogin, validateLoginJoi, loginUsuario);
+router.post('/login', authLimiter, validarLogin, validateLoginJoi, loginUsuario);
 
 /**
  * @route   POST /api/auth/forgot-password
  * @desc    Solicitar recuperación de contraseña
  * @access  Public
  */
-router.post('/forgot-password', validarSolicitarRecuperacion, solicitarRecuperacionPassword);
+router.post('/forgot-password', authLimiter, validarSolicitarRecuperacion, solicitarRecuperacionPassword);
 
 /**
  * @route   POST /api/auth/reset-password
  * @desc    Restablecer contraseña con token
  * @access  Public
  */
-router.post('/reset-password', validarResetearPassword, resetearPassword);
+router.post('/reset-password', authLimiter, validarResetearPassword, resetearPassword);
 
 // ========================================
 // RUTAS PROTEGIDAS (requieren autenticación)

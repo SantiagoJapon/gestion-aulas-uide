@@ -6,47 +6,58 @@ const { generarToken } = require('../src/utils/jwt');
 
 // Mock models
 jest.mock('../src/models', () => {
-  const mockReservas = [
-    {
-      id: 1,
-      aula_codigo: 'AULA-101',
-      dia: 'Lunes',
-      fecha: '2026-07-10',
-      hora_inicio: '08:00',
-      hora_fin: '10:00',
-      estado: 'pendiente_aprobacion',
-      usuario_id: 1,
-      solicitante_nombre: 'Docente Sistemas',
-      motivo: 'Clase especial',
+  // Mock factories — each call to findByPk returns a fresh copy
+  const reservaData = {
+    1: {
+      id: 1, aula_codigo: 'AULA-101', dia: 'Lunes', fecha: '2026-07-10',
+      hora_inicio: '08:00', hora_fin: '10:00', estado: 'pendiente_aprobacion',
+      usuario_id: 1, solicitante_nombre: 'Docente Sistemas', motivo: 'Clase especial',
       usuario: { id: 1, nombre: 'Docente', carrera_director: 'Ingenieria en Sistemas' },
-      save: jest.fn().mockResolvedValue(true),
-      toJSON() { return { ...this }; },
     },
-    {
-      id: 2,
-      aula_codigo: 'AULA-202',
-      dia: 'Martes',
-      fecha: '2026-07-11',
-      hora_inicio: '10:00',
-      hora_fin: '12:00',
-      estado: 'pendiente_aprobacion',
-      usuario_id: 3,
-      solicitante_nombre: 'Docente Derecho',
-      motivo: 'Tutoria',
+    2: {
+      id: 2, aula_codigo: 'AULA-202', dia: 'Martes', fecha: '2026-07-11',
+      hora_inicio: '10:00', hora_fin: '12:00', estado: 'pendiente_aprobacion',
+      usuario_id: 3, solicitante_nombre: 'Docente Derecho', motivo: 'Tutoria',
       usuario: { id: 3, nombre: 'Docente2', carrera_director: 'Derecho' },
-      save: jest.fn().mockResolvedValue(true),
-      toJSON() { return { ...this }; },
     },
-  ];
+    3: {
+      id: 3, aula_codigo: 'AULA-303', dia: 'Miercoles', fecha: '2026-07-12',
+      hora_inicio: '14:00', hora_fin: '16:00', estado: 'rechazada',
+      usuario_id: 1, solicitante_nombre: 'Docente Sistemas', motivo: 'Evento',
+      usuario: { id: 1, nombre: 'Docente', carrera_director: 'Ingenieria en Sistemas' },
+    },
+    4: {
+      id: 4, aula_codigo: 'AULA-404', dia: 'Jueves', fecha: '2026-07-13',
+      hora_inicio: '08:00', hora_fin: '10:00', estado: 'cancelada',
+      usuario_id: 1, solicitante_nombre: 'Docente Sistemas', motivo: 'Seminario',
+      usuario: { id: 1, nombre: 'Docente', carrera_director: 'Ingenieria en Sistemas' },
+    },
+    5: {
+      id: 5, aula_codigo: 'AULA-505', dia: 'Viernes', fecha: '2026-07-14',
+      hora_inicio: '10:00', hora_fin: '12:00', estado: 'activa',
+      usuario_id: 1, solicitante_nombre: 'Docente Sistemas', motivo: 'Conferencia',
+      usuario: { id: 1, nombre: 'Docente', carrera_director: 'Ingenieria en Sistemas' },
+    },
+  };
+
+  const freshReserva = (id) => {
+    const base = reservaData[id];
+    if (!base) return null;
+    return { ...base, save: jest.fn().mockResolvedValue(true) };
+  };
 
   return {
     Reserva: {
-      findByPk: jest.fn().mockImplementation((id, options) => {
-        const reserva = mockReservas.find(r => r.id === Number(id));
-        return Promise.resolve(reserva || null);
-      }),
-      findAll: jest.fn().mockResolvedValue(mockReservas),
-      findAndCountAll: jest.fn().mockResolvedValue({ rows: mockReservas, count: mockReservas.length }),
+      findByPk: jest.fn().mockImplementation((id) => Promise.resolve(freshReserva(Number(id)))),
+      findAll: jest.fn().mockImplementation(() =>
+        Promise.resolve(Object.keys(reservaData).map(id => freshReserva(Number(id))))
+      ),
+      findAndCountAll: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          rows: Object.keys(reservaData).map(id => freshReserva(Number(id))),
+          count: Object.keys(reservaData).length,
+        })
+      ),
     },
     User: {
       findByPk: jest.fn().mockImplementation((id) => {
@@ -153,6 +164,56 @@ describe('Reserva Controller - Access Control', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ estado: 'activa' });
       expect(res.status).toBe(404);
+    });
+
+    // ── Tests de máquina de estados ──────────────────────────
+
+    it('no puede cambiar reserva rechazada (terminal)', async () => {
+      const token = generarToken({ id: 2, email: 'admin@uide.edu.ec', rol: 'admin' });
+      const res = await request(app)
+        .patch('/api/reservas/3/estado')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ estado: 'activa' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/terminal|inválida/i);
+    });
+
+    it('no puede cambiar reserva cancelada (terminal)', async () => {
+      const token = generarToken({ id: 2, email: 'admin@uide.edu.ec', rol: 'admin' });
+      const res = await request(app)
+        .patch('/api/reservas/4/estado')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ estado: 'activa' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/terminal|inválida/i);
+    });
+
+    it('admin puede aprobar reserva pendiente → activa', async () => {
+      const token = generarToken({ id: 2, email: 'admin@uide.edu.ec', rol: 'admin' });
+      const res = await request(app)
+        .patch('/api/reservas/1/estado')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ estado: 'activa' });
+      expect(res.status).toBe(200);
+    });
+
+    it('admin puede rechazar reserva pendiente → rechazada', async () => {
+      const token = generarToken({ id: 2, email: 'admin@uide.edu.ec', rol: 'admin' });
+      const res = await request(app)
+        .patch('/api/reservas/2/estado')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ estado: 'rechazada' });
+      expect(res.status).toBe(200);
+    });
+
+    it('no puede cambiar reserva activa a rechazada (solo cancelada)', async () => {
+      const token = generarToken({ id: 2, email: 'admin@uide.edu.ec', rol: 'admin' });
+      const res = await request(app)
+        .patch('/api/reservas/5/estado')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ estado: 'rechazada' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/inválida/i);
     });
   });
 });

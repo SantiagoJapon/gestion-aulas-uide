@@ -9,6 +9,7 @@ const {
     helmetConfig,
     authLimiter,
     apiLimiter,
+    writeLimiter,
     sanitizeInput,
     securityLogger,
     validateOrigin,
@@ -55,6 +56,13 @@ app.use(sanitizeInput);
 app.use(securityLogger);
 
 // Rate Limiting desactivado
+
+// ========================================
+// RATE LIMITING
+// ========================================
+if (process.env.NODE_ENV === 'production') {
+    app.use('/api', apiLimiter);
+}
 
 // ========================================
 // MIDDLEWARES DE PARSEO
