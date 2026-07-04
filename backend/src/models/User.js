@@ -64,6 +64,9 @@ const User = sequelize.define('User', {
     }
   },
   rol: {
+    // 'profesor' es alias legado de 'docente'. Ambos otorgan los mismos permisos.
+    // Un director que también enseña conserva rol='director'; su registro Docente
+    // queda vinculado vía docente.usuario_id sin crear una segunda cuenta.
     type: DataTypes.ENUM('admin', 'director', 'profesor', 'docente', 'estudiante'),
     allowNull: false,
     defaultValue: 'estudiante',

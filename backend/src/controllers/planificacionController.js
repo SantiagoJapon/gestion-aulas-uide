@@ -181,29 +181,69 @@ exports.subirPlanificacion = async (req, res) => {
     }
 
     // ==========================================
+    // ✅ VALIDAR CLASES ANTES DE TOCAR LA BD
+    // Se valida el mínimo requerido ANTES de eliminar
+    // datos existentes para evitar pérdida parcial.
+    // ==========================================
+    const clasesValidas = parseResult.clases.filter(c => c.materia && c.materia.trim().length > 0);
+    if (clasesValidas.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        mensaje: 'El Excel no contiene clases con materia válida. No se realizaron cambios.',
+        debug: parseResult.debug
+      });
+    }
+    // Reemplazar con solo las clases válidas para el procesamiento posterior
+    parseResult.clases = clasesValidas;
+
+    // ==========================================
     // 🗑️ ELIMINAR CLASES ANTIGUAS DE ESTA CARRERA
+    // Solo se ejecuta después de validar que hay datos nuevos válidos.
     // ==========================================
     const { Clase, Aula, Docente, User } = require('../models');
     const whatsappService = require('../services/whatsappService');
 
-    // Función auxiliar para crear usuario (copiada de docenteController o importada)
+    // Función auxiliar para crear usuario para docente.
+    // Antes de crear, busca si ya existe una cuenta institucional
+    // (@uide.edu.ec) para evitar duplicar a directores que también enseñan.
     const crearUsuarioParaDocente = async (docente, t) => {
       try {
         if (docente.usuario_id) return null;
         const partes = docente.nombre.trim().split(' ');
         const nombre = partes[0] || 'Docente';
         const apellido = partes.slice(1).join(' ') || 'UIDE';
-        let email = docente.email;
-        if (!email) {
-          email = `${nombre.toLowerCase()}.${apellido.toLowerCase().replace(/\s+/g, '')}@docente.uide.edu.ec`;
+
+        // Si el docente ya tiene email, buscar primero por ese email exacto
+        if (docente.email) {
+          const existingUser = await User.findOne({ where: { email: docente.email }, transaction: t });
+          if (existingUser) {
+            await docente.update({ usuario_id: existingUser.id }, { transaction: t });
+            return null;
+          }
         }
-        const existingUser = await User.findOne({ where: { email }, transaction: t });
-        if (existingUser) {
-          await docente.update({ usuario_id: existingUser.id }, { transaction: t });
+
+        // Buscar también por el email institucional (@uide.edu.ec) que podría
+        // tener un director con el mismo nombre — evita cuentas duplicadas.
+        const emailInstitucional = `${nombre.toLowerCase()}.${apellido.toLowerCase().replace(/\s+/g, '')}@uide.edu.ec`;
+        const existingInstitucional = await User.findOne({ where: { email: emailInstitucional }, transaction: t });
+        if (existingInstitucional) {
+          // Ya existe como director u otro rol institucional: vincular sin crear cuenta nueva
+          await docente.update({ usuario_id: existingInstitucional.id }, { transaction: t });
           return null;
         }
+
+        // Si llegamos aquí, no existe: crear cuenta docente con email @docente.uide.edu.ec
+        const emailDocente = docente.email || `${nombre.toLowerCase()}.${apellido.toLowerCase().replace(/\s+/g, '')}@docente.uide.edu.ec`;
+        const existingDocente = await User.findOne({ where: { email: emailDocente }, transaction: t });
+        if (existingDocente) {
+          await docente.update({ usuario_id: existingDocente.id }, { transaction: t });
+          return null;
+        }
+
         const user = await User.create({
-          nombre, apellido, email,
+          nombre, apellido,
+          email: emailDocente,
           password: 'uide2024',
           rol: 'docente',
           estado: 'activo',
@@ -381,6 +421,17 @@ exports.subirPlanificacion = async (req, res) => {
         errores.push(`Clase ${i + 1}: ${error.message}`);
         console.error(`Error guardando clase ${i + 1}:`, error.message);
       }
+    }
+
+    // Abortar si se perdió más del 20% de las clases por errores de inserción
+    const tasaError = errores.length / parseResult.clases.length;
+    if (tasaError > 0.2 && clasesGuardadas < 5) {
+      await transaction.rollback();
+      return res.status(500).json({
+        success: false,
+        mensaje: `Demasiados errores al guardar (${errores.length} de ${parseResult.clases.length} clases fallaron). No se realizaron cambios.`,
+        errores: errores.slice(0, 10)
+      });
     }
 
     // ==========================================

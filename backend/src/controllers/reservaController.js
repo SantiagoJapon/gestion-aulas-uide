@@ -1,5 +1,22 @@
 const { Reserva, Aula, Clase, Distribucion, Espacio, Notificacion } = require('../models');
 const { Op } = require('sequelize');
+const N8nService = require('../services/n8n.service');
+
+/**
+ * Construye el payload de reserva para el contrato de eventos n8n (sección 3.3).
+ * Centralizado para que 'creada', 'aprobada' y 'rechazada' usen la misma forma.
+ */
+const buildReservaPayload = (reserva) => ({
+    id: reserva.id,
+    espacio: reserva.aula_codigo || reserva.espacio_codigo,
+    fecha: reserva.fecha,
+    hora_inicio: reserva.hora_inicio,
+    hora_fin: reserva.hora_fin,
+    solicitante_nombre: reserva.solicitante_nombre,
+    solicitante_rol: reserva.rol_usuario,
+    telefono: reserva.telefono || null,
+    motivo: reserva.motivo
+});
 
 // Helper para obtener la fecha/hora actual en Ecuador (GMT-5)
 const getEcuadorTime = () => {
@@ -111,6 +128,7 @@ exports.crearReserva = async (req, res) => {
         }
 
         // ── Validación de roles para el Auditorio ──────────────────────────
+        // 'profesor' es alias de 'docente' en el sistema; ambos necesitan aprobación.
         if (esAuditorio && !['admin', 'director'].includes(usuarioRol)) {
             return res.status(403).json({
                 error: 'Solo los Directores de Carrera pueden reservar el Auditorio. Contacta a tu Director para solicitarlo.'
@@ -118,6 +136,7 @@ exports.crearReserva = async (req, res) => {
         }
 
         // Determinar estado inicial:
+        //   - Auditorio + admin    → activa (el admin no necesita aprobarse a sí mismo)
         //   - Auditorio + director → pendiente_aprobacion (admin lo aprueba)
         //   - Todo lo demás       → activa (inmediata)
         const estadoInicial = (esAuditorio && usuarioRol === 'director') ? 'pendiente_aprobacion' : 'activa';
@@ -195,6 +214,13 @@ exports.crearReserva = async (req, res) => {
             // No fallar la reserva si la notificación falla
             console.error('⚠️ Error al enviar notificación de reserva:', notifErr.message);
         }
+
+        // ── Orquestación n8n (fire-and-forget, contrato sección 3.3) ──────────
+        // n8n hace fan-out a WhatsApp + Email. Si n8n está caído, no afecta la reserva.
+        N8nService.notificarReserva({
+            tipo: 'creada',
+            reserva: buildReservaPayload(nuevaReserva)
+        }).catch(err => console.warn('⚠️ n8n no disponible para notificar reserva creada:', err.message));
 
         res.status(201).json({
             success: true,
@@ -500,6 +526,17 @@ exports.cambiarEstado = async (req, res) => {
             });
         } catch (notifErr) {
             console.error('⚠️ Error al enviar notificación de cambio de estado:', notifErr.message);
+        }
+
+        // ── Orquestación n8n (fire-and-forget, contrato sección 3.3) ──────────
+        // Solo aprobación y rechazo se orquestan por n8n (multicanal).
+        // 'cancelada' queda como notificación in-app únicamente.
+        const tipoN8n = estado === 'activa' ? 'aprobada' : (estado === 'rechazada' ? 'rechazada' : null);
+        if (tipoN8n) {
+            N8nService.notificarReserva({
+                tipo: tipoN8n,
+                reserva: buildReservaPayload(reserva)
+            }).catch(err => console.warn(`⚠️ n8n no disponible para notificar reserva ${tipoN8n}:`, err.message));
         }
 
         const mensaje = estado === 'activa' ? 'Reserva aprobada' :

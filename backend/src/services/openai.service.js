@@ -1,6 +1,10 @@
 // El cliente se inicializa solo si es necesario para evitar errores si no hay API Key
 let openai = null;
 
+// Modelo por defecto: gpt-4o-mini (~16x más barato que gpt-4o, suficiente
+// para extracción estructurada). Configurable vía OPENAI_MODEL.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
 function obtenerClienteOpenAI() {
   if (openai) return openai;
 
@@ -77,7 +81,7 @@ Devuelve SOLO un JSON válido con este formato (sin texto adicional):
 Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin explicaciones.`;
 
     const completion = await client.chat.completions.create({
-      model: "gpt-4o",  // GPT-4 Optimized (más rápido y barato)
+      model: OPENAI_MODEL,  // gpt-4o-mini por defecto (config: OPENAI_MODEL)
       messages: [
         {
           role: "system",
@@ -93,7 +97,12 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
     });
 
     const respuesta = completion.choices[0].message.content;
-    console.log('🤖 Respuesta de GPT-4 recibida');
+
+    // Log de consumo de tokens para monitorear costo
+    if (completion.usage) {
+      const { prompt_tokens, completion_tokens, total_tokens } = completion.usage;
+      console.log(`🤖 IA (${OPENAI_MODEL}) — tokens: ${prompt_tokens} in + ${completion_tokens} out = ${total_tokens} total`);
+    }
 
     // Limpiar la respuesta por si GPT-4 agregó markdown
     let jsonLimpio = respuesta.trim();
@@ -196,9 +205,17 @@ function extraerNumeroEstudiantes(valor) {
 }
 
 /**
- * Verifica si la API Key de OpenAI está configurada
+ * Verifica si la IA está disponible para usarse.
+ * Requiere DOS condiciones:
+ *   1. AI_ENABLED no esté en 'false' (interruptor maestro de costo)
+ *   2. OPENAI_API_KEY esté configurada
+ * Si AI_ENABLED='false', la IA queda totalmente apagada sin importar la key.
  */
 function esOpenAIConfigurado() {
+  // Interruptor maestro: AI_ENABLED=false apaga toda la IA
+  if (String(process.env.AI_ENABLED).toLowerCase() === 'false') {
+    return false;
+  }
   return !!(process.env.OPENAI_API_KEY &&
     process.env.OPENAI_API_KEY !== 'tu_clave_api_aqui' &&
     process.env.OPENAI_API_KEY.length > 20);

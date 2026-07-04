@@ -124,8 +124,9 @@ const verificarAdmin = verificarRol('admin');
 
 /**
  * Middleware para verificar que el usuario sea admin o docente
+ * 'profesor' es alias de 'docente' — ambos tienen los mismos permisos.
  */
-const verificarAdminODocente = verificarRol('admin', 'docente');
+const verificarAdminODocente = verificarRol('admin', 'docente', 'profesor');
 
 module.exports = {
   verificarAuth,

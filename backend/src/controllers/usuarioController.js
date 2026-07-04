@@ -395,8 +395,17 @@ const updateUsuario = async (req, res) => {
     let updatedFields = { nombre, apellido, email, rol, estado, cedula, telefono, carrera_director };
 
     if (req.usuario.rol === 'director') {
-      if (rol === 'admin') delete updatedFields.rol;
+      // Director no puede escalar privilegios: no puede asignar admin ni director
+      if (rol && ['admin', 'director'].includes(rol)) delete updatedFields.rol;
+      // Director no puede reasignar usuarios a otra carrera
       updatedFields.carrera_director = req.usuario.carrera_director;
+      // Director no puede editar admins ni a otros directores
+      if (['admin', 'director'].includes(usuario.rol)) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permiso para editar directores o administradores'
+        });
+      }
     }
 
     await usuario.update(updatedFields);
@@ -423,11 +432,27 @@ const deleteUsuario = async (req, res) => {
       });
     }
 
-    // Seguridad para directores
-    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
-      return res.status(403).json({
+    // Un director no puede eliminarse a sí mismo ni a otros directores/admins
+    if (req.usuario.rol === 'director') {
+      if (['admin', 'director'].includes(usuario.rol)) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permiso para eliminar directores o administradores'
+        });
+      }
+      if (usuario.carrera_director !== req.usuario.carrera_director) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permiso para eliminar este usuario'
+        });
+      }
+    }
+
+    // Nadie puede eliminarse a sí mismo
+    if (parseInt(id) === req.usuario.id) {
+      return res.status(400).json({
         success: false,
-        error: 'No tienes permiso para eliminar este usuario'
+        error: 'No puedes eliminar tu propia cuenta'
       });
     }
 
