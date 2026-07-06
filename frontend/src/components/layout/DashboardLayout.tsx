@@ -9,7 +9,17 @@ interface NavItem {
     icon: string;
     tab: string;
     roles?: string[];
+    category?: string;
 }
+
+const CATEGORY_LABELS: Record<string, string> = {
+    panel: 'Panel',
+    academico: 'Académico',
+    espacios: 'Espacios',
+    personas: 'Personas',
+    reportes: 'Reportes',
+    config: 'Ajustes',
+};
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -29,6 +39,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isSidebarRetracted, setIsSidebarRetracted] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
 
     // Notificaciones reales desde la API
     const [notifications, setNotifications] = useState<Notificacion[]>([]);
@@ -65,30 +76,35 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     };
 
     const navItems: NavItem[] = [
-        { label: 'Inicio', icon: 'dashboard', tab: 'general' },
-        { label: 'Distribución', icon: 'calendar_apps_script', tab: 'distribucion', roles: ['admin'] },
-        { label: 'Disponibilidad', icon: 'event_available', tab: 'disponibilidad', roles: ['admin', 'director'] },
-        { label: 'Reservas', icon: 'book_online', tab: 'reservas', roles: ['admin', 'director'] },
-        { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'] },
-        { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'] },
-        { label: 'Materias', icon: 'menu_book', tab: 'materias', roles: ['director'] },
-        { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'] },
-        { label: 'Mis Clases', icon: 'school', tab: 'mis_clases', roles: ['director'] },
-        { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'docente', 'estudiante'] },
-        { label: 'Reportes', icon: 'bar_chart', tab: 'reportes', roles: ['admin', 'director'] },
-        { label: 'Incidencias', icon: 'warning', tab: 'incidencias', roles: ['admin', 'director', 'profesor', 'docente'] },
-        { label: 'Ajustes', icon: 'settings', tab: 'settings' },
+        { label: 'Inicio', icon: 'dashboard', tab: 'general', category: 'panel' },
+        { label: 'Mapa de Calor', icon: 'grid_view', tab: 'heatmap', roles: ['admin', 'director'], category: 'espacios' },
+        { label: 'Distribución', icon: 'calendar_apps_script', tab: 'distribucion', roles: ['admin'], category: 'academico' },
+        { label: 'Disponibilidad', icon: 'event_available', tab: 'disponibilidad', roles: ['admin', 'director'], category: 'espacios' },
+        { label: 'Reservas', icon: 'book_online', tab: 'reservas', roles: ['admin', 'director'], category: 'espacios' },
+        { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'], category: 'espacios' },
+        { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'], category: 'personas' },
+        { label: 'Materias', icon: 'menu_book', tab: 'materias', roles: ['director'], category: 'academico' },
+        { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'], category: 'personas' },
+        { label: 'Mis Clases', icon: 'school', tab: 'mis_clases', roles: ['director'], category: 'academico' },
+        { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'docente', 'estudiante'], category: 'panel' },
+        { label: 'Reportes', icon: 'bar_chart', tab: 'reportes', roles: ['admin', 'director'], category: 'reportes' },
+        { label: 'Incidencias', icon: 'warning', tab: 'incidencias', roles: ['admin', 'director', 'profesor', 'docente'], category: 'reportes' },
+        { label: 'Ajustes', icon: 'settings', tab: 'settings', category: 'config' },
     ];
 
     const filteredItems = navItems.filter(item =>
         !item.roles || (user && item.roles.includes(user.rol))
     );
 
-    // Seleccionamos items para el menú móvil (máximo 5)
+    // Seleccionamos items para el menú móvil (máximo 4 + Más)
     const mobileMenuItems = [
-        ...filteredItems.filter(item => item.tab !== 'settings').slice(0, 4),
+        ...filteredItems.filter(item => item.tab !== 'settings').slice(0, 3),
         filteredItems.find(item => item.tab === 'settings')
     ].filter(Boolean) as NavItem[];
+
+    const overflowItems = filteredItems.filter(
+        item => !mobileMenuItems.find(m => m.tab === item.tab)
+    );
 
     return (
         <div className="flex h-screen overflow-hidden bg-background font-sans text-foreground antialiased transition-colors duration-300">
@@ -104,7 +120,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             )}
 
             {/* Sidebar Navigation */}
-            <aside className={`glass-sidebar flex flex-col fixed lg:sticky top-0 left-0 bottom-0 lg:h-screen z-30 lg:z-40 transition-all duration-500 ease-in-out transform shadow-2xl lg:shadow-none bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-border/50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarRetracted ? 'w-24' : 'w-72 lg:w-64'}`}>
+            <aside className={`glass-sidebar flex flex-col fixed lg:sticky top-0 left-0 bottom-0 lg:h-screen z-30 lg:z-40 transition-all duration-500 ease-in-out transform shadow-2xl lg:shadow-none bg-white/80 backdrop-blur-xl border-r border-border/50 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isSidebarRetracted ? 'w-20' : 'w-64 lg:w-56'}`}>
 
                 {/* Header (Mantiene logo fijo) */}
                 <div className="px-4 lg:px-5 pt-5 pb-2 shrink-0">
@@ -123,7 +139,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
                         <button
                             onClick={() => {
-                                if (window.innerWidth < 1024) {
+                                if (isSidebarOpen) {
                                     setIsSidebarOpen(false);
                                 } else {
                                     setIsSidebarRetracted(!isSidebarRetracted);
@@ -133,7 +149,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             title={isSidebarRetracted ? "Expandir" : "Contraer"}
                         >
                             <span className="material-symbols-outlined">
-                                {window.innerWidth < 1024 ? 'close' : (isSidebarRetracted ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left')}
+                                {isSidebarOpen ? 'close' : (isSidebarRetracted ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left')}
                             </span>
                         </button>
                     </div>
@@ -141,35 +157,53 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
                 {/* Zona de Navegación con Scroll */}
                 <div className={`flex-1 overflow-y-auto custom-scrollbar py-3 transition-all ${isSidebarRetracted ? 'px-2' : 'px-3 lg:px-4'}`}>
-                    <nav className="space-y-1">
-                        {filteredItems.map((item) => (
-                            <button
-                                key={item.tab}
-                                id={`tour-nav-${item.tab}`}
-                                onClick={() => {
-                                    setActiveTab(item.tab);
-                                    if (window.innerWidth < 1024) setIsSidebarOpen(false);
-                                }}
-                                className={`w-full flex items-center gap-3 rounded-2xl text-sm font-bold transition-all group relative ${activeTab === item.tab
-                                    ? 'bg-primary/10 text-primary shadow-sm'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                    } ${isSidebarRetracted ? 'justify-center p-3' : 'px-3 py-2.5 lg:px-4'}`}
-                                title={isSidebarRetracted ? item.label : ""}
-                            >
-                                <span className={`material-symbols-outlined text-[22px] lg:text-[24px] transition-transform duration-300 group-hover:scale-110 shrink-0 ${activeTab === item.tab ? 'font-variation-fill' : ''}`}>
-                                    {item.icon}
-                                </span>
-                                {!isSidebarRetracted && <span className="animate-fade-in whitespace-nowrap text-sm">{item.label}</span>}
-                                {isSidebarRetracted && activeTab === item.tab && (
-                                    <div className="absolute left-0 w-1 h-5 bg-primary rounded-r-full" />
-                                )}
-                            </button>
-                        ))}
+                    <nav className="space-y-4">
+                        {(() => {
+                            const grouped = filteredItems.reduce<Record<string, NavItem[]>>((acc, item) => {
+                                const cat = item.category || 'other';
+                                if (!acc[cat]) acc[cat] = [];
+                                acc[cat].push(item);
+                                return acc;
+                            }, {});
+                            const order = [...new Set(filteredItems.map(item => item.category || 'other'))];
+                            return order.map(category => (
+                                <div key={category} className="space-y-0.5">
+                                    {!isSidebarRetracted && (
+                                        <p className="px-3 pb-0.5 text-[9px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">
+                                            {CATEGORY_LABELS[category] || category}
+                                        </p>
+                                    )}
+                                    {grouped[category].map((item) => (
+                                        <button
+                                            key={item.tab}
+                                            id={`tour-nav-${item.tab}`}
+                                            onClick={() => {
+                                                setActiveTab(item.tab);
+                                                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                                            }}
+                                            className={`w-full flex items-center gap-3 rounded-2xl text-sm font-bold transition-all group relative ${activeTab === item.tab
+                                                ? 'bg-primary/10 text-primary shadow-sm'
+                                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                                } ${isSidebarRetracted ? 'justify-center p-3' : 'px-3 py-2.5 lg:px-4'}`}
+                                            title={isSidebarRetracted ? item.label : ""}
+                                        >
+                                            <span className={`material-symbols-outlined text-[22px] lg:text-[24px] transition-transform duration-300 group-hover:scale-110 shrink-0 ${activeTab === item.tab ? 'font-variation-fill' : ''}`}>
+                                                {item.icon}
+                                            </span>
+                                            {!isSidebarRetracted && <span className="animate-fade-in whitespace-nowrap text-sm">{item.label}</span>}
+                                            {isSidebarRetracted && activeTab === item.tab && (
+                                                <div className="absolute left-0 w-1 h-5 bg-primary rounded-r-full" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            ));
+                        })()}
                     </nav>
                 </div>
 
                 {/* Pie de Sidebar (Adaptable) */}
-                <div className={`shrink-0 border-t border-border bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm transition-all mb-20 lg:mb-0 ${isSidebarRetracted ? 'p-2 pb-4' : 'px-3 py-4 lg:px-4'}`}>
+                <div className={`shrink-0 border-t border-border bg-white/40 backdrop-blur-sm transition-all mb-20 lg:mb-0 ${isSidebarRetracted ? 'p-2 pb-4' : 'px-3 py-4 lg:px-4'}`}>
                     <div className={`flex items-center gap-3 ${isSidebarRetracted ? 'flex-col' : ''}`}>
                         <div className="size-10 shrink-0 rounded-xl bg-muted flex items-center justify-center text-muted-foreground font-bold border border-border group-hover:border-primary/50 transition-colors">
                             {user?.nombre?.[0]}{user?.apellido?.[0]}
@@ -223,7 +257,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                         )}
 
                         {isNotificationsOpen && (
-                            <div className={`absolute bottom-full mb-5 w-80 bg-card/95 dark:bg-slate-900/95 backdrop-blur-xl border border-border/50 rounded-3xl shadow-[0_20px_70px_rgba(0,0,0,0.3)] overflow-hidden animate-scale-in origin-bottom transition-all duration-300 z-[100] ${isSidebarRetracted ? 'left-full ml-4' : 'left-0'}`}>
+                            <div className={`absolute bottom-full mb-5 w-80 bg-card/95 backdrop-blur-xl border border-border/50 rounded-3xl shadow-[0_20px_70px_rgba(0,0,0,0.3)] overflow-hidden animate-scale-in origin-bottom transition-all duration-300 z-[100] ${isSidebarRetracted ? 'left-full ml-4' : 'left-0'}`}>
                                 <div className="p-4 border-b border-border/50 bg-muted/40 flex justify-between items-center bg-gradient-to-r from-primary/5 to-transparent">
                                     <h4 className="text-[10px] font-black uppercase text-foreground tracking-[0.2em]">Notificaciones</h4>
                                     <button
@@ -318,7 +352,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
                 {/* Floating Apple-Style Mobile Bottom Navigation Bar */}
                 <div className="lg:hidden fixed bottom-0 left-0 right-0 px-3 sm:px-4 pb-safe z-50">
-                    <nav className="mx-auto max-w-md bg-card/80 dark:bg-card/90 backdrop-blur-2xl rounded-[2.5rem] p-2.5 flex items-center justify-between shadow-2xl shadow-black/20 dark:shadow-black/60 border border-border/60">
+                    <nav className="mx-auto max-w-md bg-card/80 backdrop-blur-2xl rounded-[2.5rem] p-2.5 flex items-center justify-between shadow-2xl shadow-black/20 border border-border/60">
                         {mobileMenuItems.map((item) => (
                             <button
                                 key={item.tab}
@@ -352,8 +386,64 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                                 </span>
                             </button>
                         ))}
+                        {overflowItems.length > 0 && (
+                            <>
+                                <button
+                                    onClick={() => setShowMoreMenu(true)}
+                                    className="relative flex flex-col items-center justify-center gap-1 py-2 px-3 rounded-[2rem] transition-all duration-300 ease-out flex-1 min-w-0 text-muted-foreground hover:text-foreground active:scale-[0.92]"
+                                >
+                                    <span className="material-symbols-outlined text-[22px]">more_horiz</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-tight opacity-70">Más</span>
+                                </button>
+                            </>
+                        )}
                     </nav>
                 </div>
+
+                {/* Mobile overflow menu */}
+                {showMoreMenu && (
+                    <div className="lg:hidden fixed inset-0 z-[100]">
+                        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMoreMenu(false)} />
+                        <div className="absolute bottom-24 left-4 right-4 mx-auto max-w-md bg-card rounded-[2rem] shadow-2xl border border-border overflow-hidden animate-scale-in origin-bottom">
+                            <div className="p-4 border-b border-border flex items-center justify-between">
+                                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Navegación</span>
+                                <button onClick={() => setShowMoreMenu(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                                    <span className="material-symbols-outlined text-lg">close</span>
+                                </button>
+                            </div>
+                            <div className="p-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                <div className="space-y-0.5">
+                                    {(() => {
+                                        const grouped = overflowItems.reduce<Record<string, NavItem[]>>((acc, item) => {
+                                            const cat = item.category || 'other';
+                                            if (!acc[cat]) acc[cat] = [];
+                                            acc[cat].push(item);
+                                            return acc;
+                                        }, {});
+                                        const order = [...new Set(overflowItems.map(item => item.category || 'other'))];
+                                        return order.map(category => (
+                                            <div key={category}>
+                                                <p className="px-3 py-2 text-[9px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">
+                                                    {CATEGORY_LABELS[category] || category}
+                                                </p>
+                                                {grouped[category].map(item => (
+                                                    <button
+                                                        key={item.tab}
+                                                        onClick={() => { setActiveTab(item.tab); setShowMoreMenu(false); }}
+                                                        className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition-all ${activeTab === item.tab ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                                                    >
+                                                        <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                                                        <span>{item.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

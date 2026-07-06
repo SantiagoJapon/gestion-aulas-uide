@@ -124,6 +124,12 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      # Los workflows de notificaciones/reportes leen $env.EVOLUTION_API_KEY
+      # dentro de expresiones — n8n bloquea el acceso a env vars en
+      # expresiones por defecto (hardening de seguridad), hay que habilitarlo.
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 
       # URLs de servicios
       - N8N_EDITOR_BASE_URL=http://localhost:5678

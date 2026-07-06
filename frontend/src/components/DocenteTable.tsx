@@ -601,10 +601,10 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                                    Email Institucional
-                                    {!editingDocente && <span className="ml-1 text-muted-foreground/50">(opcional — se auto-genera)</span>}
+                                    Email Institucional *
                                 </label>
                                 <input
+                                    required
                                     type="email"
                                     className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none"
                                     value={formData.email}
@@ -702,24 +702,6 @@ export default function DocenteTable({ carreraId }: DocenteTableProps) {
                                     </div>
                                 </div>
 
-                                {formData.nombre && !formData.email && (
-                                    <div className="flex items-center gap-3 p-3 bg-muted/20 rounded-xl border border-dashed border-border animate-in fade-in slide-in-from-top-2">
-                                        <span className="material-symbols-outlined text-sm text-muted-foreground">contact_mail</span>
-                                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                                            Vista previa del correo: <span className="text-primary lowercase bg-primary/5 px-2 py-0.5 rounded ml-1">
-                                                {(() => {
-                                                    const titulos = ['Ing.', 'Dr.', 'Dra.', 'Abg.', 'Mag.', 'Msc.', 'Mgs.', 'Lic.', 'Phd.', 'Psic.', 'Arq.'];
-                                                    let n = formData.nombre.trim();
-                                                    for (const t of titulos) if (n.toLowerCase().startsWith(t.toLowerCase())) n = n.substring(t.length).trim();
-                                                    const partes = n.split(' ');
-                                                    const nom = (partes[0] || 'docente').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                                                    const ape = (partes[1] || 'uide').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                                                    return `${nom}.${ape}@docente.uide.edu.ec`;
-                                                })()}
-                                            </span>
-                                        </p>
-                                    </div>
-                                )}
                             </div>
                         )}
 

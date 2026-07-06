@@ -197,15 +197,6 @@ const createUsuario = async (req, res) => {
   try {
     const { nombre, apellido, email, password, rol, carrera_director, cedula, telefono } = req.body;
 
-    // Verificar si el usuario ya existe
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        error: 'El email ya está registrado'
-      });
-    }
-
     // Restricciones para Directores
     let finalRol = rol || 'docente';
     let finalCarrera = carrera_director;
@@ -238,7 +229,7 @@ const createUsuario = async (req, res) => {
       try {
         const whatsappService = require('../services/whatsappService');
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${nombre} ${apellido}*, tu cuenta ha sido creada.\n\n✅ Tus credenciales de acceso han sido enviadas a tu correo institucional: *${email}*\n\nRevisa tu bandeja de entrada (y la carpeta de spam si no aparece).\n\n🌐 *Sistema:* ${frontendUrl}`;
+        const msg = `🎓 *Universidad Internacional del Ecuador*\n_Sistema de Gestión de Aulas_\n\n¡Hola *${nombre} ${apellido}*! 👋\n\nTu cuenta ha sido creada exitosamente. Hemos enviado tus credenciales de acceso al correo *${email}*.\n\n📩 Por favor revisa tu bandeja de entrada y, si no la encuentras en unos minutos, échale un vistazo a la carpeta de *spam o correo no deseado*.\n\n🌐 Ingresa aquí: ${frontendUrl}\n\nSi tienes algún inconveniente, no dudes en contactarnos.`;
         whatsapp_enviado = await whatsappService.sendMessage(newUsuario.telefono, msg);
       } catch (wErr) {
         console.warn('⚠️ WhatsApp no disponible al crear usuario:', wErr.message);
@@ -282,6 +273,12 @@ const createUsuario = async (req, res) => {
 
     res.status(201).json(responseData);
   } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError' && error.fields?.email) {
+      return res.status(400).json({
+        success: false,
+        error: 'El email ya está registrado'
+      });
+    }
     handle500(res, error, 'createUsuario');
   }
 };
@@ -330,7 +327,7 @@ const generarCredencialesUsuario = async (req, res) => {
     let whatsapp_enviado = false;
     if (usuario.telefono) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const msg = `🎓 *UIDE - Sistema de Gestión de Aulas*\n\nHola *${usuario.nombre} ${usuario.apellido}*, tus credenciales de acceso han sido generadas.\n\n✅ Los datos de ingreso han sido enviados a tu correo: *${usuario.email}*\n\nRevisa tu bandeja de entrada (y la carpeta de spam si no aparece).\n\n🌐 *Sistema:* ${frontendUrl}`;
+      const msg = `🎓 *Universidad Internacional del Ecuador*\n_Sistema de Gestión de Aulas_\n\n¡Hola *${usuario.nombre} ${usuario.apellido}*!\n\nTus credenciales de acceso han sido generadas nuevamente. Las enviamos al correo *${usuario.email}*.\n\n📩 Por favor revisa tu bandeja de entrada y, si no la encuentras en unos minutos, échale un vistazo a la carpeta de *spam o correo no deseado*.\n\n🌐 Ingresa aquí: ${frontendUrl}\n\nSi tienes algún inconveniente, no dudes en contactarnos.`;
       whatsapp_enviado = await whatsappService.sendMessage(usuario.telefono, msg);
     }
 

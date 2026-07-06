@@ -48,15 +48,15 @@
       "position": [176, 240],
       "credentials": {
         "postgres": {
-          "id": "5tJ62Xtyr8vBpyCQ",
-          "name": "Postgres account"
+          "id": "kwsYL4Txs63sMGNe",
+          "name": "Postgres - gestion_aulas"
         }
       }
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/botuide",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -66,7 +66,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"number\": \"{{ $json.director_telefono }}\", \"text\": \"{{ $('Extraer Datos Reporte').first().json.mensaje }}\"}",
+        "jsonBody": "={\"number\": \"{{ $json.director_telefono.replace(/^0/, '593') }}\", \"text\": \"{{ $('Extraer Datos Reporte').first().json.mensaje.replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"').replace(/\\n/g, '\\\\n') }}\"}",
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "rep-wa-001",

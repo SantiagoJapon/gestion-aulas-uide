@@ -232,9 +232,11 @@ exports.crearReserva = async (req, res) => {
 
         // ── n8n event (fire-and-forget, vía event queue) ─────────────────────
         // n8n consume el evento desde Redis y hace fan-out a WhatsApp + Email.
+        const reservaPayloadCreada = buildReservaPayload(nuevaReserva);
         N8nService.emit('notificacion', {
             tipo: 'reserva_creada',
-            reserva: buildReservaPayload(nuevaReserva)
+            reserva: reservaPayloadCreada,
+            mensaje: N8nService.construirMensajeNotificacion('reserva_creada', reservaPayloadCreada)
         });
 
         res.status(201).json({
@@ -589,9 +591,11 @@ exports.cambiarEstado = async (req, res) => {
         // 'cancelada' queda como notificación in-app únicamente.
         const tipoN8n = estado === 'activa' ? 'reserva_aprobada' : (estado === 'rechazada' ? 'reserva_rechazada' : null);
         if (tipoN8n) {
+            const reservaPayloadN8n = buildReservaPayload(reserva);
             N8nService.emit('notificacion', {
                 tipo: tipoN8n,
-                reserva: buildReservaPayload(reserva)
+                reserva: reservaPayloadN8n,
+                mensaje: N8nService.construirMensajeNotificacion(tipoN8n, reservaPayloadN8n)
             });
         }
 

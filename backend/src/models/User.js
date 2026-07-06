@@ -38,9 +38,6 @@ const User = sequelize.define('User', {
   email: {
     type: DataTypes.STRING(255),
     allowNull: false,
-    unique: {
-      msg: 'Este email ya está registrado'
-    },
     validate: {
       isEmail: {
         msg: 'Debe proporcionar un email válido'

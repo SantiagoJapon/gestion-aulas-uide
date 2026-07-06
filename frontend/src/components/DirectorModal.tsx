@@ -31,11 +31,13 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
     telefono: ''
   });
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setCredenciales(null);
       setError(null);
+      setEmailError(null);
       if (directorToEdit) {
         setFormData({
           nombre: directorToEdit.nombre || '',
@@ -83,7 +85,12 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.error || err.response?.data?.mensaje || err.message || 'Error al guardar director.');
+      const msg = err.response?.data?.error || err.response?.data?.mensaje || err.message || 'Error al guardar director.';
+      if (msg.toLowerCase().includes('email') && (msg.toLowerCase().includes('registrado') || msg.toLowerCase().includes('exist'))) {
+        setEmailError(msg);
+      } else {
+        setError(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -311,10 +318,16 @@ export const DirectorModal = ({ isOpen, onClose, onSuccess, directorToEdit }: Di
               required
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-3 bg-muted/20 border border-border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+              onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setEmailError(null); }}
+              className={`w-full px-4 py-3 bg-muted/20 border rounded-xl font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all ${emailError ? 'border-destructive' : 'border-border'}`}
               placeholder="correo@institucional.edu.ec"
             />
+            {emailError && (
+              <p className="text-[10px] font-bold text-destructive ml-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">error</span>
+                {emailError}
+              </p>
+            )}
           </div>
 
           {/* Teléfono WhatsApp */}

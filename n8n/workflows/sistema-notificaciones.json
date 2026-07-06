@@ -86,7 +86,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/botuide",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -96,7 +96,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"number\": \"{{ $json.reserva.telefono || $json.datos.telefono }}\", \"text\": \"{{ 'Nueva reserva: ' + $json.reserva.espacio + ' el ' + $json.reserva.fecha + ' de ' + $json.reserva.hora_inicio + ' a ' + $json.reserva.hora_fin }}\"}",
+        "jsonBody": "={\"number\": \"{{ $json.datos.reserva.telefono.replace(/^0/, '593') }}\", \"text\": \"{{ $json.datos.mensaje.replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"').replace(/\\n/g, '\\\\n') }}\"}",
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "notif-wa-reserva-001",
@@ -108,7 +108,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/bot",
+        "url": "={{ $env.EVOLUTION_API_URL || 'http://evolution-api:8080' }}/message/sendText/botuide",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -118,7 +118,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"number\": \"{{ $json.datos.telefono }}\", \"text\": \"{{ 'Hola ' + $json.datos.nombre + ', has sido asignado como director de ' + $json.datos.carrera + '. Tu contraseña actual sigue siendo la misma.' }}\"}",
+        "jsonBody": "={\"number\": \"{{ $json.datos.datos.telefono.replace(/^0/, '593') }}\", \"text\": \"{{ 'Hola ' + $json.datos.datos.nombre + ', has sido asignado como director de ' + $json.datos.datos.carrera + '. Tu contraseña actual sigue siendo la misma.' }}\"}",
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "notif-wa-director-001",

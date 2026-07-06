@@ -20,6 +20,7 @@ import { Step } from 'react-joyride';
 
 import { HealthReportModal } from '../components/director/HealthReportModal';
 import { ComunicadoModal } from '../components/director/ComunicadoModal';
+import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
 import IncidenciasView from '../components/IncidenciasView';
 import ReservasAdminView from '../components/reservas/ReservasAdminView';
 
@@ -151,6 +152,18 @@ const DirectorDashboard = () => {
     setIsEditModalOpen(false);
     setEditingClase(null);
     await loadStats();
+  };
+
+  const handleEditClaseFromReport = async (claseId: number) => {
+    try {
+      const res = await distribucionService.getClaseById(claseId);
+      if (res.success && res.clase) {
+        setEditingClase(res.clase);
+        setIsEditModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Error al cargar clase:', err);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -285,93 +298,85 @@ const DirectorDashboard = () => {
               </div>
             )}
 
-            {/* 4. GRID DINÁMICO (Tabla + Acciones) */}
+            {/* 4. GRID DINÁMICO (Resumen + Acciones) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-              {/* Listado Detallado (8/12) */}
+              {/* Resumen de Clases (8/12) */}
               <div className="lg:col-span-8 space-y-8">
                 <DashboardWidget
-                  title="Detalle de Distribución"
-                  subtitle="Verifique y edite estados de aulas individualmente"
+                  title="Distribución"
+                  subtitle="Resumen de clases y asignación de aulas"
                   icon="format_list_bulleted"
+                  action={
+                    misClases.length > 0 ? (
+                      <button
+                        onClick={() => setActiveTab('docentes')}
+                        className="text-[10px] font-black text-primary uppercase tracking-widest hover:text-primary/80 transition-colors flex items-center gap-1"
+                      >
+                        Gestión Docente
+                        <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      </button>
+                    ) : undefined
+                  }
                 >
-                  <div className="overflow-x-auto -mx-6">
-                    <table className="w-full text-sm text-left border-collapse">
-                      <thead className="bg-muted/30 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border/50">
-                        <tr>
-                          <th className="px-8 py-5">Materia / Nivel</th>
-                          <th className="px-6 py-5">Horario</th>
-                          <th className="px-6 py-5 text-center">Aula</th>
-                          <th className="px-6 py-5 text-right">Docente</th>
-                          <th className="px-8 py-5 text-right">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/40">
-                        {loadingStats ? (
-                          [1, 2, 3].map(i => (
-                            <tr key={i} className="animate-pulse">
-                              <td colSpan={5} className="px-8 py-10 h-20 bg-muted/5"></td>
-                            </tr>
-                          ))
-                        ) : misClases.length > 0 ? (
-                          misClases.slice(0, 8).map((clase, i) => (
-                            <tr key={i} className="hover:bg-muted/20 transition-all group">
-                              <td className="px-8 py-5">
-                                <p className="font-black text-foreground text-xs leading-none">{clase.materia}</p>
-                                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter mt-1.5 opacity-60">Ciclo {clase.ciclo} • {clase.paralelo}</p>
-                              </td>
-                              <td className="px-6 py-5">
-                                <span className="inline-flex items-center px-2 py-1 rounded-xl bg-primary/5 text-primary text-[10px] font-black uppercase tracking-tighter ring-1 ring-primary/10">
-                                  {clase.dia} {clase.hora_inicio}
+                  {loadingStats ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="h-24 bg-muted/20 rounded-2xl animate-pulse" />
+                      ))}
+                    </div>
+                  ) : misClases.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Mini stats */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-emerald-50 rounded-2xl p-4 text-center border border-emerald-100">
+                          <p className="text-2xl font-black text-emerald-700">{misClases.filter(c => c.aula_asignada).length}</p>
+                          <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mt-1">Asignadas</p>
+                        </div>
+                        <div className="bg-amber-50 rounded-2xl p-4 text-center border border-amber-100">
+                          <p className="text-2xl font-black text-amber-700">{misClases.filter(c => c.sobrecupo).length}</p>
+                          <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mt-1">Sobrecupo</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 text-center border border-slate-200">
+                          <p className="text-2xl font-black text-slate-700">{misClases.length}</p>
+                          <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mt-1">Totales</p>
+                        </div>
+                      </div>
+                      {/* Compact list of recent classes */}
+                      <div className="divide-y divide-border/30 max-h-[300px] overflow-y-auto custom-scrollbar -mx-2">
+                        {misClases.slice(0, 6).map((clase, i) => (
+                          <div key={i} className="flex items-center gap-3 px-2 py-2.5 hover:bg-muted/20 rounded-xl transition-colors group cursor-pointer" onClick={() => { setEditingClase(clase); setIsEditModalOpen(true); }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-foreground truncate">{clase.materia}</p>
+                              <p className="text-[9px] text-muted-foreground font-medium">{clase.dia} {clase.hora_inicio} · Ciclo {clase.ciclo}</p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              {clase.aula_asignada ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[9px] font-black border border-emerald-500/20 uppercase">
+                                  {typeof clase.aula === 'object' ? (clase.aula as any).nombre : clase.aula_asignada}
                                 </span>
-                              </td>
-                              <td className="px-6 py-5 text-center">
-                                {clase.estado === 'conflicto' ? (
-                                  <span className="px-3 py-1 rounded-full bg-red-500 text-white text-[10px] font-black uppercase shadow-sm animate-pulse flex items-center justify-center gap-1 mx-auto w-fit">
-                                    <span className="material-symbols-outlined text-xs">warning</span>
-                                    Conflicto
-                                  </span>
-                                ) : clase.estado === 'sobrecupo' ? (
-                                  <span className="px-3 py-1 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase shadow-sm flex items-center justify-center gap-1 mx-auto w-fit">
-                                    <span className="material-symbols-outlined text-xs">event_seat</span>
-                                    Sobrecupo
-                                  </span>
-                                ) : clase.aula_asignada ? (
-                                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20 uppercase shadow-sm">
-                                    {typeof clase.aula === 'object' ? (clase.aula as any).nombre : clase.aula_asignada}
-                                  </span>
-                                ) : (
-                                  <span className="px-3 py-1 rounded-full bg-slate-500/10 text-slate-400 text-[10px] font-black border border-slate-500/20 uppercase">
-                                    Sin Aula
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-5 text-right">
-                                <p className="text-[10px] font-bold text-foreground/80 truncate max-w-[150px]">{clase.docente}</p>
-                              </td>
-                              <td className="px-8 py-5 text-right font-black">
-                                <button
-                                  onClick={() => { setEditingClase(clase); setIsEditModalOpen(true); }}
-                                  className="size-10 rounded-2xl text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all flex items-center justify-center ml-auto"
-                                >
-                                  <span className="material-symbols-outlined text-xl">edit_square</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="px-8 py-24 text-center">
-                              <div className="bg-muted/20 size-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <span className="material-symbols-outlined text-4xl text-muted-foreground/30">inbox</span>
-                              </div>
-                              <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest">Sin datos de distribución</p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-400 text-[9px] font-black border border-slate-500/20 uppercase">Sin Aula</span>
+                              )}
+                            </div>
+                            <span className="material-symbols-outlined text-sm text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+                          </div>
+                        ))}
+                      </div>
+                      {misClases.length > 6 && (
+                        <p className="text-[9px] text-center text-muted-foreground font-medium">
+                          +{misClases.length - 6} clases más — use la tabla de horario completa arriba
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <div className="size-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span className="material-symbols-outlined text-3xl text-muted-foreground/30">inbox</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest">Sin datos de distribución</p>
+                    </div>
+                  )}
                 </DashboardWidget>
               </div>
 
@@ -535,7 +540,7 @@ const DirectorDashboard = () => {
         );
 
       case 'heatmap':
-        return <MapaCalor />;
+        return <MapaCalorDetallado carreraId={user?.carrera?.id} />;
       case 'disponibilidad':
         return <DisponibilidadAulas />;
       case 'reservas':
@@ -697,6 +702,7 @@ const DirectorDashboard = () => {
         isOpen={isHealthModalOpen}
         onClose={() => setIsHealthModalOpen(false)}
         report={healthReport}
+        onEditClase={handleEditClaseFromReport}
       />
 
       <ComunicadoModal

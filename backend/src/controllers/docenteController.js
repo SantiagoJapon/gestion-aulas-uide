@@ -1,4 +1,4 @@
-const { Docente, Clase, Carrera, User } = require('../models');
+﻿const { Docente, Clase, Carrera, User } = require('../models');
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const whatsappService = require('../services/whatsappService');
@@ -42,13 +42,13 @@ const crearUsuarioParaDocente = async (docente, transaction = null) => {
     const nombre = partes[0] || 'Docente';
     const apellido = partes.slice(1).join(' ') || 'UIDE';
 
-    // Generar email único basado en nombre limpio
-    let email = docente.email;
+    // Sin email real no hay forma de entregar las credenciales: no se inventa
+    // un correo (el dominio @docente.uide.edu.ec no existe y rebota siempre).
+    // El docente queda registrado sin cuenta hasta que se le agregue un email real.
+    const email = docente.email;
     if (!email) {
-        // Formato: nombre.apellido@uide.edu.ec (sin espacios ni caracteres especiales)
-        const nom = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const ape = apellido.split(' ')[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        email = `${nom}.${ape}@docente.uide.edu.ec`;
+        console.warn(`Docente "${docente.nombre}" sin email: no se crea cuenta de acceso.`);
+        return null;
     }
 
     // Verificar colisión de email autogenerado (si ya existe, añadir sufijo)
@@ -281,6 +281,11 @@ exports.createDocente = async (req, res) => {
         const { nombre, email, telefono, titulo_pregrado, titulo_posgrado, tipo, carrera_id } = req.body;
         const usuario = req.usuario;
 
+        if (!email || !email.trim()) {
+            await transaction.rollback();
+            return res.status(400).json({ success: false, message: 'El correo del docente es obligatorio para poder enviarle sus credenciales de acceso' });
+        }
+
         // Validar que carrera_id sea un número válido
         let finalCarreraId = carrera_id;
         if (typeof finalCarreraId === 'string') {
@@ -425,8 +430,10 @@ exports.updateDocente = async (req, res) => {
         let credenciales = null;
 
         // Si el docente no tenía cuenta y ahora tiene email o teléfono → crear cuenta
+        let sinEmailParaCuenta = false;
         if (!tenia_cuenta && (email || telefono)) {
             const result = await crearUsuarioParaDocente(docente);
+            if (!result && !email) sinEmailParaCuenta = true;
             if (result) {
                 const { user, passwordTemporal } = result;
                 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -462,7 +469,11 @@ exports.updateDocente = async (req, res) => {
             success: true,
             docente,
             credenciales,
-            mensaje: credenciales ? 'Docente actualizado y cuenta creada exitosamente.' : 'Docente actualizado correctamente'
+            mensaje: credenciales
+                ? 'Docente actualizado y cuenta creada exitosamente.'
+                : sinEmailParaCuenta
+                    ? 'Docente actualizado. No se creó la cuenta de acceso: agrega su correo institucional para poder enviarle las credenciales.'
+                    : 'Docente actualizado correctamente'
         });
     } catch (error) {
         handle500(res, error, 'updateDocente');
@@ -599,7 +610,12 @@ exports.crearCuentaDocente = async (req, res) => {
             });
         } else {
             const result = await crearUsuarioParaDocente(docente);
-            if (!result) return res.status(500).json({ success: false, message: 'No se pudo crear la cuenta' });
+            if (!result) {
+                if (!docente.email) {
+                    return res.status(400).json({ success: false, message: 'Este docente no tiene correo registrado. Agrega su correo institucional antes de generar sus credenciales.' });
+                }
+                return res.status(500).json({ success: false, message: 'No se pudo crear la cuenta' });
+            }
             user = result.user;
             const passwordTemporal = result.passwordTemporal;
             isNew = true;
@@ -681,6 +697,7 @@ exports.generarCredencialesMasivo = async (req, res) => {
         const docentes = await Docente.findAll({ where, transaction });
         let creados = 0;
         let conTelefono = 0;
+        let sinEmail = 0;
         const cuentasCreadas = [];
 
         for (const docente of docentes) {
@@ -688,6 +705,8 @@ exports.generarCredencialesMasivo = async (req, res) => {
             if (result) {
                 creados++;
                 cuentasCreadas.push({ docente, user: result.user, passwordTemporal: result.passwordTemporal });
+            } else if (!docente.email) {
+                sinEmail++;
             }
         }
 
@@ -712,8 +731,9 @@ exports.generarCredencialesMasivo = async (req, res) => {
         }
         res.json({
             success: true,
-            mensaje: `Se crearon ${creados} cuentas de usuario. ${conTelefono} notificaciones enviadas por WhatsApp.`,
-            stats: { creados, notificados: conTelefono }
+            mensaje: `Se crearon ${creados} cuentas de usuario. ${conTelefono} notificaciones enviadas por WhatsApp.` +
+                (sinEmail > 0 ? ` ${sinEmail} docente(s) sin correo registrado: agrégales el email para poder crear su cuenta.` : ''),
+            stats: { creados, notificados: conTelefono, sin_email: sinEmail }
         });
     } catch (error) {
         if (transaction) await transaction.rollback();

@@ -9,7 +9,7 @@ module.exports = {
       id: { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
       nombre: { type: Sequelize.STRING(100), allowNull: false },
       apellido: { type: Sequelize.STRING(100), allowNull: false },
-      email: { type: Sequelize.STRING(255), allowNull: false, unique: true },
+      email: { type: Sequelize.STRING(255), allowNull: false },
       password: { type: Sequelize.STRING(255), allowNull: false },
       rol: {
         type: Sequelize.ENUM('admin', 'director', 'profesor', 'docente', 'estudiante'),

@@ -324,6 +324,160 @@ const obtenerMapaCalor = async (req, res) => {
 };
 
 // ============================================
+// MAPA DE CALOR DETALLADO: Hora vs Aula con % de ocupación individual
+// ============================================
+const obtenerMapaCalorDetallado = async (req, res) => {
+  try {
+    const usuario = req.usuario;
+    let carreraId = req.query.carrera_id;
+    const edificio = req.query.edificio;
+    const capacidadMinima = parseInt(req.query.capacidad_minima) || 0;
+    const diasParam = req.query.dias; // "Lunes,Martes,Miercoles"
+    const franja = req.query.franja; // "manana" | "tarde" | "noche" | ""
+
+    // Forzar carrera si es director
+    if (usuario.rol === 'director' && usuario.carrera_director) {
+      carreraId = usuario.carrera_director;
+    }
+
+    const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    let diasFiltro = DIAS;
+    if (diasParam) {
+      const selected = diasParam.split(',').map(d => d.trim());
+      diasFiltro = DIAS.filter(d => selected.some(s => d.toLowerCase().startsWith(s.toLowerCase())));
+    }
+
+    const HORAS = Array.from({ length: 15 }, (_, i) => i + 7); // 7-21
+    let horasFiltro = HORAS;
+    if (franja === 'manana') horasFiltro = HORAS.filter(h => h >= 7 && h <= 12);
+    else if (franja === 'tarde') horasFiltro = HORAS.filter(h => h >= 13 && h <= 18);
+    else if (franja === 'noche') horasFiltro = HORAS.filter(h => h >= 19 && h <= 22);
+
+    // 1) Obtener aulas según filtros
+    let whereAula = "WHERE a.estado = 'disponible'";
+    const replacements = {};
+    if (edificio) {
+      whereAula += ' AND a.edificio = :edificio';
+      replacements.edificio = edificio;
+    }
+    if (capacidadMinima > 0) {
+      whereAula += ' AND a.capacidad >= :capacidad_minima';
+      replacements.capacidad_minima = capacidadMinima;
+    }
+
+    // Si es director, obtener aulas de su carrera
+    if (carreraId) {
+      whereAula += ` AND (a.restriccion_carrera IS NULL OR a.restriccion_carrera LIKE '%' || :carrera_busqueda || '%')`;
+      replacements.carrera_busqueda = String(carreraId);
+    }
+
+    const aulas = await sequelize.query(`
+      SELECT a.id, a.codigo, a.nombre, a.capacidad, a.tipo, a.edificio, a.piso, a.restriccion_carrera
+      FROM aulas a
+      ${whereAula}
+      ORDER BY a.edificio, a.piso, a.codigo
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    if (aulas.length === 0) {
+      return res.json({ success: true, aulas: [], horas: horasFiltro, dias: diasFiltro, datos: {}, estadisticas: { total_aulas: 0, promedio_ocupacion: 0 } });
+    }
+
+    // 2) Obtener clases con aula_asignada en esas aulas
+    const aulaIds = aulas.map(a => a.id);
+    const clases = await sequelize.query(`
+      SELECT
+        c.id, c.materia, c.carrera, c.dia, c.hora_inicio, c.hora_fin,
+        c.num_estudiantes, c.docente, c.aula_asignada,
+        a.id as aula_id
+      FROM clases c
+      JOIN aulas a ON a.codigo = c.aula_asignada
+      WHERE a.id IN (:aulaIds)
+        AND c.aula_asignada IS NOT NULL
+      ${carreraId && !isNaN(Number(carreraId)) ? 'AND c.carrera_id = :carreraId' : ''}
+      ORDER BY c.dia, c.hora_inicio
+    `, {
+      replacements: { aulaIds, ...(carreraId && !isNaN(Number(carreraId)) ? { carreraId: Number(carreraId) } : {}) },
+      type: QueryTypes.SELECT
+    });
+
+    // 3) Construir matriz: aulaId_hora -> { ocupacion, clase, docente, estudiantes, carrera }
+    const datos = {};
+    for (const dia of diasFiltro) {
+      for (const aula of aulas) {
+        for (const hora of horasFiltro) {
+          const key = `${aula.id}_${hora}_${dia}`;
+          datos[key] = null;
+        }
+      }
+    }
+
+    for (const clase of clases) {
+      if (!clase.dia || !clase.hora_inicio) continue;
+      if (!diasFiltro.includes(clase.dia)) continue;
+
+      const horaInicio = parseInt(clase.hora_inicio.split(':')[0]);
+      const horaFin = parseInt((clase.hora_fin || clase.hora_inicio).split(':')[0]);
+
+      const aula = aulas.find(a => a.codigo === clase.aula_asignada);
+      if (!aula) continue;
+
+      for (let h = horaInicio; h < horaFin; h++) {
+        if (!horasFiltro.includes(h)) continue;
+        const key = `${aula.id}_${h}_${clase.dia}`;
+        const capacidad = aula.capacidad || 1;
+        const estudiantes = clase.num_estudiantes || 0;
+        datos[key] = {
+          ocupacion: parseFloat(((estudiantes / capacidad) * 100).toFixed(1)),
+          clase: clase.materia,
+          docente: clase.docente || 'Sin asignar',
+          estudiantes,
+          capacidad_aula: capacidad,
+          carrera: clase.carrera,
+          clase_id: clase.id
+        };
+      }
+    }
+
+    // 4) Calcular estadísticas
+    let totalOcupacion = 0;
+    let celdasOcupadas = 0;
+    for (const key of Object.keys(datos)) {
+      if (datos[key]) {
+        totalOcupacion += datos[key].ocupacion;
+        celdasOcupadas++;
+      }
+    }
+    const promedioOcupacion = celdasOcupadas > 0 ? parseFloat((totalOcupacion / celdasOcupadas).toFixed(1)) : 0;
+
+    // 5) Obtener edificios disponibles para el filtro
+    const edificios = await sequelize.query(`
+      SELECT DISTINCT a.edificio FROM aulas a WHERE a.estado = 'disponible' AND a.edificio IS NOT NULL ORDER BY a.edificio
+    `, { type: QueryTypes.SELECT });
+
+    res.json({
+      success: true,
+      aulas: aulas.map(a => ({ id: a.id, codigo: a.codigo, nombre: a.nombre, capacidad: a.capacidad, tipo: a.tipo, edificio: a.edificio, piso: a.piso })),
+      horas: horasFiltro,
+      dias: diasFiltro,
+      datos,
+      filtros_disponibles: {
+        edificios: edificios.map(e => e.edificio)
+      },
+      estadisticas: {
+        total_aulas: aulas.length,
+        promedio_ocupacion: promedioOcupacion
+      }
+    });
+
+  } catch (error) {
+    handle500(res, error, 'obtenerMapaCalorDetallado');
+  }
+};
+
+// ============================================
 // OBTENER CLASES CON DISTRIBUCIÓN (PARA VISTA ADMIN)
 // ============================================
 const getClasesDistribucion = async (req, res) => {
@@ -1070,6 +1224,35 @@ const getCuadroClases = async (req, res) => {
   }
 };
 
+const getClaseById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await sequelize.query(`
+      SELECT
+        c.id, c.materia, c.ciclo, c.paralelo, c.docente,
+        c.dia, c.hora_inicio, c.hora_fin, c.num_estudiantes,
+        c.aula_asignada, c.aula_sugerida, c.carrera_id,
+        c.docente_id
+      FROM clases c
+      WHERE c.id = :id
+    `, {
+      replacements: { id },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    const clase = rows[0];
+
+    if (!clase) {
+      return res.status(404).json({ success: false, mensaje: 'Clase no encontrada' });
+    }
+
+    res.json({ success: true, clase });
+  } catch (error) {
+    console.error('Error al obtener clase:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al obtener clase' });
+  }
+};
+
 const deleteClase = async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -1222,12 +1405,14 @@ module.exports = {
   obtenerHorario,
   limpiarDistribucion,
   obtenerMapaCalor,
+  obtenerMapaCalorDetallado,
   getClasesDistribucion,
   getMiDistribucion,
   getReporteDistribucion,
   getDocentesCarga,
   getDistribucionSimulada,
   getCuadroClases,
+  getClaseById,
   updateClase,
   deleteClase,
   createClase,

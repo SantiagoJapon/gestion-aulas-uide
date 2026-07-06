@@ -162,7 +162,7 @@ class ReporteController {
         try {
             const { id } = req.params;
             const reporte = await ReporteHistorial.findByPk(id, {
-                include: [{ model: User, as: 'usuario', attributes: ['id', 'carrera_director'] }]
+                include: [{ model: User, as: 'generadoPor', attributes: ['id', 'carrera_director'] }]
             });
 
             if (!reporte || !reporte.ruta_archivo) {
@@ -171,7 +171,7 @@ class ReporteController {
 
             // Director solo puede descargar reportes de su carrera
             if (req.usuarioRol === 'director') {
-                const reporteCarrera = reporte.usuario?.carrera_director;
+                const reporteCarrera = reporte.generadoPor?.carrera_director;
                 if (!reporteCarrera || reporteCarrera !== req.usuario.carrera_director) {
                     return res.status(403).json({ success: false, error: 'No tiene permisos para descargar este reporte' });
                 }

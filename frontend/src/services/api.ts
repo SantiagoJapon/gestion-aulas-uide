@@ -463,6 +463,41 @@ export interface MiDistribucionResponse {
   };
 }
 
+export interface AulaInfo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  capacidad: number;
+  tipo: string;
+  edificio: string;
+  piso: number;
+}
+
+export interface CeldaOcupacion {
+  ocupacion: number;
+  clase: string;
+  docente: string;
+  estudiantes: number;
+  capacidad_aula: number;
+  carrera: string;
+  clase_id: number;
+}
+
+export interface MapaCalorDetalladoResponse {
+  success: boolean;
+  aulas: AulaInfo[];
+  horas: number[];
+  dias: string[];
+  datos: Record<string, CeldaOcupacion | null>;
+  filtros_disponibles: {
+    edificios: string[];
+  };
+  estadisticas: {
+    total_aulas: number;
+    promedio_ocupacion: number;
+  };
+}
+
 // Servicios de distribución
 export const distribucionService = {
   // Obtener estado general de distribución
@@ -493,6 +528,17 @@ export const distribucionService = {
   getMapaCalor: async (carreraId?: number): Promise<MapaCalorResponse> => {
     const params = carreraId ? { carrera_id: carreraId } : {};
     const response = await api.get<MapaCalorResponse>('/distribucion/heatmap', { params });
+    return response.data;
+  },
+
+  getMapaCalorDetallado: async (filtros?: {
+    carrera_id?: number;
+    edificio?: string;
+    capacidad_minima?: number;
+    dias?: string;
+    franja?: string;
+  }): Promise<MapaCalorDetalladoResponse> => {
+    const response = await api.get<MapaCalorDetalladoResponse>('/distribucion/heatmap-detallado', { params: filtros });
     return response.data;
   },
 
@@ -549,6 +595,11 @@ export const distribucionService = {
     return response.data;
   },
 
+  // Obtener una clase por ID
+  getClaseById: async (id: number) => {
+    const response = await api.get(`/distribucion/clase/${id}`);
+    return response.data;
+  },
   // Actualizar una clase individualmente
   updateClase: async (id: number, data: any) => {
     const response = await api.put(`/distribucion/clase/${id}`, data);
@@ -649,6 +700,24 @@ export interface ReporteSalud {
   clases_sin_horario: number;
   clases_sin_estudiantes: number;
   clases_sin_docente: number;
+  detalle_sin_horario?: Array<{
+    id: number | null;
+    materia: string;
+    ciclo: string;
+    paralelo: string;
+  }>;
+  detalle_sin_estudiantes?: Array<{
+    id: number | null;
+    materia: string;
+    ciclo: string;
+    paralelo: string;
+  }>;
+  detalle_sin_docente?: Array<{
+    id: number | null;
+    materia: string;
+    ciclo: string;
+    paralelo: string;
+  }>;
   estado_general: 'bueno' | 'atencion_requerida';
   recomendacion: string;
 }

@@ -11,6 +11,9 @@ telegram-bot-aulas/node_modules/
 backend/.env
 frontend/.env
 
+# MCP config (contains n8n API keys/tokens)
+.mcp.json
+
 # Uploads
 uploads/
 backend/uploads/

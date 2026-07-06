@@ -250,6 +250,8 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     const { MateriaCatalogo } = require('../models');
 
+    const claseIds = new Map();
+
     for (let i = 0; i < parseResult.clases.length; i++) {
       const clase = parseResult.clases[i];
 
@@ -369,7 +371,7 @@ exports.subirPlanificacion = async (req, res) => {
         }
 
         // Guardar en base de datos
-        await Clase.create({
+        const createdClase = await Clase.create({
           carrera_id: carrera_id,
           carrera: nombreCarrera,
           materia: clase.materia.trim(),
@@ -384,6 +386,7 @@ exports.subirPlanificacion = async (req, res) => {
           aula_asignada: aulaCodigo,
           aula_sugerida: clase.aula_sugerida || null
         }, { transaction });
+        claseIds.set(i, createdClase.id);
 
         clasesGuardadas++;
 
@@ -452,17 +455,30 @@ exports.subirPlanificacion = async (req, res) => {
     // ==========================================
     // 📊 GENERAR REPORTE DE SALUD DE DATOS
     // ==========================================
-    const sinHorario = parseResult.clases.filter(c => !c.dia || !c.hora_inicio).length;
-    const sinEstudiantes = parseResult.clases.filter(c => !c.num_estudiantes || c.num_estudiantes === 0).length;
-    const sinDocente = parseResult.clases.filter(c => !c.docente).length;
+    const clasesSinHorario = parseResult.clases.filter(c => !c.dia || !c.hora_inicio);
+    const clasesSinEstudiantes = parseResult.clases.filter(c => !c.num_estudiantes || c.num_estudiantes === 0);
+    const clasesSinDocente = parseResult.clases.filter(c => !c.docente);
+
+    const getDetalle = (clases) => clases.map((c, i) => {
+      const originalIndex = parseResult.clases.indexOf(c);
+      return {
+        id: claseIds.get(originalIndex) || null,
+        materia: c.materia,
+        ciclo: c.ciclo,
+        paralelo: c.paralelo,
+      };
+    });
 
     const reporteSalud = {
       total_clases: parseResult.clases.length,
-      clases_sin_horario: sinHorario,
-      clases_sin_estudiantes: sinEstudiantes,
-      clases_sin_docente: sinDocente,
-      estado_general: (sinHorario > 0 || sinEstudiantes > 0) ? 'atencion_requerida' : 'bueno',
-      recomendacion: sinHorario > 0 ? 'Hay materias sin horario definido que no podrán asignarse a un aula.' : 'Los datos parecen estar listos para la distribución.'
+      clases_sin_horario: clasesSinHorario.length,
+      clases_sin_estudiantes: clasesSinEstudiantes.length,
+      clases_sin_docente: clasesSinDocente.length,
+      detalle_sin_horario: getDetalle(clasesSinHorario),
+      detalle_sin_estudiantes: getDetalle(clasesSinEstudiantes),
+      detalle_sin_docente: getDetalle(clasesSinDocente),
+      estado_general: (clasesSinHorario.length > 0 || clasesSinEstudiantes.length > 0) ? 'atencion_requerida' : 'bueno',
+      recomendacion: clasesSinHorario.length > 0 ? 'Hay materias sin horario definido que no podrán asignarse a un aula.' : 'Los datos parecen estar listos para la distribución.'
     };
 
     res.json({

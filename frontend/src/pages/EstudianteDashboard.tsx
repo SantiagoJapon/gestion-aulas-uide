@@ -440,8 +440,15 @@ export default function EstudianteDashboard() {
         return <UserSettings />;
 
       default:
-        setActiveTab('general');
-        return null;
+        return (
+          <div className="p-12 text-center">
+            <span className="material-symbols-outlined text-5xl text-muted-foreground/30 block mb-3">error_outline</span>
+            <p className="text-sm font-bold text-muted-foreground">Sección no encontrada</p>
+            <button onClick={() => setActiveTab('general')} className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold">
+              Volver al inicio
+            </button>
+          </div>
+        );
     }
   };
 

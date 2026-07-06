@@ -59,16 +59,18 @@ const expirarPendientes = async () => {
             }
 
             // Evento n8n (fire-and-forget)
+            const reservaPayloadExpirada = {
+                id: reserva.id,
+                espacio: espacioLabel,
+                fecha: reserva.fecha,
+                hora_inicio: reserva.hora_inicio,
+                hora_fin: reserva.hora_fin,
+                motivo_rechazo: 'Expirada automáticamente (sin aprobación)',
+            };
             N8nService.emit('notificacion', {
                 tipo: 'reserva_rechazada',
-                reserva: {
-                    id: reserva.id,
-                    espacio: espacioLabel,
-                    fecha: reserva.fecha,
-                    hora_inicio: reserva.hora_inicio,
-                    hora_fin: reserva.hora_fin,
-                    motivo_rechazo: 'Expirada automáticamente (sin aprobación)',
-                },
+                reserva: reservaPayloadExpirada,
+                mensaje: N8nService.construirMensajeNotificacion('reserva_rechazada', reservaPayloadExpirada)
             });
 
             rechazadas++;

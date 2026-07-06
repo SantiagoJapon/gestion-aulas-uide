@@ -12,7 +12,12 @@ class N8nService {
       tipo,
       evento_id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      ...extra
+      ...extra,
+      // Preservado DESPUÉS del spread: extra.tipo (ej. 'reserva_creada') sobreescribe
+      // el 'tipo' de arriba a propósito (sub-tipo del evento), pero el path del
+      // webhook de n8n (/notificacion, /reporte) debe seguir siendo el eventType
+      // original — si no, retryFailedEvents() reenviaría al path equivocado.
+      _webhookPath: tipo
     };
   }
 
@@ -86,7 +91,8 @@ class N8nService {
 
     for (const evento of pendientes) {
       try {
-        await axios.post(`${N8N_WEBHOOK_URL}/${evento.tipo}`, evento, { timeout: 5000 });
+        const path = evento._webhookPath || evento.tipo;
+        await axios.post(`${N8N_WEBHOOK_URL}/${path}`, evento, { timeout: 5000 });
         reenviados++;
       } catch (err) {
         await redisQueue.push('n8n:events', evento);
@@ -123,6 +129,50 @@ class N8nService {
 
     texto += `\n\n_UIDE · Sistema de Gestión de Aulas_`;
     return texto;
+  }
+
+  /**
+   * Construye el mensaje de WhatsApp para eventos de notificación de reserva,
+   * diferenciado por tipo (mismo patrón que construirReporteDistribucion: el
+   * backend arma el texto final, n8n solo lo reenvía).
+   *
+   * @param {string} tipo - 'reserva_creada' | 'reserva_aprobada' | 'reserva_rechazada'
+   * @param {Object} reserva - payload de la reserva (forma de buildReservaPayload,
+   *   o el objeto reducido que usa el cron de expiración — ambos son tolerados).
+   */
+  static construirMensajeNotificacion(tipo, reserva = {}) {
+    const espacio = reserva.espacio || 'el espacio solicitado';
+    const cuando = [reserva.fecha, (reserva.hora_inicio && reserva.hora_fin) ? `${reserva.hora_inicio} a ${reserva.hora_fin}` : null]
+      .filter(Boolean)
+      .join(' de ');
+    const motivo = reserva.motivo || reserva.motivo_rechazo || null;
+
+    switch (tipo) {
+      case 'reserva_creada':
+        return (
+          `📝 *Nueva solicitud de reserva*\n\n` +
+          `Espacio: *${espacio}*\n` +
+          (cuando ? `Cuándo: ${cuando}\n` : '') +
+          (reserva.solicitante_nombre ? `Solicitante: ${reserva.solicitante_nombre}${reserva.solicitante_rol ? ` (${reserva.solicitante_rol})` : ''}\n` : '') +
+          (motivo ? `Motivo: ${motivo}\n` : '') +
+          `\n_UIDE · Sistema de Gestión de Aulas_`
+        );
+      case 'reserva_aprobada':
+        return (
+          `✅ *Reserva aprobada*\n\n` +
+          `Tu reserva de *${espacio}*${cuando ? ` el ${cuando}` : ''} ha sido aprobada.\n` +
+          `\n_UIDE · Sistema de Gestión de Aulas_`
+        );
+      case 'reserva_rechazada':
+        return (
+          `❌ *Reserva rechazada*\n\n` +
+          `Tu solicitud de *${espacio}*${cuando ? ` el ${cuando}` : ''} fue rechazada.\n` +
+          (motivo ? `Motivo: ${motivo}\n` : '') +
+          `\n_UIDE · Sistema de Gestión de Aulas_`
+        );
+      default:
+        return `Actualización de reserva (${tipo}): ${espacio}${cuando ? ` - ${cuando}` : ''}`;
+    }
   }
 }
 

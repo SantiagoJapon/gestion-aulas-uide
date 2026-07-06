@@ -121,20 +121,13 @@ function main() {
 
   if (totalErrors === 0 && totalWarnings === 0) {
     console.log('✅ Todas las variables de entorno están correctamente configuradas.\n');
-    process.exit(0);
-  }
-
-  if (totalWarnings > 0 && totalErrors === 0) {
+  } else if (totalWarnings > 0 && totalErrors === 0) {
     console.log(`⚠️  ${totalWarnings} advertencia(s) — no bloquea el arranque.\n`);
-    process.exit(0);
-  }
-
-  if (process.env.NODE_ENV === 'production') {
+  } else if (process.env.NODE_ENV === 'production') {
     console.error(`❌ ${totalErrors} error(es) — arranque bloqueado en producción.\n`);
-    process.exit(1);
+    if (require.main === module) process.exit(1);
   } else {
     console.warn(`⚠️  ${totalErrors} error(es) — permitido en desarrollo, bloqueado en prod.\n`);
-    process.exit(0);
   }
 }
 

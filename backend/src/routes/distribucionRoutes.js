@@ -8,6 +8,7 @@ const {
   obtenerHorario,
   limpiarDistribucion,
   obtenerMapaCalor,
+  obtenerMapaCalorDetallado,
   getClasesDistribucion,
   getMiDistribucion,
   getReporteDistribucion,
@@ -26,6 +27,7 @@ router.post('/ejecutar', verificarAuth, verificarRol('director', 'admin'), ejecu
 router.get('/horario', verificarAuth, verificarRol('director', 'admin'), obtenerHorario);
 router.post('/limpiar', verificarAuth, verificarAdmin, limpiarDistribucion);
 router.get('/heatmap', verificarAuth, verificarRol('director', 'admin'), obtenerMapaCalor);
+router.get('/heatmap-detallado', verificarAuth, verificarRol('director', 'admin'), obtenerMapaCalorDetallado);
 router.get('/clases', verificarAuth, verificarRol('director', 'admin'), getClasesDistribucion);
 router.get('/simulado', verificarAuth, verificarAdmin, getDistribucionSimulada);
 router.get('/cuadro', verificarAuth, verificarAdmin, getCuadroClases);
@@ -40,7 +42,8 @@ router.get('/reporte', verificarAuth, verificarRol('director', 'admin'), getRepo
 router.get('/docentes-carga', verificarAuth, verificarRol('director', 'admin'), getDocentesCarga);
 
 // Mantenimiento y Edición Manual
-const { updateClase, checkDisponibilidad, createClase, deleteClase } = require('../controllers/distribucionController');
+const { getClaseById, updateClase, checkDisponibilidad, createClase, deleteClase } = require('../controllers/distribucionController');
+router.get('/clase/:id', verificarAuth, verificarRol('director', 'admin'), getClaseById);
 router.post('/clase', verificarAuth, verificarRol('director', 'admin'), createClase);
 router.put('/clase/:id', verificarAuth, verificarRol('director', 'admin'), updateClase);
 router.delete('/clase/:id', verificarAuth, verificarRol('director', 'admin'), deleteClase);

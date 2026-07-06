@@ -27,41 +27,29 @@
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "complete",
-        "model": "gpt-4o",
-        "messages": {
-          "values": [
-            {
-              "role": "system",
-              "content": "Eres un asistente experto en gestión académica universitaria de la UIDE. Ayudas a administradores y directores con análisis, recomendaciones y reportes. Responde en español, sé conciso y profesional. Máximo 400 palabras."
-            },
-            {
-              "role": "user",
-              "content": "=Contexto del sistema:\n{{ $json.contexto ? JSON.stringify($json.contexto) : 'Sin contexto adicional' }}\n\nConsulta del administrador:\n{{ $json.prompt }}"
-            }
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.OPENAI_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
           ]
         },
-        "options": {
-          "temperature": 0.3,
-          "maxTokens": 800
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"gpt-4o\", \"temperature\": 0.3, \"max_tokens\": 800, \"messages\": [{\"role\": \"system\", \"content\": \"Eres un asistente experto en gestión académica universitaria de la UIDE. Ayudas a administradores y directores con análisis, recomendaciones y reportes. Responde en español, sé conciso y profesional. Máximo 400 palabras.\"}, {\"role\": \"user\", \"content\": \"{{ ('Contexto del sistema:\\n' + ($json.contexto ? JSON.stringify($json.contexto) : 'Sin contexto adicional') + '\\n\\nConsulta del administrador:\\n' + $json.prompt).replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"').replace(/\\n/g, '\\\\n') }}\"}]}",
+        "options": {}
       },
       "id": "ia-gpt-001",
       "name": "GPT-4o",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.8,
-      "position": [-48, 336],
-      "credentials": {
-        "openAiApi": {
-          "id": "CREAR_EN_N8N_PRIMERO",
-          "name": "OpenAI UIDE"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-48, 336]
     },
     {
       "parameters": {
-        "jsCode": "const gptResponse = $json;\nreturn {\n  success: true,\n  respuesta: gptResponse.message.content,\n  modelo: 'gpt-4o',\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "const gptResponse = $json;\nconst content = gptResponse.choices && gptResponse.choices[0] && gptResponse.choices[0].message\n  ? gptResponse.choices[0].message.content\n  : 'No se pudo obtener respuesta de la IA.';\nreturn {\n  success: true,\n  respuesta: content,\n  modelo: 'gpt-4o',\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "ia-response-001",
       "name": "Formatear Respuesta",

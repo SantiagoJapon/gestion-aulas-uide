@@ -52,61 +52,6 @@
     --radius: 0.75rem;
 }
 
-/* Modo oscuro: paleta específica solicitada
-   --text: #eae9fc;
-   --background: #010104;
-   --primary: #ff7092;
-   --secondary: #ffc014;
-   --accent: #000000;
-*/
-.dark {
-    /* fondo casi negro #010104 */
-    --background: 240 60% 1%;
-    /* texto principal #eae9fc */
-    --foreground: 243 76% 95%;
-
-    /* tarjetas apenas más claras que el fondo */
-    --card: 240 25% 6%;
-    --card-foreground: 243 76% 95%;
-
-    --popover: 240 25% 6%;
-    --popover-foreground: 243 76% 95%;
-
-    /* primary #ff7092 */
-    --primary: 346 100% 72%;
-    --primary-foreground: 0 0% 0%;
-
-    /* secondary #ffc014 */
-    --secondary: 44 100% 54%;
-    --secondary-foreground: 240 60% 1%;
-
-    /* texto suavizado y fondos neutros */
-    --muted: 240 20% 14%;
-    --muted-foreground: 243 25% 75%;
-
-    /* accent #000000 */
-    --accent: 0 0% 0%;
-    --accent-foreground: 243 76% 95%;
-
-    --destructive: 0 55% 45%;
-    --destructive-foreground: 0 0% 98%;
-
-    /* bordes / inputs ligeramente por encima del fondo */
-    --border: 240 18% 18%;
-    --input: 240 18% 18%;
-
-    /* anillos de foco usando primary */
-    --ring: 346 100% 72%;
-
-    /* azules para gráficas/coinciden con brand blue */
-    --brand-navy: 215 100% 35%;
-    --chart-1: 215 100% 35%;
-    --chart-2: 44 100% 54%;
-    --chart-3: 346 100% 72%;
-    --chart-4: 243 76% 95%;
-    --chart-5: 240 60% 1%;
-}
-
 @layer base {
     * {
         @apply border-border;
@@ -114,10 +59,7 @@
 
     html {
         @apply antialiased;
-    }
-
-    html.dark {
-        color-scheme: dark;
+        color-scheme: light;
     }
 
     body {
@@ -126,7 +68,6 @@
             'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        transition: background-color 0.25s ease, color 0.2s ease;
     }
 }
 
@@ -149,32 +90,26 @@
         animation: fadeIn 0.3s ease-out;
     }
 
-    /* Scrollbar: claro y oscuro */
+    /* Scrollbar personalizado */
     .custom-scrollbar::-webkit-scrollbar {
         width: 8px;
         height: 8px;
     }
 
     .custom-scrollbar::-webkit-scrollbar-track {
-        @apply bg-gray-100 dark:bg-white/5 rounded;
+        @apply bg-gray-100 rounded;
     }
 
     .custom-scrollbar::-webkit-scrollbar-thumb {
-        @apply bg-gray-300 dark:bg-white/20 rounded hover:bg-gray-400 dark:hover:bg-white/30 transition-colors;
+        @apply bg-gray-300 rounded hover:bg-gray-400 transition-colors;
     }
 
-    /* Sidebar y cards: transición suave con el tema */
+    /* Sidebar translucent */
     .glass-sidebar {
         background: rgba(255, 255, 255, 0.7);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border-right: 1px solid rgba(0, 0, 0, 0.05);
-        transition: background-color 0.25s ease, border-color 0.2s ease;
-    }
-
-    .dark .glass-sidebar {
-        background: hsl(224, 28%, 13%, 0.85);
-        border-right: 1px solid hsl(224, 18%, 22%);
     }
 
     .mac-card {
@@ -182,11 +117,11 @@
     }
 
     .mac-card-hover {
-        @apply hover:shadow-xl hover:-translate-y-1 dark:hover:shadow-none;
+        @apply hover:shadow-xl hover:-translate-y-1;
     }
 
     .glass-morphism {
-        @apply bg-white/70 dark:bg-card/80 backdrop-blur-xl border border-border;
+        @apply bg-white/70 backdrop-blur-xl border border-border;
     }
 }
 

@@ -7,7 +7,7 @@ import DirectorAssignmentView from '../components/DirectorAssignmentView';
 import SubirEstudiantes from '../components/SubirEstudiantes';
 import MapaCalor from '../components/MapaCalor';
 import PlanificacionesTable from '../components/PlanificacionesTable';
-import SystemHealthWidget from '../components/SystemHealthWidget';
+
 import CentroControlDistribucion from '../components/CentroControlDistribucion';
 import HorarioVisual from '../components/HorarioVisual';
 import EspacioTable from '../components/EspacioTable';
@@ -22,6 +22,7 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
 import ReservasAdminView from '../components/reservas/ReservasAdminView';
+import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
 
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 
@@ -35,7 +36,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'distribucion' | 'disponibilidad' | 'reservas' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'disponibilidad' | 'reservas' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -226,9 +227,6 @@ export default function AdminDashboard() {
                   </DashboardWidget>
                 </div>
 
-                {/* System Health Widget */}
-                <SystemHealthWidget />
-
                 {/* Info Card Quick Action */}
                 <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
                   <div className="relative z-10">
@@ -308,6 +306,9 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+
+      case 'heatmap':
+        return <div className="p-6 animate-fade-in"><MapaCalorDetallado esAdmin /></div>;
 
       case 'disponibilidad':
         return <DisponibilidadAulas />;
