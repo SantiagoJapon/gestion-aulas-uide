@@ -3,7 +3,9 @@
 # Uso: ./deploy.sh && ./healthcheck.sh
 set -uo pipefail
 
-COMPOSE="docker compose -f docker-compose.prod.yml"
+ENV_FILE="${ENV_FILE:-.env.production}"
+COMPOSE="docker compose -f docker-compose.prod.yml --env-file $ENV_FILE"
+[ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
 DOMAIN="${DOMAIN:-}"
 BASE_URL="http://127.0.0.1"
 [ -n "$DOMAIN" ] && BASE_URL="https://$DOMAIN"
