@@ -21,12 +21,12 @@ module.exports = {
       carrera_director: { type: Sequelize.STRING(100), allowNull: true },
       estado: { type: Sequelize.ENUM('activo', 'inactivo'), allowNull: false, defaultValue: 'activo' },
       requiere_cambio_password: { type: Sequelize.BOOLEAN, defaultValue: false },
-      passwordTemporal_expira: { type: Sequelize.DATE, allowNull: true },
+      password_temporal_expira: { type: Sequelize.DATE, allowNull: true },
       token_recuperacion: { type: Sequelize.STRING(255), allowNull: true },
       token_expira: { type: Sequelize.DATE, allowNull: true },
       ultimo_cambio_password: { type: Sequelize.DATE, allowNull: true },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
 
     // =============================================
@@ -123,8 +123,8 @@ module.exports = {
       capacidad: { type: Sequelize.INTEGER, allowNull: false },
       estado: { type: Sequelize.STRING(50), allowNull: false, defaultValue: 'DISPONIBLE' },
       descripcion: { type: Sequelize.TEXT, allowNull: true },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
     await queryInterface.addIndex('espacios', ['tipo']);
     await queryInterface.addIndex('espacios', ['estado']);
@@ -263,8 +263,8 @@ module.exports = {
       rol_usuario: { type: Sequelize.STRING(50), allowNull: true },
       solicitante_nombre: { type: Sequelize.STRING(100), allowNull: true },
       solicitante_cedula: { type: Sequelize.STRING(20), allowNull: true },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
     await queryInterface.addIndex('reservas', ['aula_codigo']);
     await queryInterface.addIndex('reservas', ['dia']);
@@ -322,7 +322,7 @@ module.exports = {
         references: { model: 'periodos', key: 'id' },
         onUpdate: 'CASCADE', onDelete: 'SET NULL',
       },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
 
     // =============================================
@@ -341,7 +341,7 @@ module.exports = {
         references: { model: 'usuarios', key: 'id' },
         onUpdate: 'CASCADE', onDelete: 'CASCADE',
       },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
 
     // =============================================
@@ -380,8 +380,8 @@ module.exports = {
         references: { model: 'clases', key: 'id' },
         onUpdate: 'CASCADE', onDelete: 'SET NULL',
       },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
     await queryInterface.addIndex('notificaciones', ['leida']);
     await queryInterface.addIndex('notificaciones', ['tipo']);
@@ -412,8 +412,8 @@ module.exports = {
         references: { model: 'usuarios', key: 'id' },
         onUpdate: 'CASCADE', onDelete: 'CASCADE',
       },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      created_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.literal('NOW()') },
     });
     await queryInterface.addIndex('incidencias', ['estado']);
     await queryInterface.addIndex('incidencias', ['tipo']);

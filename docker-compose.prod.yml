@@ -161,12 +161,12 @@ services:
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:?N8N_PASSWORD es requerido}
-      N8N_HOST: miespacioideal.es
+      N8N_HOST: ${DOMAIN}
       N8N_PORT: 5678
       N8N_PROTOCOL: https
       N8N_PATH: /n8n/
-      N8N_EDITOR_BASE_URL: https://miespacioideal.es/n8n/
-      WEBHOOK_URL: https://miespacioideal.es/
+      N8N_EDITOR_BASE_URL: https://${DOMAIN}/n8n/
+      WEBHOOK_URL: https://${DOMAIN}/
       GENERIC_TIMEZONE: America/Guayaquil
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -235,7 +235,7 @@ services:
     container_name: gestion_aulas_evolution_api
     restart: always
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       # Autenticación (v2.3.7: sin AUTHENTICATION_TYPE ni DATABASE_ENABLED)
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}

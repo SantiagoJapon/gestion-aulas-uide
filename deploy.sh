@@ -106,7 +106,7 @@ sleep 15
 
 # 9. Verificar estado de servicios
 info "Estado de los servicios:"
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" ps
 
 # 10. Health check del backend
 info "Verificando backend..."
@@ -124,7 +124,7 @@ done
 
 if [ "$BACKEND_OK" = false ]; then
     warn "Backend no responde despues de 5 intentos. Revisa los logs:"
-    warn "docker compose -f docker-compose.prod.yml logs backend"
+    warn "docker compose -f docker-compose.prod.yml --env-file $ENV_FILE logs backend"
 fi
 
 # 11. Verificar frontend
@@ -132,7 +132,7 @@ info "Verificando frontend..."
 if curl -s -o /dev/null -w '%{http_code}' http://localhost/ 2>/dev/null | grep -q "200\|301\|302"; then
     info "Frontend cargando correctamente"
 else
-    warn "Frontend no responde. Revisa: docker compose -f docker-compose.prod.yml logs nginx"
+    warn "Frontend no responde. Revisa: docker compose -f docker-compose.prod.yml --env-file $ENV_FILE logs nginx"
 fi
 
 # 12. SSL con Let's Encrypt (si DOMAIN está configurado)
@@ -144,28 +144,28 @@ if [ -n "$DOMAIN" ]; then
         warn "No se encontraron certificados SSL para $DOMAIN"
         warn "Obteniendo certificados de Let's Encrypt..."
         
-        docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+        docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" run --rm certbot certonly \
             --webroot -w /var/www/certbot \
             -d "$DOMAIN" -d "www.$DOMAIN" \
             --non-interactive --agree-tos \
             --email "admin@$DOMAIN" || true
-        
+
         if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
             info "Certificados SSL obtenidos para $DOMAIN"
         else
             warn "No se pudieron obtener certificados SSL automaticamente"
             warn "Ejecuta manualmente:"
-            warn "  docker compose -f docker-compose.prod.yml run certbot certonly --webroot -w /var/www/certbot -d $DOMAIN"
+            warn "  docker compose -f docker-compose.prod.yml --env-file $ENV_FILE run certbot certonly --webroot -w /var/www/certbot -d $DOMAIN"
         fi
     else
         info "Certificados SSL existentes para $DOMAIN"
         info "Programa renovacion automatica con:"
-        info "  0 3 * * * docker compose -f /opt/gestion-aulas-uide/docker-compose.prod.yml run certbot renew && docker compose restart nginx"
+        info "  0 3 * * * docker compose -f /opt/gestion-aulas-uide/docker-compose.prod.yml --env-file $ENV_FILE run certbot renew && docker compose -f /opt/gestion-aulas-uide/docker-compose.prod.yml --env-file $ENV_FILE restart nginx"
     fi
-    
+
     # Reiniciar nginx para que cargue la config SSL
     info "Reiniciando nginx para aplicar config SSL..."
-    docker compose -f docker-compose.prod.yml restart nginx
+    docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" restart nginx
 fi
 
 echo ""
@@ -186,8 +186,8 @@ fi
 info "WhatsApp: Escanea QR: bash scripts/setup-evolution-instance.sh"
 echo ""
 echo "Comandos utiles:"
-echo "  Logs:       docker compose -f docker-compose.prod.yml logs -f"
-echo "  Estado:     docker compose -f docker-compose.prod.yml ps"
-echo "  Reiniciar:  docker compose -f docker-compose.prod.yml restart"
-echo "  Detener:    docker compose -f docker-compose.prod.yml down"
-echo "  Actualizar: git pull && docker compose -f docker-compose.prod.yml up -d --build"
+echo "  Logs:       docker compose -f docker-compose.prod.yml --env-file $ENV_FILE logs -f"
+echo "  Estado:     docker compose -f docker-compose.prod.yml --env-file $ENV_FILE ps"
+echo "  Reiniciar:  docker compose -f docker-compose.prod.yml --env-file $ENV_FILE restart"
+echo "  Detener:    docker compose -f docker-compose.prod.yml --env-file $ENV_FILE down"
+echo "  Actualizar: git pull && docker compose -f docker-compose.prod.yml --env-file $ENV_FILE up -d --build"

@@ -40,7 +40,7 @@ if [ -d "$BUILD_DIR" ]; then
     rm -rf "$BUILD_DIR"
 fi
 
-git clone --depth 1 --branch v${IMAGE_TAG} \
+git clone --depth 1 --branch ${IMAGE_TAG} \
     https://github.com/EvolutionAPI/evolution-api.git \
     "$BUILD_DIR" 2>&1
 
