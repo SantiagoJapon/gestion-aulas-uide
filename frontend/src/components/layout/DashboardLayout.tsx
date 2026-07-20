@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import CommandKSearch from './CommandKSearch';
+import QuickReserveFAB from '../QuickReserveFAB';
 import { notificacionService, Notificacion } from '../../services/api';
 
 interface NavItem {
@@ -79,16 +80,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         { label: 'Inicio', icon: 'dashboard', tab: 'general', category: 'panel' },
         { label: 'Mapa de Calor', icon: 'grid_view', tab: 'heatmap', roles: ['admin', 'director'], category: 'espacios' },
         { label: 'Distribución', icon: 'calendar_apps_script', tab: 'distribucion', roles: ['admin'], category: 'academico' },
-        { label: 'Disponibilidad', icon: 'event_available', tab: 'disponibilidad', roles: ['admin', 'director'], category: 'espacios' },
         { label: 'Reservas', icon: 'book_online', tab: 'reservas', roles: ['admin', 'director'], category: 'espacios' },
         { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'], category: 'espacios' },
-        { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin', 'director'], category: 'personas' },
-        { label: 'Materias', icon: 'menu_book', tab: 'materias', roles: ['director'], category: 'academico' },
-        { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin', 'director'], category: 'personas' },
-        { label: 'Mis Clases', icon: 'school', tab: 'mis_clases', roles: ['director'], category: 'academico' },
+        { label: 'Gestión Académica', icon: 'school', tab: 'gestion_academica', roles: ['director'], category: 'academico' },
+        { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin'], category: 'personas' },
+        { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin'], category: 'personas' },
         { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'docente', 'estudiante'], category: 'panel' },
         { label: 'Reportes', icon: 'bar_chart', tab: 'reportes', roles: ['admin', 'director'], category: 'reportes' },
-        { label: 'Incidencias', icon: 'warning', tab: 'incidencias', roles: ['admin', 'director', 'profesor', 'docente'], category: 'reportes' },
+        { label: 'Incidencias', icon: 'report', tab: 'incidencias', category: 'reportes' },
         { label: 'Ajustes', icon: 'settings', tab: 'settings', category: 'config' },
     ];
 
@@ -316,16 +315,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 </div>
             </aside>
 
-            {/* Tour Global Trigger */}
-            <button
-                id="tour-help-button"
-                onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
-                className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 lg:bottom-10 lg:right-10 size-11 sm:size-12 bg-uide-gold text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-[60] group"
-                title="Ayuda / Tour Guiado"
-            >
-                <span className="material-symbols-outlined text-xl sm:text-2xl font-variation-fill group-hover:rotate-12 transition-transform">help</span>
-            </button>
-
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 {/* Mobile Header */}
@@ -445,6 +434,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     </div>
                 )}
             </main>
+
+            <QuickReserveFAB />
         </div>
     );
 };

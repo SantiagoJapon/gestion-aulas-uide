@@ -431,7 +431,7 @@ const AulaTable: React.FC = () => {
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-50 dark:border-slate-700/50">
                     {aula.es_prioritaria && (
                       <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[9px] font-black rounded-lg border border-amber-100 dark:border-amber-900/30 flex items-center gap-1 uppercase tracking-tighter">
-                        <span className="material-symbols-outlined text-[12px] font-bold">star</span> Prioridad
+                        <span className="material-symbols-outlined text-[12px] font-bold">star</span> Exclusiva
                       </span>
                     )}
                     {aula.restriccion_carrera && (
@@ -485,7 +485,7 @@ const AulaTable: React.FC = () => {
                           <div className="font-bold text-slate-900 dark:text-white text-sm">{aula.nombre}</div>
                           <div className="flex flex-wrap gap-2 mt-1.5">
                             {aula.es_prioritaria && (
-                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[9px] font-black rounded border border-amber-100 uppercase">Prioritaria</span>
+                              <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[9px] font-black rounded border border-amber-100 uppercase">Exclusiva</span>
                             )}
                             {aula.restriccion_carrera && (
                               (() => {
@@ -655,10 +655,10 @@ const AulaTable: React.FC = () => {
 
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                Carreras con Prioridad (MULTISELECCIÓN)
+                Carreras Exclusivas (MULTISELECCIÓN)
               </label>
               <p className="text-[10px] text-muted-foreground ml-1 -mt-1">
-                Haz clic en cada carrera para activarla o desactivarla. Las seleccionadas tendrán prioridad.
+                Haz clic en cada carrera para activarla o desactivarla. El aula quedará <strong>exclusiva</strong> para las carreras seleccionadas.
               </p>
 
               <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-2xl border border-dashed border-border min-h-[60px]">
@@ -713,7 +713,7 @@ const AulaTable: React.FC = () => {
               {formData.restriccion_carrera && formData.restriccion_carrera !== 'AUDITORIO_INSTITUCIONAL' && (
                 <p className="text-[10px] text-amber-600 font-bold ml-1 flex items-center gap-1 animate-in slide-in-from-left-2">
                   <span className="material-symbols-outlined text-[12px]">star</span>
-                  Prioridad asignada a las carreras marcadas. Las demás pueden usar el espacio si está libre.
+                  Espacio <strong>exclusivo</strong> para las carreras marcadas. Ninguna otra carrera podrá recibir este espacio en la distribución automática.
                 </p>
               )}
               {!formData.restriccion_carrera && (

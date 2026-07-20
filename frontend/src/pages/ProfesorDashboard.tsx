@@ -793,7 +793,7 @@ export default function ProfesorDashboard() {
         );
 
       case 'incidencias':
-        return <IncidenciasView />;
+        return <IncidenciasView mode="report" />;
 
       case 'settings':
         return <UserSettings />;

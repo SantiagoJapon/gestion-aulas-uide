@@ -204,6 +204,7 @@ services:
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - EVOLUTION_INSTANCE=botuide
       - BOT_PORT=3020
+      - WEBHOOK_URL=http://whatsapp-bot:3020/webhook
       - BACKEND_URL=http://host.docker.internal:3001
       - DB_HOST=postgres
       - DB_PORT=5432

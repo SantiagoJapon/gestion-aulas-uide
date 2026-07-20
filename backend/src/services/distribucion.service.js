@@ -9,10 +9,13 @@ const { normalizarTexto } = require('../utils/textUtils');
 // Única regla fija: el Auditorio NO se asigna en distribución automática.
 // Se reserva manualmente para eventos institucionales.
 //
-// Las prioridades de aulas por carrera se gestionan desde la BD:
-// - aula.restriccion_carrera → carrera con prioridad (no exclusiva)
-// - aula.es_prioritaria = true → la carrera indicada tiene prioridad de scoring
-// - Cualquier otra carrera SÍ puede usar el aula si hay disponibilidad
+// Las restricciones de aulas por carrera se gestionan desde la BD:
+// - aula.restriccion_carrera → carrera(s) con acceso (string, CSV o JSON array)
+// - aula.es_prioritaria = true → la restricción es EXCLUSIVA: solo esa(s)
+//   carrera(s) pueden recibir esta aula en la distribución. Ninguna otra
+//   carrera puede usarla, aunque esté libre en el horario.
+// - Si es_prioritaria = false (o restriccion_carrera es NULL) → aula libre
+//   para cualquier carrera.
 // ============================================
 
 // Excluye de la distribución automática solo el Auditorio
@@ -193,10 +196,11 @@ class DistribucionService {
    *
    * Reglas:
    *  - Solo el Auditorio queda excluido (ya filtrado antes de llegar aquí).
-   *  - Todas las demás aulas pueden ser usadas por cualquier carrera.
-   *  - Si un aula tiene restriccion_carrera + es_prioritaria=true, recibe un
-   *    bonus de score cuando la clase pertenece a esa carrera prioritaria.
-   *    Las demás carreras también pueden usar el aula, solo con menor prioridad.
+   *  - Si un aula tiene restriccion_carrera + es_prioritaria=true, es
+   *    EXCLUSIVA de esa(s) carrera(s): se descarta por completo para
+   *    cualquier otra carrera, sin importar disponibilidad.
+   *  - El resto de aulas (sin restricción exclusiva) pueden ser usadas por
+   *    cualquier carrera.
    */
   buscarAulaOptima(clase, aulas, aulasOcupadas, estrictoCapacidad = true) {
     let mejorAula = null;
@@ -225,6 +229,18 @@ class DistribucionService {
 
     for (const aula of aulasParaBuscar) {
       const numEstudiantes = clase.num_estudiantes || 1;
+
+      // ── RESTRICCIÓN EXCLUSIVA ────────────────────────────────────────────
+      // Si el aula tiene es_prioritaria=true + restriccion_carrera definida,
+      // es EXCLUSIVA de esa(s) carrera(s). Ninguna otra carrera puede usarla,
+      // sin importar disponibilidad u optimización de score.
+      if (aula.es_prioritaria && aula.restriccion_carrera) {
+        const tienePrioridad = typeof aula.tienePrioridad === 'function'
+          ? aula.tienePrioridad(clase.carrera)
+          : normalizarTexto(aula.restriccion_carrera).includes(carreraNorm);
+
+        if (!tienePrioridad) continue; // Aula exclusiva de otra(s) carrera(s): descartar
+      }
 
       // Capacidad mínima en modo estricto
       if (estrictoCapacidad && aula.capacidad < numEstudiantes) continue;

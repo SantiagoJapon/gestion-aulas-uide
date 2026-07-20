@@ -34,7 +34,7 @@ const upload = multer({
 router.use(verificarAuth);
 
 router.post('/', upload.single('foto'), incidenciaController.crearIncidencia);
-router.get('/', verificarRol('admin', 'director'), incidenciaController.listarIncidencias);
+router.get('/', verificarRol('admin', 'director', 'docente', 'profesor', 'estudiante'), incidenciaController.listarIncidencias);
 router.put('/:id/estado', verificarRol('admin', 'director'), incidenciaController.actualizarEstado);
 
 module.exports = router;

@@ -155,17 +155,27 @@ const updateProfileSchema = Joi.object({
   telefono: Joi.string()
     .trim()
     .min(7)
-    .max(10)
-    .pattern(/^\d+$/)
+    .max(15)
+    .pattern(/^\+?[\d\s\-]+$/)
     .optional()
     .allow(null, '')
     .messages({
-      'string.pattern.base': 'El teléfono debe contener solo números'
+      'string.pattern.base': 'El teléfono debe ser un número válido'
+    }),
+
+  email: Joi.string()
+    .trim()
+    .email()
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.email': 'El correo debe ser válido'
     }),
 
   cedula: Joi.string()
     .trim()
-    .length(10)
+    .min(10)
+    .max(10)
     .pattern(/^\d+$/)
     .optional()
     .allow(null, '')

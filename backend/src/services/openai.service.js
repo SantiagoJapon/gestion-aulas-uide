@@ -1,45 +1,130 @@
-// El cliente se inicializa solo si es necesario para evitar errores si no hay API Key
-let openai = null;
+﻿/**
+ * Servicio de IA Multi-Proveedor
+ * Soporta: DeepSeek | OpenAI
+ *
+ * El proveedor activo se controla con la variable AI_PROVIDER en .env.
+ * DeepSeek es 100% compatible con el SDK de OpenAI (solo cambia baseURL).
+ */
 
-// Modelo por defecto: gpt-4o-mini (~16x más barato que gpt-4o, suficiente
-// para extracción estructurada). Configurable vía OPENAI_MODEL.
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+// ── Configuracion por proveedor ───────────────────────────────────────────────
 
-function obtenerClienteOpenAI() {
-  if (openai) return openai;
+const PROVIDERS = {
+  deepseek: {
+    name: 'DeepSeek',
+    baseURL: 'https://api.deepseek.com/v1',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    modelEnv: 'DEEPSEEK_MODEL',
+    defaultModel: 'deepseek-chat',
+  },
+  openai: {
+    name: 'OpenAI',
+    baseURL: null,
+    apiKeyEnv: 'OPENAI_API_KEY',
+    modelEnv: 'OPENAI_MODEL',
+    defaultModel: 'gpt-4o-mini',
+  },
+};
 
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'tu_clave_api_aqui') {
-    throw new Error('OPENAI_API_KEY no configurada en el servidor.');
+// ── Estado del cliente ────────────────────────────────────────────────────────
+
+let _client = null;
+let _activeProvider = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getProviderConfig() {
+  const providerName = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+  const config = PROVIDERS[providerName];
+
+  if (!config) {
+    throw new Error(`AI_PROVIDER="${providerName}" no es valido. Usa: ${Object.keys(PROVIDERS).join(', ')}`);
   }
 
-  const OpenAI = require('openai');
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-  return openai;
+  const apiKey = process.env[config.apiKeyEnv];
+  if (!apiKey || apiKey.length < 10) {
+    throw new Error(`${config.apiKeyEnv} no esta configurada en .env (proveedor: ${config.name})`);
+  }
+
+  const model = process.env[config.modelEnv] || config.defaultModel;
+  return { ...config, apiKey, model, providerName };
 }
 
-/**
- * Analiza un Excel completo usando GPT-4 para extraer clases
- * Funciona con cualquier formato de Excel, sin importar encabezados o estructura
- */
+function obtenerCliente() {
+  if (_client) return { client: _client, config: _activeProvider };
+
+  const config = getProviderConfig();
+  const OpenAI = require('openai');
+
+  const clientOptions = { apiKey: config.apiKey };
+  if (config.baseURL) {
+    clientOptions.baseURL = config.baseURL;
+  }
+
+  _client = new OpenAI(clientOptions);
+  _activeProvider = config;
+
+  console.log(`Robot IA inicializada: ${config.name} (${config.model})`);
+  return { client: _client, config };
+}
+
+function resetCliente() {
+  _client = null;
+  _activeProvider = null;
+}
+
+// ── Verificacion de disponibilidad ───────────────────────────────────────────
+
+function esIAConfigurado() {
+  if (String(process.env.AI_ENABLED).toLowerCase() === 'false') return false;
+  try {
+    getProviderConfig();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const esOpenAIConfigurado = esIAConfigurado;
+
+// ── Funcion principal de chat ─────────────────────────────────────────────────
+
+async function chat(messages, options = {}) {
+  const { client, config } = obtenerCliente();
+
+  const params = {
+    model: config.model,
+    messages,
+    temperature: options.temperature !== undefined ? options.temperature : 0.1,
+    max_tokens: options.max_tokens || 4000,
+  };
+
+  const completion = await client.chat.completions.create(params);
+
+  if (completion.usage) {
+    const { prompt_tokens, completion_tokens, total_tokens } = completion.usage;
+    console.log(`Robot IA (${config.name}/${config.model}) tokens: ${prompt_tokens} in + ${completion_tokens} out = ${total_tokens} total`);
+  }
+
+  return completion.choices[0].message.content;
+}
+
+// ── Analisis de Excel con IA ──────────────────────────────────────────────────
+
 async function analizarExcelConIA(excelData, carreraNombre) {
   try {
-    const client = obtenerClienteOpenAI();
-    console.log('🤖 Analizando Excel con GPT-4...');
+    const { config } = obtenerCliente();
+    console.log(`Robot Analizando Excel con ${config.name} (${config.model})...`);
 
-    // Convertir las primeras 30 filas a texto para enviar a GPT-4
     const primerasFilas = excelData.slice(0, 30);
     const textoExcel = JSON.stringify(primerasFilas, null, 2);
+    console.log(`Enviando ${primerasFilas.length} filas a ${config.name} para analisis...`);
 
-    console.log(`📄 Enviando ${primerasFilas.length} filas a GPT-4 para análisis...`);
-
-    const prompt = `Eres un asistente experto en análisis de datos académicos. Te voy a dar las primeras filas de un archivo Excel que contiene la planificación académica de la carrera "${carreraNombre}".
+    const prompt = `Eres un asistente experto en analisis de datos academicos. Te voy a dar las primeras filas de un archivo Excel que contiene la planificacion academica de la carrera "${carreraNombre}".
 
 Tu tarea es:
-1. IGNORAR cualquier fila de título, encabezado decorativo, o celdas fusionadas
-2. IDENTIFICAR en qué fila empiezan las columnas reales de datos
-3. DETECTAR las columnas que contienen: materia/asignatura, docente/profesor, día, horario, número de estudiantes, aula/salón
+1. IGNORAR cualquier fila de titulo, encabezado decorativo, o celdas fusionadas
+2. IDENTIFICAR en que fila empiezan las columnas reales de datos
+3. DETECTAR las columnas que contienen: materia/asignatura, docente/profesor, dia, horario, numero de estudiantes, aula/salon
 4. EXTRAER todas las clases (una por fila de datos)
 
 DATOS DEL EXCEL:
@@ -48,11 +133,11 @@ ${textoExcel}
 IMPORTANTE:
 - Las columnas pueden tener CUALQUIER nombre (MATERIA, Asignatura, Curso, etc.)
 - El horario puede estar en una sola columna ("08:00-10:00") o en dos columnas separadas (inicio y fin)
-- El número de estudiantes puede estar escrito de varias formas ("25", "Nro. 25", "25 alumnos", etc.)
-- Ignora filas vacías o que no sean clases reales
-- Si una fila tiene información incompleta pero tiene materia, inclúyela de todas formas
+- El numero de estudiantes puede estar escrito de varias formas ("25", "Nro. 25", "25 alumnos", etc.)
+- Ignora filas vacias o que no sean clases reales
+- Si una fila tiene informacion incompleta pero tiene materia, incluyela de todas formas
 
-Devuelve SOLO un JSON válido con este formato (sin texto adicional):
+Devuelve SOLO un JSON valido con este formato (sin texto adicional):
 {
   "fila_inicio_datos": 2,
   "columnas_detectadas": {
@@ -65,46 +150,26 @@ Devuelve SOLO un JSON válido con este formato (sin texto adicional):
   },
   "clases": [
     {
-      "materia": "Introducción a la Programación",
+      "materia": "Introduccion a la Programacion",
       "ciclo": "1",
       "paralelo": "A",
       "dia": "Lunes",
       "hora_inicio": "08:00",
       "hora_fin": "10:00",
       "num_estudiantes": 25,
-      "docente": "Juan Pérez",
+      "docente": "Juan Perez",
       "aula": "LAB 1"
     }
   ]
 }
 
-Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin explicaciones.`;
+Si no puedes determinar algun campo, usa null. SOLO devuelve el JSON, sin explicaciones.`;
 
-    const completion = await client.chat.completions.create({
-      model: OPENAI_MODEL,  // gpt-4o-mini por defecto (config: OPENAI_MODEL)
-      messages: [
-        {
-          role: "system",
-          content: "Eres un experto en análisis de datos académicos. Siempre devuelves JSON válido sin texto adicional."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.1,  // Muy bajo para respuestas consistentes
-      max_tokens: 4000
-    });
+    const respuesta = await chat([
+      { role: 'system', content: 'Eres un experto en analisis de datos academicos. Siempre devuelves JSON valido sin texto adicional.' },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.1, max_tokens: 4000 });
 
-    const respuesta = completion.choices[0].message.content;
-
-    // Log de consumo de tokens para monitorear costo
-    if (completion.usage) {
-      const { prompt_tokens, completion_tokens, total_tokens } = completion.usage;
-      console.log(`🤖 IA (${OPENAI_MODEL}) — tokens: ${prompt_tokens} in + ${completion_tokens} out = ${total_tokens} total`);
-    }
-
-    // Limpiar la respuesta por si GPT-4 agregó markdown
     let jsonLimpio = respuesta.trim();
     if (jsonLimpio.startsWith('```json')) {
       jsonLimpio = jsonLimpio.replace(/```json\n?/g, '').replace(/```\n?/g, '');
@@ -114,56 +179,97 @@ Si no puedes determinar algún campo, usa null. SOLO devuelve el JSON, sin expli
 
     const resultado = JSON.parse(jsonLimpio);
 
-    console.log('✅ Análisis completado:');
-    console.log(`   📊 Fila de inicio de datos: ${resultado.fila_inicio_datos}`);
-    console.log(`   📋 Clases detectadas: ${resultado.clases.length}`);
-    console.log(`   🔍 Columnas identificadas:`, Object.keys(resultado.columnas_detectadas).filter(k => resultado.columnas_detectadas[k]));
+    console.log('Analisis completado:');
+    console.log(`   Fila de inicio: ${resultado.fila_inicio_datos}`);
+    console.log(`   Clases detectadas: ${resultado.clases ? resultado.clases.length : 0}`);
 
-    // Si GPT-4 solo analizó las primeras filas, procesar el resto del Excel
-    // usando las columnas detectadas
-    if (resultado.fila_inicio_datos && resultado.columnas_detectadas.materia) {
-      console.log('📚 Procesando el resto del Excel con columnas detectadas...');
-      const clasesAdicionales = procesarRestanteExcel(
-        excelData,
-        resultado.fila_inicio_datos,
-        resultado.columnas_detectadas
-      );
-
-      resultado.clases = resultado.clases.concat(clasesAdicionales);
-      console.log(`✅ Total de clases extraídas: ${resultado.clases.length}`);
+    if (resultado.fila_inicio_datos && resultado.columnas_detectadas && resultado.columnas_detectadas.materia) {
+      console.log('Procesando resto del Excel con columnas detectadas...');
+      const clasesAdicionales = procesarRestanteExcel(excelData, resultado.fila_inicio_datos, resultado.columnas_detectadas);
+      resultado.clases = (resultado.clases || []).concat(clasesAdicionales);
+      console.log(`Total clases extraidas: ${resultado.clases.length}`);
     }
 
     return resultado;
 
   } catch (error) {
-    console.error('❌ Error al analizar Excel con IA:', error.message);
+    console.error('Error al analizar Excel con IA:', error.message);
 
-    if (error.status === 401) {
-      throw new Error('API Key de OpenAI inválida. Configura OPENAI_API_KEY en .env');
+    if (error.status === 401 || (error.message && error.message.includes('401'))) {
+      const provider = process.env.AI_PROVIDER || 'openai';
+      throw new Error(`API Key de ${provider} invalida o expirada. Verifica ${provider.toUpperCase()}_API_KEY en .env`);
     }
 
     throw error;
   }
 }
 
-/**
- * Procesa el resto del Excel usando las columnas detectadas por GPT-4
- */
+// ── Analisis narrativo de distribucion ───────────────────────────────────────
+
+async function analizarReporteDistribucion(estadisticas) {
+  const { config } = obtenerCliente();
+  console.log(`Generando analisis narrativo con ${config.name}...`);
+
+  const total = estadisticas.total || 0;
+  const exitosas = estadisticas.exitosas || 0;
+  const fallidas = estadisticas.fallidas || 0;
+  const sobrecupos = estadisticas.sobrecupos || 0;
+  const pct = total > 0 ? Math.round((exitosas / total) * 100) : 0;
+
+  const prompt = `Eres un analista academico de la UIDE. Se acabo de ejecutar la distribucion automatica de aulas con estos resultados:
+
+- Total de clases: ${total}
+- Clases asignadas exitosamente: ${exitosas}
+- Clases sin aula (conflicto o falta de espacio): ${fallidas}
+- Clases con sobrecupo: ${sobrecupos}
+- Porcentaje de exito: ${pct}%
+
+Genera un parrafo de analisis ejecutivo (maximo 4 oraciones) que:
+1. Resuma el resultado de forma directa
+2. Destaque si hay problemas criticos (muchas clases sin aula o sobrecupos)
+3. Sugiera una accion concreta si hay problemas
+4. Use un tono profesional y conciso
+
+Devuelve SOLO el texto del parrafo, sin titulos ni formato markdown.`;
+
+  return await chat([
+    { role: 'system', content: 'Eres un analista academico conciso y profesional.' },
+    { role: 'user', content: prompt },
+  ], { temperature: 0.3, max_tokens: 300 });
+}
+
+// ── Consulta general IA ───────────────────────────────────────────────────────
+
+async function consultarIA(prompt, contexto) {
+  const { config } = obtenerCliente();
+
+  const messages = [];
+  if (contexto) {
+    messages.push({ role: 'system', content: contexto });
+  }
+  messages.push({ role: 'user', content: prompt });
+
+  const respuesta = await chat(messages, { temperature: 0.5, max_tokens: 1000 });
+
+  return {
+    respuesta,
+    proveedor: config.name,
+    modelo: config.model,
+  };
+}
+
+// ── Helpers privados ──────────────────────────────────────────────────────────
+
 function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
   const clasesAdicionales = [];
 
-  // Procesar desde la fila 30 (GPT-4 ya procesó las primeras 30)
   for (let i = 30; i < excelData.length; i++) {
     const fila = excelData[i];
-
-    // Extraer datos usando las columnas detectadas
     const materia = fila[columnasDetectadas.materia];
-
-    // Si no hay materia, saltar esta fila
-    if (!materia || materia.trim() === '') continue;
+    if (!materia || String(materia).trim() === '') continue;
 
     const clase = {
-      materia: materia.trim(),
+      materia: String(materia).trim(),
       ciclo: null,
       paralelo: null,
       dia: fila[columnasDetectadas.dia] || null,
@@ -171,16 +277,15 @@ function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
       hora_fin: null,
       num_estudiantes: extraerNumeroEstudiantes(fila[columnasDetectadas.estudiantes]),
       docente: fila[columnasDetectadas.docente] || null,
-      aula: fila[columnasDetectadas.aula] || null
+      aula: fila[columnasDetectadas.aula] || null,
     };
 
-    // Procesar horario
     const horario = fila[columnasDetectadas.horario];
     if (horario && typeof horario === 'string') {
-      const partesHora = horario.split('-');
-      if (partesHora.length === 2) {
-        clase.hora_inicio = partesHora[0].trim();
-        clase.hora_fin = partesHora[1].trim();
+      const partes = horario.split('-');
+      if (partes.length === 2) {
+        clase.hora_inicio = partes[0].trim();
+        clase.hora_fin = partes[1].trim();
       }
     }
 
@@ -190,38 +295,29 @@ function procesarRestanteExcel(excelData, filaInicio, columnasDetectadas) {
   return clasesAdicionales;
 }
 
-/**
- * Extrae el número de estudiantes de un campo que puede tener varios formatos
- */
 function extraerNumeroEstudiantes(valor) {
   if (!valor) return 0;
-
-  // Si ya es un número
   if (typeof valor === 'number') return Math.floor(valor);
-
-  // Si es string, extraer el primer número
   const match = String(valor).match(/\d+/);
   return match ? parseInt(match[0]) : 0;
 }
 
-/**
- * Verifica si la IA está disponible para usarse.
- * Requiere DOS condiciones:
- *   1. AI_ENABLED no esté en 'false' (interruptor maestro de costo)
- *   2. OPENAI_API_KEY esté configurada
- * Si AI_ENABLED='false', la IA queda totalmente apagada sin importar la key.
- */
-function esOpenAIConfigurado() {
-  // Interruptor maestro: AI_ENABLED=false apaga toda la IA
-  if (String(process.env.AI_ENABLED).toLowerCase() === 'false') {
-    return false;
-  }
-  return !!(process.env.OPENAI_API_KEY &&
-    process.env.OPENAI_API_KEY !== 'tu_clave_api_aqui' &&
-    process.env.OPENAI_API_KEY.length > 20);
-}
+// ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
   analizarExcelConIA,
-  esOpenAIConfigurado
+  analizarReporteDistribucion,
+  consultarIA,
+  chat,
+  esIAConfigurado,
+  esOpenAIConfigurado,
+  resetCliente,
+  getProviderInfo: function() {
+    try {
+      const config = getProviderConfig();
+      return { proveedor: config.name, modelo: config.model, habilitado: esIAConfigurado() };
+    } catch {
+      return { proveedor: null, modelo: null, habilitado: false };
+    }
+  },
 };

@@ -105,7 +105,7 @@ exports.listarIncidencias = async (req, res) => {
                 }
             }
         } else {
-            // Profesor/docente: solo las propias
+            // Profesor/docente/estudiante: solo las propias
             where.usuario_id = req.usuarioId;
         }
 

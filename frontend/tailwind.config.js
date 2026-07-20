@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class', // proyecto es solo modo claro; nada agrega la clase 'dark' al <html>, así los `dark:` quedan inertes
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

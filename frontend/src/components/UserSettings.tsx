@@ -47,7 +47,9 @@ export default function UserSettings() {
             await authService.updateProfile({
                 nombre: profileData.nombre,
                 apellido: profileData.apellido,
-                telefono: profileData.telefono
+                telefono: profileData.telefono,
+                email: profileData.email,
+                cedula: profileData.cedula
             });
             alert('Perfil actualizado correctamente');
         } catch (error: any) {
@@ -166,10 +168,9 @@ export default function UserSettings() {
                                     <input
                                         type="email"
                                         value={profileData.email}
-                                        disabled
-                                        className="w-full px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed"
+                                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-uide-blue outline-none transition-all"
                                     />
-                                    <p className="text-[10px] text-slate-400 italic">El correo institucional no se puede modificar.</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -179,17 +180,19 @@ export default function UserSettings() {
                                             type="tel"
                                             value={profileData.telefono}
                                             onChange={(e) => setProfileData({ ...profileData, telefono: e.target.value })}
-                                            placeholder="+593 99 999 9999"
+                                            placeholder="0999999999"
                                             className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-uide-blue outline-none transition-all"
                                         />
+                                        <p className="text-[10px] text-slate-400 italic">Formato: 10 dígitos (ej: 0999999999)</p>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cédula</label>
                                         <input
                                             type="text"
                                             value={profileData.cedula}
-                                            disabled
-                                            className="w-full px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed"
+                                            onChange={(e) => setProfileData({ ...profileData, cedula: e.target.value })}
+                                            maxLength={10}
+                                            className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:ring-2 focus:ring-uide-blue outline-none transition-all"
                                         />
                                     </div>
                                 </div>

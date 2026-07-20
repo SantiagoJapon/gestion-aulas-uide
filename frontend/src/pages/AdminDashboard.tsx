@@ -1,23 +1,19 @@
 import { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { aulaService } from '../services/api';
-import AulaTable from '../components/AulaTable';
-import CarreraTable from '../components/CarreraTable';
+import GestionEspacios from '../components/GestionEspacios';
 import DirectorAssignmentView from '../components/DirectorAssignmentView';
 import SubirEstudiantes from '../components/SubirEstudiantes';
-import MapaCalor from '../components/MapaCalor';
 import PlanificacionesTable from '../components/PlanificacionesTable';
 
 import CentroControlDistribucion from '../components/CentroControlDistribucion';
 import HorarioVisual from '../components/HorarioVisual';
-import EspacioTable from '../components/EspacioTable';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import EstudianteTable from '../components/EstudianteTable';
 import ImportarCupos from '../components/ImportarCupos';
 import DocenteTable from '../components/DocenteTable';
 import IncidenciasView from '../components/IncidenciasView';
-import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
@@ -36,7 +32,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'disponibilidad' | 'reservas' | 'espacios' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'reservas' | 'espacios' | 'gestion_academica' | 'docentes' | 'estudiantes' | 'reportes' | 'settings'>('general');
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -155,12 +151,6 @@ export default function AdminDashboard() {
                       "Gestión inteligente para una educación de excelencia."
                     </p>
                     <div className="mt-4 flex items-center justify-center lg:justify-start gap-4">
-                      <button
-                        onClick={() => window.dispatchEvent(new CustomEvent('restart-uide-tour'))}
-                        className="text-xs font-bold bg-white text-[#002D72] px-4 py-2 rounded-xl hover:bg-uide-gold hover:text-white transition-all shadow-lg active:scale-95"
-                      >
-                        Guía del Administrador
-                      </button>
                       <p className="text-[11px] text-white/50 font-medium uppercase tracking-widest">
                         {new Date().toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })}
                       </p>
@@ -178,6 +168,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
+
             {/* 1. KPIs PANORÁMICOS */}
             <div id="tour-kpis" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
@@ -197,50 +188,53 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            {/* 2. GRID PRINCIPAL (Tabla + Historial) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* 2. LIDERAZGO ACADÉMICO */}
+            <div id="tour-liderazgo" className="bg-white dark:bg-slate-900 border border-border/50 rounded-[2.5rem] shadow-sm">
+              <div className="px-6 py-4 border-b border-border/50">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-[20px]">person_pin</span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-foreground">Gestión de Liderazgo Académico</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Directores asignados por carrera</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-2">
+                <DirectorAssignmentView />
+              </div>
+            </div>
 
-              {/* Listado de Aulas (8/12) */}
-              <div id="tour-inventario-aulas" className="lg:col-span-8">
+            {/* 2. GRID PRINCIPAL (Planificaciones + Acción Rápida) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+              {/* Planificaciones */}
+              <div id="tour-planificaciones">
                 <DashboardWidget
-                  title="Control de Inventario"
-                  subtitle="Gestión detallada de aulas y laboratorios"
-                  icon="inventory_2"
+                  title="Planificaciones"
+                  subtitle="Cargas de archivos recientes"
+                  icon="history"
                 >
-                  <div className="p-1">
-                    <AulaTable />
+                  <div className="max-h-[500px] overflow-y-auto pr-1">
+                    <PlanificacionesTable />
                   </div>
                 </DashboardWidget>
               </div>
 
-              {/* Barra Lateral (4/12) */}
-              <div className="lg:col-span-4 space-y-8">
-                <div id="tour-planificaciones">
-                  <DashboardWidget
-                    title="Planificaciones"
-                    subtitle="Cargas de archivos recientes"
-                    icon="history"
+              {/* Acción Rápida */}
+              <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group flex flex-col justify-center">
+                <div className="relative z-10">
+                  <h4 className="text-2xl font-black tracking-tighter leading-none mb-2">Asignación <br />Estratégica</h4>
+                  <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-6">Módulo de IA actvado</p>
+                  <button
+                    onClick={() => setActiveTab('heatmap')}
+                    className="bg-white text-primary p-3 px-6 rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg active:scale-95 hover:bg-slate-50"
                   >
-                    <div className="max-h-[500px] overflow-y-auto pr-1">
-                      <PlanificacionesTable />
-                    </div>
-                  </DashboardWidget>
+                    Ir al Mapa de Calor
+                  </button>
                 </div>
-
-                {/* Info Card Quick Action */}
-                <div className="bg-primary p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-                  <div className="relative z-10">
-                    <h4 className="text-2xl font-black tracking-tighter leading-none mb-2">Asignación <br />Estratégica</h4>
-                    <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-6">Módulo de IA actvado</p>
-                    <button
-                      onClick={() => setActiveTab('distribucion')}
-                      className="bg-white text-primary p-3 px-6 rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg active:scale-95 hover:bg-slate-50"
-                    >
-                      Ir al Centro de Mando
-                    </button>
-                  </div>
-                  <span className="material-symbols-outlined text-[10rem] absolute -bottom-10 -right-10 text-white/10 group-hover:scale-110 transition-transform">auto_fix</span>
-                </div>
+                <span className="material-symbols-outlined text-[10rem] absolute -bottom-10 -right-10 text-white/10 group-hover:scale-110 transition-transform">auto_fix</span>
               </div>
             </div>
 
@@ -257,20 +251,6 @@ export default function AdminDashboard() {
                 </div>
               </DashboardWidget>
             </div>
-
-            {/* 4. MAPA DE CALOR (Full Width) */}
-            <div className="pt-6 border-t border-border/50">
-              <DashboardWidget
-                title="Saturación Institucional"
-                subtitle="Mapa de calor detallado por franjas horarias y días"
-                icon="grid_view"
-                noPadding
-              >
-                <div className="p-4 overflow-hidden rounded-[2rem] bg-background">
-                  <MapaCalor />
-                </div>
-              </DashboardWidget>
-            </div>
           </div>
         );
 
@@ -281,49 +261,17 @@ export default function AdminDashboard() {
             <div id="tour-centro-mando" className="bg-slate-900 rounded-[3rem] p-4 shadow-2xl border border-white/5">
               <CentroControlDistribucion onDistribucionCompletada={handleDistribucionCompletada} />
             </div>
-
-            {/* Asignación de Roles - Ahora en ancho completo para evitar amontonamiento */}
-            <div className="space-y-12">
-              <DashboardWidget
-                title="Gestión de Liderazgo Académico"
-                subtitle="Vincule directores a sus respectivas carreras para otorgar permisos"
-                icon="person_pin"
-              >
-                <div className="px-1">
-                  <DirectorAssignmentView />
-                </div>
-              </DashboardWidget>
-
-              <DashboardWidget
-                title="Estructura Curricular"
-                subtitle="Configure las carreras habilitadas y sus estados institucionales"
-                icon="account_tree"
-              >
-                <div className="px-1">
-                  <CarreraTable />
-                </div>
-              </DashboardWidget>
-            </div>
           </div>
         );
 
       case 'heatmap':
         return <div className="p-6 animate-fade-in"><MapaCalorDetallado esAdmin /></div>;
 
-      case 'disponibilidad':
-        return <DisponibilidadAulas />;
-
       case 'reservas':
         return <ReservasAdminView />;
 
       case 'espacios':
-        return (
-          <div className="space-y-6 animate-fade-in pb-20">
-            <DashboardWidget title="Gestión de Espacios Adicionales" icon="space_dashboard">
-              <EspacioTable />
-            </DashboardWidget>
-          </div>
-        );
+        return <GestionEspacios />;
 
       case 'estudiantes':
         return (
@@ -361,31 +309,31 @@ export default function AdminDashboard() {
             <DashboardWidget title="Reportes Institucionales" icon="description">
               <ReporteEjecutivo />
             </DashboardWidget>
-          </div>
-        );
-
-      case 'incidencias':
-        return (
-          <div id="tour-seccion-incidencias" className="space-y-6 animate-fade-in pb-20">
-            <div className="flex gap-4 mb-4">
-              <div className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] flex-1">
-                <div className="flex items-center gap-4">
-                  <div className="size-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-                    <span className="material-symbols-outlined">warning</span>
-                  </div>
-                  <div>
-                    <h4 className="text-xl font-black text-foreground">Centro de Incidencias</h4>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Reportes de Hardware y Mantenimiento</p>
+            <div id="tour-seccion-incidencias">
+              <div className="flex gap-4 mb-4">
+                <div className="bg-white dark:bg-slate-900 border border-border/50 p-6 rounded-[2.5rem] flex-1">
+                  <div className="flex items-center gap-4">
+                    <div className="size-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <span className="material-symbols-outlined">warning</span>
+                    </div>
+                    <div>
+                      <h4 className="text-xl font-black text-foreground">Centro de Incidencias</h4>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Reportes de Hardware y Mantenimiento</p>
+                    </div>
                   </div>
                 </div>
               </div>
+              <IncidenciasView />
             </div>
-            <IncidenciasView />
           </div>
         );
 
       case 'settings':
-        return <UserSettings />;
+        return (
+          <div className="space-y-10 animate-fade-in pb-20">
+            <UserSettings />
+          </div>
+        );
 
       default:
         return null;

@@ -194,7 +194,7 @@ exports.obtenerPerfil = async (req, res) => {
 // ==========================================
 exports.actualizarPerfil = async (req, res) => {
     try {
-        const { nombre, apellido, telefono } = req.body;
+        const { nombre, apellido, telefono, email, cedula } = req.body;
         const usuario = await Usuario.findByPk(req.usuario.id);
 
         if (!usuario) {
@@ -204,10 +204,34 @@ exports.actualizarPerfil = async (req, res) => {
             });
         }
 
+        // Verificar si el email ya está en uso por otro usuario
+        if (email && email !== usuario.email) {
+            const emailExistente = await Usuario.findOne({ where: { email } });
+            if (emailExistente && emailExistente.id !== usuario.id) {
+                return res.status(400).json({
+                    success: false,
+                    mensaje: 'El correo electrónico ya está en uso por otro usuario'
+                });
+            }
+        }
+
+        // Verificar si la cédula ya está en uso por otro usuario
+        if (cedula && cedula !== usuario.cedula) {
+            const cedulaExistente = await Usuario.findOne({ where: { cedula } });
+            if (cedulaExistente && cedulaExistente.id !== usuario.id) {
+                return res.status(400).json({
+                    success: false,
+                    mensaje: 'La cédula ya está en uso por otro usuario'
+                });
+            }
+        }
+
         // Actualizar campos
         if (nombre) usuario.nombre = nombre;
         if (apellido) usuario.apellido = apellido;
-        if (telefono) usuario.telefono = telefono;
+        if (telefono !== undefined) usuario.telefono = telefono;
+        if (email) usuario.email = email;
+        if (cedula) usuario.cedula = cedula;
 
         await usuario.save();
 

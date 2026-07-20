@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { distribucionService, usuarioService, User } from '../services/api';
+import { distribucionService, usuarioService, carreraService, User } from '../services/api';
 import DirectorManagementModal from './DirectorManagementModal';
 
 interface CarreraData {
@@ -30,6 +30,22 @@ export default function DirectorAssignmentView() {
 
     // Management Modal
     const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
+
+    // Nueva Carrera Modal
+    const [isNewCarreraModalOpen, setIsNewCarreraModalOpen] = useState(false);
+    const [newCarreraNombre, setNewCarreraNombre] = useState('');
+    const [newCarreraFacultad, setNewCarreraFacultad] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+
+    // Edit Carrera Modal
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editCarrera, setEditCarrera] = useState<CarreraData | null>(null);
+    const [editNombre, setEditNombre] = useState('');
+    const [editFacultad, setEditFacultad] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Menu State
+    const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
     useEffect(() => {
         loadData();
@@ -62,6 +78,68 @@ export default function DirectorAssignmentView() {
         setSelectedDirectorId(null);
         setAssignSearchTerm('');
         setIsDrawerOpen(true);
+    };
+
+    const handleCreateCarrera = async () => {
+        if (!newCarreraNombre.trim() || isCreating) return;
+        try {
+            setIsCreating(true);
+            const result = await carreraService.createCarrera(newCarreraNombre.trim(), newCarreraFacultad.trim());
+            if (result.success) {
+                setNewCarreraNombre('');
+                setNewCarreraFacultad('');
+                setIsNewCarreraModalOpen(false);
+                loadData();
+                window.dispatchEvent(new CustomEvent('carrera-modified'));
+            }
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Error al crear la carrera');
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const openEditModal = (carrera: CarreraData) => {
+        setEditCarrera(carrera);
+        setEditNombre(carrera.nombre_carrera);
+        setEditFacultad(carrera.facultad || '');
+        setIsEditModalOpen(true);
+        setOpenMenuId(null);
+    };
+
+    const handleEditCarrera = async () => {
+        if (!editCarrera || !editNombre.trim() || isSaving) return;
+        try {
+            setIsSaving(true);
+            const result = await carreraService.updateCarrera(editCarrera.id, {
+                carrera: editNombre.trim(),
+                facultad: editFacultad.trim() || null
+            });
+            if (result.success) {
+                setIsEditModalOpen(false);
+                setEditCarrera(null);
+                loadData();
+                window.dispatchEvent(new CustomEvent('carrera-modified'));
+            }
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Error al actualizar la carrera');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteCarrera = async (carrera: CarreraData) => {
+        if (!confirm(`¿Estás seguro de eliminar la carrera "${carrera.nombre_carrera}"? Esta acción no se puede deshacer.`)) return;
+        try {
+            const result = await carreraService.deleteCarrera(carrera.id);
+            if (result.success) {
+                setOpenMenuId(null);
+                loadData();
+                window.dispatchEvent(new CustomEvent('carrera-modified'));
+            }
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Error al eliminar la carrera');
+        }
     };
 
     const handleAssign = async () => {
@@ -126,6 +204,140 @@ export default function DirectorAssignmentView() {
                 document.body
             )}
 
+            {/* Modal Nueva Carrera */}
+            {isNewCarreraModalOpen && createPortal(
+                <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsNewCarreraModalOpen(false)} />
+                    <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in zoom-in-95">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-white">Nueva Carrera</h3>
+                                <p className="text-xs text-slate-500 mt-1">Complete los datos para registrar</p>
+                            </div>
+                            <button
+                                onClick={() => setIsNewCarreraModalOpen(false)}
+                                className="size-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">close</span>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Nombre de la Carrera *</label>
+                                <input
+                                    type="text"
+                                    value={newCarreraNombre}
+                                    onChange={(e) => setNewCarreraNombre(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleCreateCarrera()}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                    placeholder="Ej: Ingeniería en Sistemas"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Facultad (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={newCarreraFacultad}
+                                    onChange={(e) => setNewCarreraFacultad(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleCreateCarrera()}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                    placeholder="Ej: Facultad de Ingeniería"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => setIsNewCarreraModalOpen(false)}
+                                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreateCarrera}
+                                disabled={!newCarreraNombre.trim() || isCreating}
+                                className="flex-1 bg-primary disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-400 text-white py-3 rounded-xl font-black shadow-lg shadow-primary/20 hover:brightness-110 transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2"
+                            >
+                                {isCreating ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                ) : (
+                                    <span className="material-symbols-outlined text-[18px]">add</span>
+                                )}
+                                {isCreating ? 'Creando...' : 'Crear Carrera'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Modal Editar Carrera */}
+            {isEditModalOpen && editCarrera && createPortal(
+                <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)} />
+                    <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in zoom-in-95">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-white">Editar Carrera</h3>
+                                <p className="text-xs text-slate-500 mt-1">Modifique los datos de la carrera</p>
+                            </div>
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                className="size-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">close</span>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Nombre de la Carrera *</label>
+                                <input
+                                    type="text"
+                                    value={editNombre}
+                                    onChange={(e) => setEditNombre(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleEditCarrera()}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                    placeholder="Ej: Ingeniería en Sistemas"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Facultad (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={editFacultad}
+                                    onChange={(e) => setEditFacultad(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleEditCarrera()}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                                    placeholder="Ej: Facultad de Ingeniería"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleEditCarrera}
+                                disabled={!editNombre.trim() || isSaving}
+                                className="flex-1 bg-primary disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-400 text-white py-3 rounded-xl font-black shadow-lg shadow-primary/20 hover:brightness-110 transition-all active:scale-[0.98] text-sm flex items-center justify-center gap-2"
+                            >
+                                {isSaving ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                ) : (
+                                    <span className="material-symbols-outlined text-[18px]">save</span>
+                                )}
+                                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
             {/* Toolbar simplificada - Sin encabezado redundante */}
             <div className="px-1 py-4 z-10">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -162,19 +374,27 @@ export default function DirectorAssignmentView() {
                             />
                         </div>
                         <button
+                            onClick={() => setIsNewCarreraModalOpen(true)}
+                            className="bg-emerald-600 text-white p-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-600/10 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            title="Nueva Carrera"
+                        >
+                            <span className="material-symbols-outlined text-[18px]">add</span>
+                            <span className="hidden sm:inline">Nueva Carrera</span>
+                        </button>
+                        <button
                             onClick={() => setIsManagementModalOpen(true)}
                             className="bg-primary text-white p-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/10 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
                             title="Gestionar Base de Directores"
                         >
                             <span className="material-symbols-outlined text-[18px]">group</span>
-                            <span className="hidden sm:inline">Gestionar</span>
+                            <span className="hidden sm:inline">Directores</span>
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Main Grid Content - Ajustado para DashboardWidget */}
-            <div className="flex-1 overflow-y-auto py-2 scroll-smooth">
+            <div className="flex-1 overflow-y-auto py-2 scroll-smooth" onClick={() => setOpenMenuId(null)}>
                 <div>
                     {loading ? (
                         <div className="flex items-center justify-center h-64">
@@ -206,15 +426,48 @@ export default function DirectorAssignmentView() {
                                             <div className={`size-10 md:size-12 rounded-xl flex items-center justify-center ${iconColor}`}>
                                                 <span className="material-symbols-outlined text-[24px] md:text-[28px]">{icon}</span>
                                             </div>
-                                            {isVacant ? (
-                                                <span className="px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wide">
-                                                    Vacante
-                                                </span>
-                                            ) : (
-                                                <button className="size-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                                                    <span className="material-symbols-outlined text-[20px]">more_vert</span>
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {isVacant && (
+                                                    <span className="px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wide">
+                                                        Vacante
+                                                    </span>
+                                                )}
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setOpenMenuId(openMenuId === carrera.id ? null : carrera.id);
+                                                        }}
+                                                        className="size-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                                                    </button>
+                                                    {openMenuId === carrera.id && (
+                                                        <div className="absolute right-0 top-10 z-50 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 animate-in zoom-in-95">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    openEditModal(carrera);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">edit</span>
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteCarrera(carrera);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                                                                Eliminar
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <h4 className="text-sm md:text-base font-bold mb-1 text-slate-900 dark:text-white line-clamp-2 md:h-12 group-hover:text-uide-blue transition-colors">

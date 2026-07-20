@@ -41,8 +41,9 @@ function formatPhone(jid) {
   if (!jid) return null;
   // Si es LID, lo mantenemos integro para la lógica de mapeo
   if (jid.includes('@lid')) return jid;
-  // Limpiar sufijos de multi-dispositivo (:1, .0:1, etc) y dejar solo el número base antes del @
-  return jid.split(':')[0].split('.')[0].replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@g.us', '');
+  // 1) Quitar el dominio (@s.whatsapp.net, @c.us, @g.us)
+  // 2) Limpiar sufijos multi-dispositivo (:1, .0, etc) del número base
+  return jid.split('@')[0].split(':')[0].split('.')[0];
 }
 
 // ==========================================
@@ -62,33 +63,45 @@ async function sendText(phone, text) {
   }
 }
 
-async function sendButtons(phone, text, buttons) {
-  try {
-    const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
-    await axios.post(
-      `${EVOLUTION_API_URL}/message/sendButtons/${EVOLUTION_INSTANCE}`,
-      {
-        number: jid,
-        title: '',
-        description: text,
-        buttons: buttons.map((b, i) => ({
-          type: 'reply',
-          buttonId: b.id || String(i + 1),
-          buttonText: { displayText: b.text }
-        }))
-      },
-      { headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' }, timeout: 15000 }
-    );
-  } catch (error) {
-    // Fallback: si sendButtons falla, enviar como texto con opciones numeradas
-    console.warn('sendButtons no disponible, usando texto numerado');
-    let fallback = text + '\n\n';
-    buttons.forEach((b, i) => {
-      fallback += `*${i + 1}.* ${b.text}\n`;
-    });
-    fallback += '\n_Responde con el numero de la opcion._';
-    await sendText(phone, fallback);
+// Botones interactivos (Evolution v2: nativeFlow quick_reply).
+// PROBLEMA CONOCIDO: Baileys envía los botones como viewOnceMessage/interactiveMessage
+// y muchos clientes (y SIEMPRE WhatsApp Web/Escritorio) los muestran en blanco:
+// el usuario no ve nada. Por eso los botones van desactivados por defecto y se
+// envía texto numerado, que funciona en todos los clientes.
+// Para reactivar botones: USE_INTERACTIVE_BUTTONS=true en el entorno.
+const USE_INTERACTIVE_BUTTONS = process.env.USE_INTERACTIVE_BUTTONS === 'true';
+
+async function sendButtons(phone, text, buttons, title = '') {
+  if (USE_INTERACTIVE_BUTTONS) {
+    try {
+      const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+      await axios.post(
+        `${EVOLUTION_API_URL}/message/sendButtons/${EVOLUTION_INSTANCE}`,
+        {
+          number: jid,
+          title,
+          description: text,
+          footer: 'Roomie · UIDE',
+          buttons: buttons.slice(0, 3).map((b, i) => ({
+            type: 'reply',
+            displayText: b.text,
+            id: b.id || String(i + 1)
+          }))
+        },
+        { headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' }, timeout: 15000 }
+      );
+      return;
+    } catch (error) {
+      console.warn('sendButtons falló, usando texto numerado:', error.response?.data?.response?.message || error.message);
+    }
   }
+  // Texto numerado: compatible con teléfono, WhatsApp Web y Escritorio
+  let msg = (title ? `${title}\n` : '') + text + '\n\n';
+  buttons.forEach((b, i) => {
+    msg += `*${b.id || String(i + 1)}.* ${b.text}\n`;
+  });
+  msg += `\n_Responde con el número de la opción._`;
+  await sendText(phone, msg);
 }
 
 async function sendList(phone, text, title, sections) {
@@ -190,7 +203,7 @@ async function initDB() {
         hora_fin VARCHAR(10),
         telefono VARCHAR(20),
         cedula VARCHAR(20),
-        usuario_nombre VARCHAR(100),
+        solicitante_nombre VARCHAR(100),
         motivo TEXT,
         estado VARCHAR(20) DEFAULT 'activa',
         tipo_espacio VARCHAR(50) DEFAULT 'aula',
@@ -263,11 +276,11 @@ function isDuplicate(messageId) {
 // Menu principal - opciones numeradas con IDs
 const MENU_OPTIONS = [
   { id: 'menu_aulas', label: 'Buscar Aulas Libres', emoji: '1' },
-  { id: 'menu_reservas', label: 'Mis Reservas', emoji: '2' },
-  { id: 'menu_profe', label: 'Buscar Profesor', emoji: '3' },
-  { id: 'menu_materia', label: 'Horario Materia', emoji: '4' },
-  { id: 'menu_estado', label: 'Estado General', emoji: '5', roles: ['director', 'admin'] },
-  { id: 'menu_perfil', label: 'Mi Perfil', emoji: '6' },
+  { id: 'menu_espacios', label: 'Espacios Comunes', emoji: '2' },
+  { id: 'menu_reservas', label: 'Mis Reservas', emoji: '3' },
+  { id: 'menu_profe', label: 'Buscar Profesor', emoji: '4' },
+  { id: 'menu_materia', label: 'Horario Materia', emoji: '5' },
+  { id: 'menu_estado', label: 'Estado General', emoji: '6', roles: ['director', 'admin'] },
 ];
 
 const DAYS = [
@@ -324,8 +337,8 @@ async function getSessionName(session) {
       const u = await pool.query('SELECT nombre FROM usuarios WHERE id = $1', [session.user_id]);
       if (u.rows.length) return u.rows[0].nombre.split(' ')[0];
     } else {
-      const e = await pool.query('SELECT nombre, nombre_completo FROM estudiantes WHERE id = $1', [session.user_id]);
-      if (e.rows.length) return (e.rows[0].nombre_completo || e.rows[0].nombre || '').split(' ')[0] || 'amigo';
+      const e = await pool.query('SELECT nombre FROM estudiantes WHERE id = $1', [session.user_id]);
+      if (e.rows.length) return (e.rows[0].nombre || '').split(' ')[0] || 'amigo';
     }
   } catch (_) { }
   return 'amigo';
@@ -417,14 +430,30 @@ async function authenticateUser(cedula, jid) {
   return null;
 }
 
-// Buscar docente — usa GET /api/bot/docente?nombre=
+// SQL compartido: horario de clases con el AULA REAL por bloque.
+// El aula verdadera de cada franja vive en `distribucion` (clase_id -> aula_id);
+// `clases.aula_asignada` puede estar vacia o desactualizada. COALESCE resuelve:
+// primero el aula de la distribución, si no existe usa la de la clase.
+const SQL_HORARIO_CON_AULA = `
+  SELECT DISTINCT c.dia, c.hora_inicio, c.hora_fin, c.materia, c.docente,
+         COALESCE(a.codigo, c.aula_asignada) AS aula_asignada,
+         a.nombre AS aula_nombre
+  FROM clases c
+  LEFT JOIN distribucion d
+    ON d.clase_id = c.id
+   AND lower(d.dia) = lower(c.dia)
+   AND d.hora_inicio::text LIKE c.hora_inicio || '%'
+  LEFT JOIN aulas a ON a.id = d.aula_id
+`;
+
+// Buscar docente — usa GET /api/bot/docente?nombre= (el backend une distribucion)
 async function findTeacher(queryTerm) {
   try {
     const resp = await axios.get(`${BACKEND_URL}/api/bot/docente`, {
       params: { nombre: queryTerm },
       timeout: 8000
     });
-    if (resp.data?.success) {
+    if (resp.data?.success && resp.data.resultados?.length) {
       // Normalizar al formato que espera el bot
       return resp.data.resultados.map(r => ({
         materia: r.materia,
@@ -436,48 +465,86 @@ async function findTeacher(queryTerm) {
       }));
     }
   } catch (e) {
-    console.error('[findTeacher] Error:', e.message);
+    console.error('[findTeacher] Error backend, usando SQL:', e.message);
+  }
+  // Fallback SQL directo con el aula real de la distribución
+  try {
+    const res = await pool.query(
+      `${SQL_HORARIO_CON_AULA}
+       WHERE c.docente ILIKE '%' || $1 || '%'
+       ORDER BY c.dia, c.hora_inicio LIMIT 15`,
+      [queryTerm]
+    );
+    return res.rows;
+  } catch (sqlErr) {
+    console.error('[findTeacher] SQL fallback también falló:', sqlErr.message);
   }
   return [];
 }
 
-// Buscar horarios de materia — usa GET /api/search/global?q=&tipo=materia
+// Buscar horarios de materia — SQL directo con JOIN a distribucion.
+// (La ruta /api/search/global devuelve resultados tipo "spotlight" sin
+// dia/hora/aula — no sirve para horarios; el aula real sale de distribucion.)
 async function findSubjectClasses(subject) {
-  try {
-    // Ruta correcta del backend: /api/search/global
-    const resp = await axios.get(`${BACKEND_URL}/api/search/global`, {
-      params: { q: subject, tipo: 'materia' },
-      timeout: 8000
-    });
-    if (resp.data?.resultados) {
-      return resp.data.resultados.map(r => ({
-        materia: r.materia,
-        dia: r.dia,
-        hora_inicio: r.hora_inicio,
-        hora_fin: r.hora_fin,
-        aula_asignada: r.aula_asignada || r.aula,
-        docente: r.docente
-      }));
-    }
-  } catch (e) {
-    // Fallback a SQL directo si la ruta no responde
-    console.error('[findSubjectClasses] Error backend, usando SQL:', e.message);
-    try {
+  {
+    try { // eslint-disable-line
       const normalized = subject.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const res = await pool.query(
-        `SELECT c.dia, c.hora_inicio, c.hora_fin, c.materia, c.aula_asignada, c.docente
-         FROM clases c
-         WHERE lower(c.materia) ILIKE '%' || lower($1) || '%'
+        `${SQL_HORARIO_CON_AULA}
+         WHERE translate(lower(c.materia), 'áéíóúñ', 'aeioun') ILIKE '%' || lower($1) || '%'
            AND c.materia IS NOT NULL
-         ORDER BY c.materia, c.dia, c.hora_inicio LIMIT 10`,
+         ORDER BY c.materia, c.dia, c.hora_inicio LIMIT 12`,
         [normalized]
       );
       return res.rows;
     } catch (sqlErr) {
-      console.error('[findSubjectClasses] SQL fallback también falló:', sqlErr.message);
+      console.error('[findSubjectClasses] Error SQL:', sqlErr.message);
     }
   }
   return [];
+}
+
+// ==========================================
+// ESPACIOS COMUNES (biblioteca, salas, cubículos...)
+// ==========================================
+
+const ESPACIO_TIPO_EMOJI = {
+  BIBLIOTECA: '📖', SALA_DESCANSO: '🛋️', ZONA_TRABAJO: '💼', CUBICULO: '🚪', OTRO: '📍'
+};
+
+// Lista todos los espacios comunes disponibles (tabla `espacios`)
+async function getEspaciosComunes() {
+  try {
+    const res = await pool.query(
+      `SELECT codigo, nombre, tipo, capacidad, descripcion
+       FROM espacios
+       WHERE upper(estado) = 'DISPONIBLE'
+       ORDER BY tipo, codigo`
+    );
+    return res.rows;
+  } catch (e) {
+    console.error('[getEspaciosComunes] Error SQL:', e.message);
+    return [];
+  }
+}
+
+// Verifica si un espacio común está libre en dia+hora (contra reservas activas)
+async function isEspacioLibre(codigo, dia, horaInicio, horaFin) {
+  try {
+    const res = await pool.query(
+      `SELECT 1 FROM reservas
+       WHERE (espacio_codigo = $1 OR aula_codigo = $1)
+         AND dia ILIKE $2
+         AND estado IN ('activa', 'pendiente_aprobacion')
+         AND hora_inicio < $4 AND hora_fin > $3
+       LIMIT 1`,
+      [codigo, dia, horaInicio, horaFin]
+    );
+    return res.rows.length === 0;
+  } catch (e) {
+    console.error('[isEspacioLibre] Error SQL:', e.message);
+    return false;
+  }
 }
 
 // Buscar aulas disponibles — usa GET /api/reservas/disponibles
@@ -530,7 +597,7 @@ async function getAvailableRooms(dia, horaInicio, tipo = 'AULA') {
       )
       AND a.id NOT IN (
         SELECT aula_id FROM distribucion
-        WHERE dia ILIKE $1 AND hora_inicio < $2 AND hora_fin > $3
+        WHERE dia ILIKE $1 AND hora_inicio < $2::time AND hora_fin > $3::time
       )
       AND a.codigo NOT IN (
         SELECT aula_codigo FROM reservas
@@ -684,7 +751,7 @@ async function sendMainMenu(jid, session, overrideName = null, rolLabel = null) 
     return true;
   });
 
-  const emojis = ['🏫', '📋', '👨‍🏫', '📚', '📊', '👤'];
+  const emojis = ['🏫', '🛋️', '📋', '👨‍🏫', '📚', '📊'];
   let text = `👋 ¡Hola *${name}*! Soy *Roomie* 🤖\n`;
   if (rolLabel) {
     text += `_${rolLabel}_\n\n`;
@@ -701,40 +768,86 @@ async function sendMainMenu(jid, session, overrideName = null, rolLabel = null) 
   await sendText(jid, text);
 }
 
-async function sendDayMenu(jid) {
+// ctx transporta el contexto del flujo: { flujo: 'aula'|'espacio', selectedEspacio? }
+async function sendDayMenu(jid, ctx = {}) {
   const phone = formatPhone(jid);
   const today = getTodayName();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowName = extractDay(normalizeText(tomorrow.toLocaleDateString('es-ES', { timeZone: 'America/Guayaquil', weekday: 'long' })))?.formatted || 'Mañana';
 
-  let text = `📅 *¿Qué día necesitas?*\n\n`;
-  text += `*1.* 🟢 Hoy (${today})\n`;
-  text += `*2.* ⏩ Mañana (${tomorrowName})\n`;
-  DAYS.slice(0, 5).forEach((d, i) => {
-    text += `*${i + 3}.* ${d.formatted}\n`;
+  userState.set(phone, { ...ctx, state: 'SELECTING_DAY', lastActivity: Date.now() });
+  await sendButtons(jid, '¿Qué día necesitas?', [
+    { id: '1', text: `Hoy (${today})` },
+    { id: '2', text: `Mañana (${tomorrowName})` },
+    { id: '3', text: 'Otro día' }
+  ], '📅 Elige el día');
+}
+
+async function sendDayListMenu(jid, ctx = {}) {
+  const phone = formatPhone(jid);
+  let text = `📅 *Elige el día:*\n\n`;
+  DAYS.slice(0, 6).forEach((d, i) => {
+    text += `*${i + 1}.* ${d.formatted}\n`;
   });
   text += `\n*0.* ⬅️ Volver al menú`;
-  userState.set(phone, { state: 'SELECTING_DAY', lastActivity: Date.now() });
+  userState.set(phone, { ...ctx, state: 'SELECTING_DAY_LIST', lastActivity: Date.now() });
   await sendText(jid, text);
 }
 
-async function sendTimeMenu(jid, dia) {
+// Paso 1 de hora: elegir jornada con botones (menos texto en pantalla)
+async function sendTimeMenu(jid, dia, ctx = {}) {
   const phone = formatPhone(jid);
-  let text = `⏰ *${dia}* — ¿A qué hora?\n\n`;
-  TIME_SLOTS.forEach((t, i) => {
-    const h = parseInt(t);
-    const period = h < 12 ? 'AM' : 'PM';
-    text += `*${i + 1}.* ${t} ${period}\n`;
+  userState.set(phone, { ...ctx, state: 'SELECTING_PERIOD', dia, lastActivity: Date.now() });
+  await sendButtons(jid, `📅 *${dia}*\n¿En qué jornada?`, [
+    { id: '1', text: 'Mañana ☀️ (07-12)' },
+    { id: '2', text: 'Tarde 🌆 (14-19)' }
+  ], '⏰ Elige la jornada');
+}
+
+// Paso 2 de hora: franjas de la jornada elegida (lista corta de 6)
+async function sendSlotMenu(jid, dia, period, ctx = {}) {
+  const phone = formatPhone(jid);
+  const slots = period === 'AM'
+    ? TIME_SLOTS.filter(t => parseInt(t) < 13)
+    : TIME_SLOTS.filter(t => parseInt(t) >= 13);
+  let text = `⏰ *${dia}* — ${period === 'AM' ? 'Mañana ☀️' : 'Tarde 🌆'}\n\n`;
+  slots.forEach((t, i) => {
+    text += `*${i + 1}.* ${t}\n`;
   });
   text += `\n*0.* ⬅️ Volver`;
-  userState.set(phone, { state: 'SELECTING_TIME', dia, lastActivity: Date.now() });
+  userState.set(phone, { ...ctx, state: 'SELECTING_TIME', dia, slots, lastActivity: Date.now() });
   await sendText(jid, text);
 }
 
 // ==========================================
 // BUSCAR Y MOSTRAR AULAS
 // ==========================================
+
+const ROOMS_PAGE_SIZE = 5;
+
+// Muestra una página de aulas (paginado para no saturar el chat)
+async function showRoomsPage(jid, stateObj) {
+  const phone = formatPhone(jid);
+  const { rooms, dia, horaInicio, horaFin, page = 0 } = stateObj;
+  const tipoEmoji = { 'AULA': '🏫', 'LABORATORIO': '🔬', 'AUDITORIO': '🎬', 'SALA_ESPECIAL': '🏛️' };
+
+  const start = page * ROOMS_PAGE_SIZE;
+  const pageRooms = rooms.slice(start, start + ROOMS_PAGE_SIZE);
+  const hasMore = rooms.length > start + ROOMS_PAGE_SIZE;
+
+  let msg = `✅ *Aulas libres* · ${dia} ⏰ ${horaInicio}–${horaFin}\n\n`;
+  pageRooms.forEach((a, i) => {
+    const ico = tipoEmoji[a.tipo?.toUpperCase()] || '🏫';
+    msg += `*${i + 1}.* ${ico} *${a.codigo}* · ${a.nombre} · 👥 ${a.capacidad}\n`;
+  });
+  msg += `\n`;
+  if (hasMore) msg += `*${pageRooms.length + 1}.* ➕ Ver más aulas\n`;
+  msg += `*0.* ⬅️ Volver al menú\n\n_Responde con el número para reservar._`;
+
+  userState.set(phone, { ...stateObj, state: 'SELECTING_ROOM', page, pageRooms, hasMore, lastActivity: Date.now() });
+  await sendText(jid, msg);
+}
 
 async function searchAndShowRooms(jid, dia, hora) {
   const phone = formatPhone(jid);
@@ -751,23 +864,45 @@ async function searchAndShowRooms(jid, dia, hora) {
       return;
     }
 
-    const tipoEmoji = { 'AULA': '🏫', 'LABORATORIO': '🔬', 'AUDITORIO': '🎬', 'SALA_ESPECIAL': '🏛️' };
-    let msg = `✅ *Aulas disponibles*\n`;
-    msg += `📅 ${dia} | ⏰ ${hora} – ${horaFin}\n\n`;
-    rooms.forEach((a, i) => {
-      const ico = tipoEmoji[a.tipo] || '🏫';
-      msg += `*${i + 1}.* ${ico} *${a.codigo}* — ${a.nombre}\n`;
-      msg += `   👥 Capacidad: ${a.capacidad} personas\n\n`;
-    });
-    msg += `*0.* ⬅️ Volver al menú\n\n`;
-    msg += `_Selecciona un número para reservar._`;
-
-    userState.set(phone, { state: 'SELECTING_ROOM', rooms, dia, horaInicio: hora, horaFin, lastActivity: Date.now() });
-    await sendText(jid, msg);
+    await showRoomsPage(jid, { rooms, dia, horaInicio: hora, horaFin, page: 0 });
   } catch (e) {
     console.error('Error buscando aulas:', e);
     await sendText(jid, '⚠️ Error al buscar aulas. Intenta de nuevo o escribe *menu*.');
   }
+}
+
+// Flujo espacios comunes: tras elegir día+hora se verifica disponibilidad puntual
+async function checkEspacioAndConfirm(jid, stateObj, dia, hora) {
+  const phone = formatPhone(jid);
+  const esp = stateObj.selectedEspacio;
+  const h = parseInt(hora.split(':')[0]);
+  const horaFin = `${String(h + 1).padStart(2, '0')}:${hora.split(':')[1] || '00'}`;
+
+  const libre = await isEspacioLibre(esp.codigo, dia, hora, horaFin);
+  if (!libre) {
+    await sendText(jid,
+      `😕 *${esp.nombre}* está ocupado el *${dia}* a las *${hora}*.\n\n` +
+      `Elige otra hora:`
+    );
+    await sendTimeMenu(jid, dia, { flujo: 'espacio', selectedEspacio: esp });
+    return;
+  }
+
+  userState.set(phone, {
+    ...stateObj,
+    state: 'WAITING_GROUP_MODE',
+    selectedAula: { codigo: esp.codigo, nombre: esp.nombre, capacidad: esp.capacidad, tipo: 'espacio' },
+    dia, horaInicio: hora, horaFin,
+    lastActivity: Date.now()
+  });
+  await sendButtons(jid,
+    `${ESPACIO_TIPO_EMOJI[esp.tipo] || '📍'} *${esp.nombre}*\n` +
+    `📅 ${dia} · ⏰ ${hora}–${horaFin} · 👥 hasta ${esp.capacidad}\n\n` +
+    `¿Cómo vas a usar el espacio?`,
+    [
+      { id: '1', text: 'Solo 👤' },
+      { id: '2', text: 'En grupo 👥' }
+    ], '✅ Espacio disponible');
 }
 
 // ==========================================
@@ -909,11 +1044,27 @@ async function handleMessage(jid, text, messageData) {
       // Si no es un numero valido, intentar deteccion natural
     }
 
-    // --- SELECCION DE DIA ---
+    // Contexto de flujo que viaja entre estados (aula vs espacio común)
+    const flowCtx = { flujo: stateObj?.flujo, selectedEspacio: stateObj?.selectedEspacio };
+
+    // Despacha búsqueda según el flujo activo una vez elegidos día y hora
+    const routeDayTime = async (dia, hora) => {
+      if (flowCtx.flujo === 'espacio' && flowCtx.selectedEspacio) {
+        await checkEspacioAndConfirm(jid, { ...stateObj, ...flowCtx }, dia, hora);
+      } else {
+        await searchAndShowRooms(jid, dia, hora);
+      }
+    };
+
+    // --- SELECCION DE DIA (botones: hoy / mañana / otro día) ---
     if (state === 'SELECTING_DAY') {
       const num = parseInt(text);
       let dia = null;
 
+      if (num === 0) {
+        await sendMainMenu(jid, session);
+        return;
+      }
       if (num === 1) {
         dia = getTodayName();
       } else if (num === 2) {
@@ -921,51 +1072,116 @@ async function handleMessage(jid, text, messageData) {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const d = extractDay(normalizeText(tomorrow.toLocaleDateString('es-ES', { timeZone: 'America/Guayaquil', weekday: 'long' })));
         dia = d ? d.formatted : 'Martes';
-      } else if (num >= 3 && num <= 7) {
-        dia = DAYS[num - 3]?.formatted;
+      } else if (num === 3) {
+        await sendDayListMenu(jid, flowCtx);
+        return;
+      }
+
+      if (!dia) {
+        // Intentar extraer dia del texto natural
+        const dayFromText = extractDay(text);
+        if (dayFromText) dia = dayFromText.formatted;
       }
 
       if (dia) {
-        await sendTimeMenu(jid, dia);
+        await sendTimeMenu(jid, dia, flowCtx);
         return;
       }
 
-      // Intentar extraer dia del texto
-      const dayFromText = extractDay(text);
-      if (dayFromText) {
-        await sendTimeMenu(jid, dayFromText.formatted);
-        return;
-      }
-
-      await sendText(jid, 'No entendí el día. Intenta de nuevo o escribe *menu* para volver.');
+      await sendText(jid, 'No entendí el día. Elige un botón o escribe *menu* para volver.');
       return;
     }
 
-    // --- SELECCION DE HORA ---
-    if (state === 'SELECTING_TIME') {
+    // --- SELECCION DE DIA (lista completa) ---
+    if (state === 'SELECTING_DAY_LIST') {
       const num = parseInt(text);
       if (num === 0) {
         await sendMainMenu(jid, session);
         return;
       }
-      if (num >= 1 && num <= TIME_SLOTS.length) {
-        const hora = TIME_SLOTS[num - 1];
-        await searchAndShowRooms(jid, stateObj.dia, hora);
+      let dia = (num >= 1 && num <= 6) ? DAYS[num - 1]?.formatted : null;
+      if (!dia) {
+        const dayFromText = extractDay(text);
+        if (dayFromText) dia = dayFromText.formatted;
+      }
+      if (dia) {
+        await sendTimeMenu(jid, dia, flowCtx);
+        return;
+      }
+      await sendText(jid, 'No entendí el día. Responde con el número o escribe *menu*.');
+      return;
+    }
+
+    // --- SELECCION DE JORNADA (botones AM/PM) ---
+    if (state === 'SELECTING_PERIOD') {
+      const num = parseInt(text);
+      if (num === 0) {
+        await sendDayMenu(jid, flowCtx);
+        return;
+      }
+      if (num === 1 || num === 2) {
+        await sendSlotMenu(jid, stateObj.dia, num === 1 ? 'AM' : 'PM', flowCtx);
+        return;
+      }
+      // Hora escrita directamente ("15:00", "3 pm")
+      const timeFromText = extractTime(text);
+      if (timeFromText) {
+        await routeDayTime(stateObj.dia, timeFromText);
+        return;
+      }
+      await sendText(jid, 'Elige *1* Mañana o *2* Tarde, o escribe la hora (ej. 15:00).');
+      return;
+    }
+
+    // --- SELECCION DE HORA (franja concreta) ---
+    if (state === 'SELECTING_TIME') {
+      const num = parseInt(text);
+      const slots = stateObj.slots || TIME_SLOTS;
+      if (num === 0) {
+        await sendTimeMenu(jid, stateObj.dia, flowCtx);
+        return;
+      }
+      if (num >= 1 && num <= slots.length) {
+        await routeDayTime(stateObj.dia, slots[num - 1]);
         return;
       }
 
       // Intentar extraer hora del texto
       const timeFromText = extractTime(text);
       if (timeFromText) {
-        await searchAndShowRooms(phone, stateObj.dia, timeFromText);
+        await routeDayTime(stateObj.dia, timeFromText);
         return;
       }
 
-      await sendText(phone, 'No entendi la hora. Intenta de nuevo o escribe *menu* para volver.');
+      await sendText(jid, 'No entendí la hora. Responde con el número o escribe *menu*.');
       return;
     }
 
-    // --- SELECCION DE AULA PARA RESERVAR ---
+    // --- SELECCION DE ESPACIO COMUN ---
+    if (state === 'SELECTING_ESPACIO') {
+      const num = parseInt(text);
+      const espacios = stateObj.espacios || [];
+      if (num === 0) {
+        await sendMainMenu(jid, session);
+        return;
+      }
+      if (num >= 1 && num <= espacios.length) {
+        const esp = espacios[num - 1];
+        // Ficha del espacio + pasar a elegir día
+        let ficha = `${ESPACIO_TIPO_EMOJI[esp.tipo] || '📍'} *${esp.nombre}*\n`;
+        ficha += `🔖 Código: ${esp.codigo}\n`;
+        ficha += `🏷️ Tipo: ${esp.tipo.replace(/_/g, ' ')}\n`;
+        ficha += `👥 Capacidad: ${esp.capacidad} personas`;
+        if (esp.descripcion) ficha += `\n📝 ${esp.descripcion}`;
+        await sendText(jid, ficha);
+        await sendDayMenu(jid, { flujo: 'espacio', selectedEspacio: esp });
+        return;
+      }
+      await sendText(jid, 'Número no válido. Responde con el número del espacio o *0* para volver.');
+      return;
+    }
+
+    // --- SELECCION DE AULA PARA RESERVAR (paginado) ---
     if (state === 'SELECTING_ROOM') {
       const num = parseInt(text);
       if (num === 0) {
@@ -973,21 +1189,27 @@ async function handleMessage(jid, text, messageData) {
         return;
       }
 
-      const { rooms, dia, horaInicio, horaFin } = stateObj;
-      if (num >= 1 && num <= rooms.length) {
-        const aula = rooms[num - 1];
-        userState.set(phone, { ...stateObj, state: 'WAITING_GROUP_MODE', selectedAula: aula, lastActivity: Date.now() });
-        await sendText(phone,
-          `🏫 *${aula.codigo}* seleccionada\n` +
-          `_${aula.nombre} — ${aula.capacidad} personas_\n\n` +
-          `👥 ¿Cómo vas a usar el espacio?\n\n` +
-          `*1.* 👤 Solo\n` +
-          `*2.* 👫 En Grupo`
-        );
+      const { pageRooms = [], hasMore, page = 0 } = stateObj;
+
+      // "Ver más" es la opción siguiente a la última aula de la página
+      if (hasMore && num === pageRooms.length + 1) {
+        await showRoomsPage(jid, { ...stateObj, page: page + 1 });
         return;
       }
 
-      await sendText(phone, 'Numero no valido. Intenta de nuevo o escribe *menu*.');
+      if (num >= 1 && num <= pageRooms.length) {
+        const aula = pageRooms[num - 1];
+        userState.set(phone, { ...stateObj, state: 'WAITING_GROUP_MODE', selectedAula: aula, lastActivity: Date.now() });
+        await sendButtons(jid,
+          `🏫 *${aula.codigo}* · ${aula.nombre}\n👥 Capacidad: ${aula.capacidad} personas\n\n¿Cómo vas a usar el espacio?`,
+          [
+            { id: '1', text: 'Solo 👤' },
+            { id: '2', text: 'En grupo 👥' }
+          ], '✔️ Aula seleccionada');
+        return;
+      }
+
+      await sendText(phone, 'Número no válido. Intenta de nuevo o escribe *menu*.');
       return;
     }
 
@@ -997,14 +1219,14 @@ async function handleMessage(jid, text, messageData) {
       if (num === 1) {
         userState.set(phone, { ...stateObj, state: 'CONFIRMING_RESERVATION', esGrupal: false, numPersonas: 1, lastActivity: Date.now() });
         const { selectedAula, dia, horaInicio, horaFin } = stateObj;
-        await sendText(phone,
-          `📝 *Confirmar Reserva*\n\n` +
-          `🏫 Espacio: *${selectedAula.codigo}*\n` +
-          `📅 Día: ${dia}\n` +
-          `⏰ Hora: ${horaInicio} – ${horaFin}\n` +
-          `👤 Tipo: Individual\n\n` +
-          `¿Confirmas la reserva?\n*1.* ✅ Sí, reservar\n*2.* ❌ No, cancelar`
-        );
+        await sendButtons(jid,
+          `🏫 *${selectedAula.codigo}* · ${selectedAula.nombre || ''}\n` +
+          `📅 ${dia} · ⏰ ${horaInicio}–${horaFin}\n` +
+          `👤 Individual\n\n¿Confirmas la reserva?`,
+          [
+            { id: '1', text: 'Sí, reservar ✅' },
+            { id: '2', text: 'No, cancelar ❌' }
+          ], '📝 Confirmar reserva');
       } else if (num === 2) {
         userState.set(phone, { ...stateObj, state: 'WAITING_NUM_PEOPLE', esGrupal: true, lastActivity: Date.now() });
         await sendText(phone, '👥 ¿Cuántas personas van a usar el espacio?\n\n_Escribe el número:_');
@@ -1022,15 +1244,19 @@ async function handleMessage(jid, text, messageData) {
         return;
       }
       const { selectedAula, dia, horaInicio, horaFin } = stateObj;
+      if (selectedAula.capacidad && num > selectedAula.capacidad) {
+        await sendText(phone, `⚠️ *${selectedAula.codigo}* tiene capacidad para *${selectedAula.capacidad}* personas.\n\nEscribe un número menor o *0* para volver:`);
+        return;
+      }
       userState.set(phone, { ...stateObj, state: 'CONFIRMING_RESERVATION', numPersonas: num, lastActivity: Date.now() });
-      await sendText(phone,
-        `📝 *Confirmar Reserva*\n\n` +
-        `🏫 Espacio: *${selectedAula.codigo}*\n` +
-        `📅 Día: ${dia}\n` +
-        `⏰ Hora: ${horaInicio} – ${horaFin}\n` +
-        `👥 Tipo: Grupal (${num} personas)\n\n` +
-        `¿Confirmas la reserva?\n*1.* ✅ Sí, reservar\n*2.* ❌ No, cancelar`
-      );
+      await sendButtons(jid,
+        `🏫 *${selectedAula.codigo}* · ${selectedAula.nombre || ''}\n` +
+        `📅 ${dia} · ⏰ ${horaInicio}–${horaFin}\n` +
+        `👥 Grupal (${num} personas)\n\n¿Confirmas la reserva?`,
+        [
+          { id: '1', text: 'Sí, reservar ✅' },
+          { id: '2', text: 'No, cancelar ❌' }
+        ], '📝 Confirmar reserva');
       return;
     }
 
@@ -1212,8 +1438,8 @@ async function handleMessage(jid, text, messageData) {
       await handleMenuAction(phone, 'menu_materia', session);
       return;
     }
-    if (n.includes('mi perfil') || n === 'perfil') {
-      await handleMenuAction(phone, 'menu_perfil', session);
+    if (n.includes('espacios comunes') || n.includes('espacio comun') || n === 'espacios') {
+      await handleMenuAction(jid, 'menu_espacios', session);
       return;
     }
     if (n.includes('estado general') && ['admin', 'director'].includes(session?.rol)) {
@@ -1286,10 +1512,11 @@ async function handleMenuAction(jid, actionId, session) {
       } catch (e) {
         // Fallback a SQL directo si no hay token o falla el backend
         const res = await pool.query(
-          `SELECT id, aula_codigo, dia, hora_inicio, hora_fin FROM reservas WHERE telefono = $1 AND estado = 'activa' ORDER BY hora_inicio`,
+          `SELECT id, COALESCE(aula_codigo, espacio_codigo) AS aula_codigo, tipo_espacio, dia, hora_inicio, hora_fin
+           FROM reservas WHERE telefono = $1 AND estado = 'activa' ORDER BY hora_inicio`,
           [phone]
         );
-        reservas = res.rows.map(r => ({ id: r.id, aula_codigo: r.aula_codigo, dia: r.dia, hora_inicio: r.hora_inicio, hora_fin: r.hora_fin }));
+        reservas = res.rows;
       }
 
       if (reservas.length === 0) {
@@ -1298,7 +1525,9 @@ async function handleMenuAction(jid, actionId, session) {
       } else {
         let msg = '*Tus Reservas Activas:*\n\n';
         reservas.forEach((r, i) => {
-          msg += `*${i + 1}.* ${r.aula_codigo}: ${r.dia} ${r.hora_inicio}-${r.hora_fin}\n`;
+          const codigo = r.aula_codigo || r.espacio_codigo;
+          const ico = r.tipo_espacio === 'espacio' ? '🛋️' : '🏫';
+          msg += `*${i + 1}.* ${ico} ${codigo}: ${r.dia} ${r.hora_inicio}-${r.hora_fin}\n`;
         });
         msg += `\n*0.* Volver al menu\n`;
         msg += `\n_Responde con el numero para cancelar una reserva._`;
@@ -1347,18 +1576,21 @@ async function handleMenuAction(jid, actionId, session) {
       break;
     }
 
-    case 'menu_perfil': {
-      const name = await getSessionName(session);
-      await sendText(phone,
-        `*Perfil Roomie*\n\n` +
-        `Nombre: *${name}*\n` +
-        `Rol: *${session.rol.toUpperCase()}*\n` +
-        `Tipo: ${session.user_type}\n` +
-        `Sesion: Activa\n\n` +
-        `Escribe *salir* para cerrar sesion.\n` +
-        `Escribe *menu* para volver.`
-      );
-      userState.delete(phone);
+    case 'menu_espacios': {
+      const espacios = await getEspaciosComunes();
+      if (espacios.length === 0) {
+        await sendText(jid, '😕 No hay espacios comunes disponibles por ahora.\n\nEscribe *menu* para volver.');
+        userState.delete(phone);
+        break;
+      }
+      let msg = `🛋️ *Espacios Comunes* (${espacios.length})\n\n`;
+      espacios.slice(0, 8).forEach((e, i) => {
+        const ico = ESPACIO_TIPO_EMOJI[e.tipo] || '📍';
+        msg += `*${i + 1}.* ${ico} *${e.nombre}* · 👥 ${e.capacidad}\n`;
+      });
+      msg += `\n*0.* ⬅️ Volver al menú\n\n_Responde con el número para ver detalles y reservar._`;
+      userState.set(phone, { state: 'SELECTING_ESPACIO', espacios: espacios.slice(0, 8), lastActivity: Date.now() });
+      await sendText(jid, msg);
       break;
     }
 
@@ -1392,11 +1624,14 @@ async function reservarAula(jid, aulaCodigo, dia, horaInicio, horaFin, session, 
   fechaReserva.setDate(ecuadorTime.getDate() + diff);
   const fechaStr = fechaReserva.toISOString().split('T')[0];
 
+  const esEspacio = tipoEspacio === 'espacio';
+
   // Intentar via API del backend: POST /api/reservas/
   if (stateData.jwtToken) {
     try {
       const resp = await axios.post(`${BACKEND_URL}/api/reservas/`, {
-        aula_codigo: aulaCodigo,
+        ...(esEspacio ? { espacio_codigo: aulaCodigo } : { aula_codigo: aulaCodigo }),
+        tipo_espacio: esEspacio ? 'espacio' : 'aula',
         dia,
         fecha: fechaStr,
         hora_inicio: horaInicio,
@@ -1453,8 +1688,9 @@ async function reservarAula(jid, aulaCodigo, dia, horaInicio, horaFin, session, 
 
   // Fallback: SQL directo (para usuarios sin JWT o si falla el backend)
   const conflict = await pool.query(
-    `SELECT usuario_nombre FROM reservas
-     WHERE aula_codigo = $1 AND dia = $2 AND estado = 'activa'
+    `SELECT solicitante_nombre FROM reservas
+     WHERE (aula_codigo = $1 OR espacio_codigo = $1) AND dia = $2
+     AND estado IN ('activa', 'pendiente_aprobacion')
      AND hora_inicio < $4 AND hora_fin > $3`,
     [aulaCodigo, dia, horaInicio, horaFin]
   );
@@ -1466,9 +1702,15 @@ async function reservarAula(jid, aulaCodigo, dia, horaInicio, horaFin, session, 
 
   const estadoReserva = esAuditorio ? 'pendiente_aprobacion' : 'activa';
   const insertResult = await pool.query(
-    `INSERT INTO reservas (aula_codigo, dia, hora_inicio, hora_fin, telefono, usuario_nombre, estado)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [aulaCodigo, dia, horaInicio, horaFin, phone, sessionName, estadoReserva]
+    `INSERT INTO reservas (aula_codigo, espacio_codigo, tipo_espacio, es_grupal, num_personas, dia, fecha, hora_inicio, hora_fin, telefono, solicitante_nombre, estado, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) RETURNING id`,
+    [
+      esEspacio ? null : aulaCodigo,
+      esEspacio ? aulaCodigo : null,
+      esEspacio ? 'espacio' : 'aula',
+      esGrupal, numPersonas,
+      dia, fechaStr, horaInicio, horaFin, phone, sessionName, estadoReserva
+    ]
   );
   const reservaId = insertResult.rows[0].id;
 
@@ -1623,7 +1865,15 @@ app.post('/webhook', async (req, res) => {
     if (isDuplicate(messageId)) return res.sendStatus(200);
 
     // Prioridad: Botones y Listas primero (interacciones)
-    const buttonResponse = data.message?.buttonsResponseMessage?.selectedButtonId;
+    // nativeFlow (Evolution v2) responde con interactiveResponseMessage o templateButtonReplyMessage
+    let nativeFlowId = null;
+    const nfr = data.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+    if (nfr) {
+      try { nativeFlowId = JSON.parse(nfr).id || null; } catch (_) { }
+    }
+    const buttonResponse = data.message?.buttonsResponseMessage?.selectedButtonId ||
+      data.message?.templateButtonReplyMessage?.selectedId ||
+      nativeFlowId;
     const listResponse = data.message?.listResponseMessage?.singleSelectReply?.selectedRowId;
 
     // --- EXTRAER TEXTO ---
@@ -1697,7 +1947,7 @@ setInterval(async () => {
 
     // 1. Notificar INICIO de reservas (15 min antes)
     const reservasStart = await pool.query(
-      `SELECT telefono, aula_codigo FROM reservas WHERE dia = $1 AND hora_inicio = $2 AND estado = 'activa' AND telefono IS NOT NULL`,
+      `SELECT telefono, COALESCE(aula_codigo, espacio_codigo) AS aula_codigo FROM reservas WHERE dia = $1 AND hora_inicio = $2 AND estado = 'activa' AND telefono IS NOT NULL`,
       [day, timeStr15]
     );
     for (const r of reservasStart.rows) {
@@ -1706,7 +1956,7 @@ setInterval(async () => {
 
     // 2. Notificar FIN de reservas (justo al terminar)
     const reservasEnd = await pool.query(
-      `SELECT id, telefono, aula_codigo FROM reservas WHERE dia = $1 AND hora_fin = $2 AND estado = 'activa' AND telefono IS NOT NULL`,
+      `SELECT id, telefono, COALESCE(aula_codigo, espacio_codigo) AS aula_codigo FROM reservas WHERE dia = $1 AND hora_fin = $2 AND estado = 'activa' AND telefono IS NOT NULL`,
       [day, timeNow]
     );
     for (const r of reservasEnd.rows) {
@@ -1740,10 +1990,23 @@ setInterval(async () => {
 // INICIAR SERVIDOR
 // ==========================================
 
-app.listen(BOT_PORT, () => {
+const { registerWebhook } = require('./scripts/setup-webhook');
+
+app.listen(BOT_PORT, async () => {
   console.log(`Roomie Bot (WhatsApp) iniciado en puerto ${BOT_PORT}`);
   console.log(`Webhook URL: http://localhost:${BOT_PORT}/webhook`);
   console.log(`Instance: ${EVOLUTION_INSTANCE}`);
+
+  // Auto-registrar webhook en Evolution API
+  setTimeout(async () => {
+    const ok = await registerWebhook();
+    if (ok) {
+      console.log('[BOOT] Webhook registrado correctamente');
+    } else {
+      console.warn('[BOOT] No se pudo registrar el webhook automáticamente');
+      console.warn('[BOOT] Registra manualmente en Evolution API o ejecuta: node scripts/setup-webhook.js');
+    }
+  }, 3000); // Espera 3s para dar tiempo a Evolution API
 });
 
 // ==========================================

@@ -1,10 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { incidenciaService, incidenciaFotoUrl, TIPO_INCIDENCIA_LABELS, Incidencia } from '../services/api';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import ReportarIncidenciaModal from './ReportarIncidenciaModal';
 
-const IncidenciasView = () => {
+interface IncidenciasViewProps {
+    mode?: 'admin' | 'report';
+}
+
+const IncidenciasView = ({ mode = 'admin' }: IncidenciasViewProps) => {
+    const { user } = useContext(AuthContext);
+    // Admin y Director ven la tabla de gestión completa
+    const isAdmin = user?.rol === 'admin' || user?.rol === 'director' || mode === 'admin';
     const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterEstado, setFilterEstado] = useState('');
@@ -33,15 +41,108 @@ const IncidenciasView = () => {
         if (!confirm(`¿Cambiar estado a ${nuevoEstado}?`)) return;
         try {
             await incidenciaService.actualizarEstado(id, { estado: nuevoEstado });
-            fetchIncidencias(); // Recargar
+            fetchIncidencias();
         } catch (error) {
             alert("Error al actualizar estado");
         }
     };
 
+    // Modo docente/estudiante: historial propio + botón de reportar
+    if (!isAdmin) {
+        return (
+            <div className="space-y-6">
+                {/* Botón para reportar */}
+                <div className="bg-card border border-border rounded-3xl p-8 text-center">
+                    <div className="size-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="material-symbols-outlined text-3xl text-primary">report</span>
+                    </div>
+                    <h3 className="text-lg font-black text-foreground mb-2">Reportar Incidencia</h3>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+                        ¿Encontraste un problema en un aula o espacio? Repórtalo aquí para que sea atendido por la administración.
+                    </p>
+                    <button
+                        onClick={() => setModalOpen(true)}
+                        className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                        Reportar Incidencia
+                    </button>
+                </div>
+
+                {/* Historial de mis reportes */}
+                <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-sm">
+                    <div className="px-6 py-4 border-b border-border flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-xl">history</span>
+                        <div>
+                            <h4 className="text-sm font-black text-foreground">Mis Reportes</h4>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Historial de incidencias enviadas</p>
+                        </div>
+                        <span className="ml-auto text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded">{incidencias.length} reporte(s)</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-muted/30 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border">
+                                <tr>
+                                    <th className="px-6 py-4">Asunto</th>
+                                    <th className="px-6 py-4">Aula</th>
+                                    <th className="px-6 py-4">Fecha</th>
+                                    <th className="px-6 py-4">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/50">
+                                {loading ? (
+                                    <tr><td colSpan={4} className="p-8 text-center text-xs text-muted-foreground">Cargando reportes...</td></tr>
+                                ) : incidencias.length === 0 ? (
+                                    <tr><td colSpan={4} className="p-8 text-center text-xs text-muted-foreground">No has enviado ningún reporte aún.</td></tr>
+                                ) : (
+                                    incidencias.map(inc => (
+                                        <tr key={inc.id} className="hover:bg-muted/10 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <p className="font-bold text-xs text-foreground">{inc.titulo}</p>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5 italic line-clamp-1">{inc.descripcion}</p>
+                                            </td>
+                                            <td className="px-6 py-4 text-[11px] font-bold text-primary">{inc.aula_codigo}</td>
+                                            <td className="px-6 py-4 text-[10px] text-muted-foreground">
+                                                {format(new Date(inc.created_at), "d MMM yyyy, HH:mm", { locale: es })}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`text-[10px] font-black uppercase ${
+                                                    inc.estado === 'PENDIENTE' ? 'text-red-500' :
+                                                    inc.estado === 'REVISANDO' ? 'text-blue-500' :
+                                                    'text-emerald-500'
+                                                }`}>
+                                                    {inc.estado}
+                                                </span>
+                                                {inc.nota_director && (
+                                                    <p className="text-[9px] text-blue-600 mt-0.5 bg-blue-50 dark:bg-blue-950/20 rounded px-1.5 py-0.5 max-w-[200px]">
+                                                        <span className="font-black">Respuesta: </span>{inc.nota_director}
+                                                    </p>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {modalOpen && (
+                    <ReportarIncidenciaModal
+                        onClose={() => setModalOpen(false)}
+                        onSuccess={() => {
+                            setModalOpen(false);
+                            fetchIncidencias();
+                        }}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // Modo admin: tabla completa con gestión
     return (
         <div className="space-y-6">
-            {/* Lightbox para fotos */}
             {lightboxUrl && (
                 <div
                     className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
@@ -50,7 +151,7 @@ const IncidenciasView = () => {
                     <img src={lightboxUrl} alt="evidencia" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
                 </div>
             )}
-            {/* Header con Filtros y Botón */}
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto">
                     {['', 'PENDIENTE', 'REVISANDO', 'RESUELTO', 'CERRADO'].map(est => (
@@ -76,7 +177,6 @@ const IncidenciasView = () => {
                 </button>
             </div>
 
-            {/* Tabla */}
             <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
@@ -197,7 +297,7 @@ const IncidenciasView = () => {
                     </table>
                 </div>
             </div>
-            {/* Modal para reportar */}
+
             {modalOpen && (
                 <ReportarIncidenciaModal
                     onClose={() => setModalOpen(false)}

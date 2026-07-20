@@ -9,10 +9,7 @@ import { Button } from '../components/common/Button';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
 import SubirEstudiantes from '../components/SubirEstudiantes';
-import DocenteTable from '../components/DocenteTable';
-import MateriaManagement from '../components/MateriaManagement';
-import EstudianteTable from '../components/EstudianteTable';
-import ImportarCupos from '../components/ImportarCupos';
+import GestionAcademica from '../components/GestionAcademica';
 import ClaseEditModal from '../components/ClaseEditModal';
 import DisponibilidadAulas from '../components/DisponibilidadAulas';
 import GuidedTour from '../components/common/GuidedTour';
@@ -97,8 +94,6 @@ const DirectorDashboard = () => {
   const [uploading, setUploading] = useState(false);
   const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, sobrecupos: 0, porcentaje_completado: 0 });
   const [misClases, setMisClases] = useState<any[]>([]);
-  const [misClasesDocente, setMisClasesDocente] = useState<any[]>([]);
-  const [loadingMisClases, setLoadingMisClases] = useState(false);
   const [loadingStats, setLoadingStats] = useState(true);
   const [editingClase, setEditingClase] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -111,18 +106,6 @@ const DirectorDashboard = () => {
       loadStats();
     }
   }, [user]);
-
-  const loadMisClasesDocente = async () => {
-    setLoadingMisClases(true);
-    try {
-      const res = await distribucionService.getMisClasesComoDocente();
-      if (res.success) setMisClasesDocente(res.clases || []);
-    } catch (err) {
-      console.error('Error al cargar clases del director como docente:', err);
-    } finally {
-      setLoadingMisClases(false);
-    }
-  };
 
   const loadStats = async () => {
     try {
@@ -545,78 +528,22 @@ const DirectorDashboard = () => {
         return <DisponibilidadAulas />;
       case 'reservas':
         return <ReservasAdminView />;
-      case 'estudiantes':
-        const nombreCarrera = user?.carrera?.carrera || user?.carrera_director || '';
-        return (
-          <div className="space-y-12 animate-fade-in pb-20">
-            <DashboardWidget
-              title="Base de Datos de Alumnado"
-              subtitle={`Estudiantes registrados en la carrera de ${nombreCarrera}`}
-              icon="people"
-              action={
-                <Button size="sm" variant="secondary" onClick={() => setIsComunicadoOpen(true)}>
-                  <span className="material-symbols-outlined text-sm mr-2">campaign</span>
-                  Enviar Comunicado
-                </Button>
-              }
-            >
-              <div className="mt-4">
-                <EstudianteTable carreraNombre={nombreCarrera} />
-              </div>
-            </DashboardWidget>
-
-            <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10">
-              <h5 className="text-xs font-black text-primary uppercase tracking-widest mb-2 flex items-center gap-2">
-                <span className="material-symbols-outlined text-sm">info</span>
-                ¿Cómo gestionar estudiantes irregulares o con homologación?
-              </h5>
-              <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
-                Para estudiantes que no siguen un ciclo regular (repetidores o con materias homologadas):
-                <br />1. Localice al estudiante en la tabla superior.
-                <br />2. Haga clic en el botón <strong>CALENDAR_MONTH Carga</strong>.
-                <br />3. Allí podrá añadir o quitar materias de <strong>cualquier ciclo</strong> de la carrera para personalizar su horario.
-              </p>
-            </div>
-
-            <DashboardWidget
-              title="Carga Masiva de Alumnos"
-              subtitle="Importar listado oficial desde archivo Excel"
-              icon="upload_file"
-            >
-              <div className="mt-4">
-                <SubirEstudiantes carreraNombre={nombreCarrera} isCompact />
-              </div>
-            </DashboardWidget>
-
-            <DashboardWidget
-              title="Sincronización de Inscripciones (Cupos)"
-              subtitle="Vincular estudiantes con sus materias proyectadas"
-              icon="sync_alt"
-            >
-              <div className="mt-4">
-                <ImportarCupos isCompact />
-              </div>
-            </DashboardWidget>
-          </div>
-        );
+      case 'gestion_academica':
       case 'docentes':
-        return (
-          <DashboardWidget title="Plantilla Docente" icon="badge">
-            <DocenteTable carreraId={user?.carrera?.id || 0} />
-          </DashboardWidget>
-        );
+      case 'estudiantes':
       case 'materias':
-        return (
-          <DashboardWidget title="Catálogo de Materias" subtitle="Administración de la malla curricular" icon="menu_book">
-            <MateriaManagement carreraId={user?.carrera?.id || 0} />
-          </DashboardWidget>
-        );
+        return <GestionAcademica mode="director" />;
       case 'settings':
         return <UserSettings />;
       case 'reportes':
-        return <ReporteEjecutivo carreraPreseleccionada={{ id: user?.carrera?.id || 0, nombre: user?.carrera?.carrera || '' }} />;
-      case 'incidencias':
-        return <IncidenciasView />;
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <ReporteEjecutivo carreraPreseleccionada={{ id: user?.carrera?.id || 0, nombre: user?.carrera?.carrera || '' }} />
+            <div>
+              <IncidenciasView />
+            </div>
+          </div>
+        );
       default:
         return null;
     }

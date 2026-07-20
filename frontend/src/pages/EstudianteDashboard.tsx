@@ -7,6 +7,7 @@ import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
 import ReservaWidget from '../components/reservas/ReservaWidget';
 import GuidedTour from '../components/common/GuidedTour';
+import IncidenciasView from '../components/IncidenciasView';
 import { Step } from 'react-joyride';
 
 
@@ -435,6 +436,9 @@ export default function EstudianteDashboard() {
             <HorarioVisual mode="personal" title="Mi Horario Estudiantil" />
           </div>
         );
+
+      case 'incidencias':
+        return <IncidenciasView mode="report" />;
 
       case 'settings':
         return <UserSettings />;

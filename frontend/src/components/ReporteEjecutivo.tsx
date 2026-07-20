@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { reporteService, ReporteHistorial, carreraService, Carrera } from '../services/api';
+import MapaCalorDetallado from './director/MapaCalorDetallado';
 import {
     FaFilePdf,
     FaFileExcel,
@@ -172,6 +173,19 @@ export const ReporteEjecutivo = ({ carreraPreseleccionada }: ReporteEjecutivoPro
                         {metricasActuales?.uso_edificios?.length || 0}
                     </h3>
                 </div>
+            </div>
+
+            {/* Mapa de Calor Visual */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <FaChartBar className="text-uide-blue" size={16} />
+                    Mapa de Ocupación de Aulas
+                </h3>
+                <MapaCalorDetallado
+                    carreraId={carreraPreseleccionada?.id}
+                    esAdmin={!carreraPreseleccionada}
+                    vistaCompacta
+                />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
