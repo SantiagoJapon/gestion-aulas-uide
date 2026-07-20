@@ -430,6 +430,40 @@ async function authenticateUser(cedula, jid) {
   return null;
 }
 
+// ==========================================
+// AUTENTICACIÓN POR EMAIL (Docentes/Directores)
+// ==========================================
+async function authenticateUserByEmail(email, jid) {
+  const cleanPhone = formatPhone(jid);
+  const normalizedEmail = email.toLowerCase().trim();
+
+  console.log(`[AUTH] Verificando email ${normalizedEmail} para ${cleanPhone}...`);
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query(
+      "SELECT * FROM usuarios WHERE LOWER(email) = $1 AND estado = 'activo'",
+      [normalizedEmail]
+    );
+    if (userRes.rows.length > 0) {
+      const user = userRes.rows[0];
+      console.log(`[AUTH] Usuario encontrado por email: ${user.nombre} (${user.rol})`);
+      await client.query(`
+        INSERT INTO bot_sessions (telefono, user_id, user_type, rol)
+        VALUES ($1, $2, 'usuario', $3)
+        ON CONFLICT (telefono)
+        DO UPDATE SET user_id = EXCLUDED.user_id, user_type = EXCLUDED.user_type, rol = EXCLUDED.rol
+      `, [cleanPhone, user.id, user.rol]);
+      return { name: user.nombre.split(' ')[0], rol: user.rol, type: 'usuario' };
+    }
+  } finally {
+    client.release();
+  }
+
+  console.log(`[AUTH] Email ${normalizedEmail} no encontrado en usuarios`);
+  return null;
+}
+
 // SQL compartido: horario de clases con el AULA REAL por bloque.
 // El aula verdadera de cada franja vive en `distribucion` (clase_id -> aula_id);
 // `clases.aula_asignada` puede estar vacia o desactualizada. COALESCE resuelve:
@@ -957,7 +991,7 @@ async function handleMessage(jid, text, messageData) {
 
     // --- AUTO-START: si no tiene sesion, intentar auto-login por telefono ---
     const session = await getSession(jid);
-    if (!session && state !== 'WAITING_CEDULA') {
+    if (!session && state !== 'WAITING_CEDULA' && state !== 'WAITING_USER_TYPE' && state !== 'WAITING_EMAIL') {
       // Buscar en usuarios.telefono antes de pedir cedula.
       // El numero de WhatsApp llega como "593987654321"; usuarios guarda "0987654321" o "593987654321".
       const autoUser = await autoLoginByPhone(phone);
@@ -983,10 +1017,54 @@ async function handleMessage(jid, text, messageData) {
         return;
       }
 
-      userState.set(phone, { state: 'WAITING_CEDULA' });
+      // Preguntar tipo de usuario primero
+      userState.set(phone, { state: 'WAITING_USER_TYPE' });
       await sendText(jid,
-        '¡Hola! Soy *Roomie*, tu asistente de aulas en la UIDE 🤖\n\nPara empezar, necesito verificar tu identidad.\n\nEnvía tu número de *cédula* (10 dígitos):'
+        '¡Hola! Soy *Roomie*, tu asistente de aulas en la UIDE 🤖\n\n' +
+        'Para empezar, necesito verificar tu identidad.\n\n' +
+        '¿Quién eres?\n\n' +
+        '1️⃣ *Docente o Director* (ingresa con tu correo)\n' +
+        '2️⃣ *Estudiante* (ingresa con tu cédula)'
       );
+      return;
+    }
+
+    // --- SELECCION DE TIPO DE USUARIO ---
+    if (state === 'WAITING_USER_TYPE') {
+      const option = text.trim();
+      if (option === '1') {
+        userState.set(phone, { state: 'WAITING_EMAIL' });
+        await sendText(jid, '📧 Por favor, ingresa tu *correo electrónico* institucional:');
+        return;
+      } else if (option === '2') {
+        userState.set(phone, { state: 'WAITING_CEDULA' });
+        await sendText(jid, '🪪 Por favor, ingresa tu número de *cédula* (10 dígitos):');
+        return;
+      } else {
+        await sendText(jid, 'Por favor, selecciona una opción válida:\n\n1️⃣ Docente o Director\n2️⃣ Estudiante');
+        return;
+      }
+    }
+
+    // --- LOGIN CON EMAIL (Docentes/Directores) ---
+    if (state === 'WAITING_EMAIL') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(text.trim())) {
+        await sendText(jid, '❌ Ese correo no parece válido. Intenta de nuevo:');
+        return;
+      }
+      const user = await authenticateUserByEmail(text.trim(), jid);
+      if (user) {
+        userState.delete(phone);
+        const newSession = await getSession(jid);
+        await sendMainMenu(jid, newSession, user.name);
+      } else {
+        await sendText(jid,
+          '❌ No encontré ese correo en el sistema.\n\n' +
+          'Si eres estudiante, selecciona la opción 2 e ingresa tu cédula.\n' +
+          'Si eres docente/director, verifica tu correo e intenta de nuevo:'
+        );
+      }
       return;
     }
 
@@ -997,8 +1075,12 @@ async function handleMessage(jid, text, messageData) {
         userState.delete(phone);
         await sendMainMenu(jid, session);
       } else {
-        userState.set(phone, { state: 'WAITING_CEDULA' });
-        await sendText(jid, 'Primero necesito tu cédula (10 dígitos) para identificarte:');
+        userState.set(phone, { state: 'WAITING_USER_TYPE' });
+        await sendText(jid,
+          '¿Quién eres?\n\n' +
+          '1️⃣ *Docente o Director* (ingresa con tu correo)\n' +
+          '2️⃣ *Estudiante* (ingresa con tu cédula)'
+        );
       }
       return;
     }
@@ -1006,8 +1088,12 @@ async function handleMessage(jid, text, messageData) {
     if (n === 'salir' || n === '/logout' || n === 'cerrar sesion') {
       await pool.query('DELETE FROM bot_sessions WHERE telefono = $1', [phone]);
       await pool.query('UPDATE estudiantes SET telefono = NULL WHERE telefono = $1', [phone]);
-      userState.set(phone, { state: 'WAITING_CEDULA' });
-      await sendText(jid, 'Sesión cerrada. Envía tu cédula cuando quieras volver a entrar.');
+      userState.set(phone, { state: 'WAITING_USER_TYPE' });
+      await sendText(jid,
+        'Sesión cerrada. ¿Quién eres?\n\n' +
+        '1️⃣ *Docente o Director*\n' +
+        '2️⃣ *Estudiante*'
+      );
       return;
     }
 
