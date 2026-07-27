@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { distribucionService, reporteService, type MapaCalorDetalladoResponse, type AulaInfo, type CeldaOcupacion } from '../../services/api';
 import { StatCard } from '../common/StatCard';
 import { FiAlertTriangle, FiCheckCircle, FiClock, FiTrendingDown, FiDownload } from 'react-icons/fi';
@@ -50,6 +50,16 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
   const [agrupar, setAgrupar] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [semanaOffset, setSemanaOffset] = useState(0);
+
+  // Debounce para evitar re-renders en cada keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 300);
+  };
 
   const [vistaActiva, setVistaActiva] = useState<VistaActiva>('resumen');
   const [modalAula, setModalAula] = useState<AulaInfo | null>(null);
@@ -106,14 +116,26 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
 
   const aulasFiltradas = useMemo(() => {
     if (!data) return [];
-    if (!searchTerm) return data.aulas;
-    const term = searchTerm.toLowerCase();
-    return data.aulas.filter(a =>
-      a.codigo.toLowerCase().includes(term) ||
-      a.nombre.toLowerCase().includes(term) ||
-      a.edificio.toLowerCase().includes(term)
-    );
-  }, [data, searchTerm]);
+    if (!debouncedSearch) return data.aulas;
+    const term = debouncedSearch.toLowerCase();
+    return data.aulas.filter(a => {
+      const matchMeta =
+        a.codigo.toLowerCase().includes(term) ||
+        a.nombre.toLowerCase().includes(term) ||
+        a.edificio.toLowerCase().includes(term);
+      const matchClase = data.horas.some(hora =>
+        DIAS.some(dia => {
+          const celda = data.datos[getKey(a.id, hora, dia)];
+          return celda && (
+            celda.clase?.toLowerCase().includes(term) ||
+            celda.carrera?.toLowerCase().includes(term) ||
+            celda.docente?.toLowerCase().includes(term)
+          );
+        })
+      );
+      return matchMeta || matchClase;
+    });
+  }, [data, debouncedSearch]);
 
   const kpis = useMemo(() => {
     if (!data) return { ocupacionGlobal: 0, aulasSubutilizadas: 0, franjasCriticas: 0, topMejores: [], topPeores: [] };
@@ -294,9 +316,14 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
       <div className="flex flex-wrap items-end gap-3 p-4 bg-card rounded-2xl border border-border">
         <div className="flex flex-col gap-1 flex-1 min-w-[150px]">
           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Buscar</label>
-          <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Código, nombre o edificio..."
+          <input type="text" value={searchTerm} onChange={e => handleSearchChange(e.target.value)} placeholder="Buscar aula, materia, docente o carrera..."
             className="px-3 py-2 rounded-xl border border-border bg-background text-sm font-medium" />
         </div>
+        {debouncedSearch && (
+          <p className="text-[10px] text-muted-foreground font-medium mt-1">
+            {aulasFiltradas.length} de {data?.aulas.length || 0} aulas
+          </p>
+        )}
         {esAdmin && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Edificio</label>
@@ -650,10 +677,38 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
       {modalAula && data && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setModalAula(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            {/* Header con info del aula */}
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-black text-lg">{modalAula.nombre}</h3>
                 <p className="text-sm text-muted-foreground">{modalAula.codigo} · {modalAula.edificio} · {modalAula.capacidad} cupos · {modalAula.tipo}</p>
+                {(() => {
+                  let count = 0, libre = 0, sobrecupos = 0, clasesSet = new Set<string>();
+                  data.horas.forEach(hora => {
+                    DIAS.forEach(dia => {
+                      const celda = data.datos[getKey(modalAula.id, hora, dia)];
+                      if (celda) {
+                        count++;
+                        clasesSet.add(celda.clase);
+                        if (celda.estudiantes > celda.capacidad_aula) sobrecupos++;
+                      } else {
+                        libre++;
+                      }
+                    });
+                  });
+                  return (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                        {clasesSet.size} materias programadas
+                      </span>
+                      {sobrecupos > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">
+                          ⚠ {sobrecupos} sobrecupo{sobrecupos > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <button onClick={() => setModalAula(null)}><span className="material-symbols-outlined">close</span></button>
             </div>
@@ -681,12 +736,27 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
                         const colors = getColor(pct);
                         return (
                           <td key={dia} className={`p-1 border-r border-border/30 ${colors.bg} ${colors.border}`}>
-                            <div className="flex flex-col items-center justify-center h-8">
-                              <span className={`font-bold text-[10px] ${colors.text}`}>
-                                {pct === 0 ? '—' : `${pct}%`}
-                              </span>
-                              {celda && (
-                                <span className="text-[7px] text-muted-foreground truncate max-w-[70px]">{celda.clase}</span>
+                            <div className="flex flex-col items-center justify-center min-h-[48px] py-1">
+                              {celda ? (
+                                <>
+                                  <span className="text-[9px] font-bold text-foreground leading-tight text-center line-clamp-2 px-0.5">
+                                    {celda.clase}
+                                  </span>
+                                  <span className="text-[8px] text-muted-foreground leading-tight text-center truncate max-w-[80px]">
+                                    {celda.docente}
+                                  </span>
+                                  <span className={`text-[10px] font-black mt-0.5 ${
+                                    celda.ocupacion >= 100 ? 'text-red-600' :
+                                    celda.ocupacion >= 80 ? 'text-amber-600' : 'text-emerald-600'
+                                  }`}>
+                                    {celda.ocupacion}%
+                                  </span>
+                                  <span className="text-[7px] text-muted-foreground">
+                                    {celda.estudiantes}/{celda.capacidad_aula} est
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-[9px] text-emerald-600 font-medium">Disponible</span>
                               )}
                             </div>
                           </td>
@@ -698,31 +768,55 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
               </table>
             </div>
 
-            {/* Resumen del aula */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Leyenda de colores */}
+            <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
+              <span className="font-bold">Colores:</span>
+              <div className="flex items-center gap-1"><div className="size-2 rounded bg-emerald-100 border border-emerald-200" /> &lt;40%</div>
+              <div className="flex items-center gap-1"><div className="size-2 rounded bg-amber-100 border border-amber-300" /> 40-80%</div>
+              <div className="flex items-center gap-1"><div className="size-2 rounded bg-red-100 border border-red-300" /> &gt;80%</div>
+              <div className="flex items-center gap-1"><div className="size-2 rounded bg-emerald-50 border border-emerald-200" /> Disponible</div>
+            </div>
+
+            {/* Resumen expandido */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {(() => {
-                let total = 0, count = 0, libre = 0;
+                let total = 0, count = 0, libre = 0, sobrecupos = 0;
                 data.horas.forEach(hora => {
                   DIAS.forEach(dia => {
                     const celda = data.datos[getKey(modalAula.id, hora, dia)];
-                    if (celda) { total += celda.ocupacion; count++; }
-                    else { libre++; }
+                    if (celda) {
+                      total += celda.ocupacion;
+                      count++;
+                      if (celda.estudiantes > celda.capacidad_aula) sobrecupos++;
+                    } else {
+                      libre++;
+                    }
                   });
                 });
+                const totalPosibles = data.horas.length * DIAS.length;
                 const promedio = count > 0 ? (total / count) : 0;
+                const porcentajeGeneral = totalPosibles > 0 ? Math.round((count / totalPosibles) * 100) : 0;
                 return (
                   <>
-                    <div className="p-3 rounded-xl bg-muted/50 text-center">
-                      <p className="text-lg font-black text-foreground">{promedio === 0 ? '—' : `${promedio.toFixed(1)}%`}</p>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase">Promedio</p>
+                    <div className="p-3 rounded-xl bg-primary/5 text-center border border-primary/10">
+                      <p className="text-xl font-black text-primary">{porcentajeGeneral}%</p>
+                      <p className="text-[10px] text-primary font-bold uppercase">Utilización Semanal</p>
+                      <p className="text-[8px] text-muted-foreground">{count} de {totalPosibles} franjas</p>
                     </div>
-                    <div className="p-3 rounded-xl bg-emerald-50 text-center">
-                      <p className="text-lg font-black text-emerald-700">{libre}</p>
+                    <div className="p-3 rounded-xl bg-emerald-50 text-center border border-emerald-100">
+                      <p className="text-xl font-black text-emerald-700">{libre}</p>
                       <p className="text-[10px] text-emerald-600 font-bold uppercase">Franjas Libres</p>
+                      <p className="text-[8px] text-muted-foreground">disponibles para reserva</p>
                     </div>
-                    <div className="p-3 rounded-xl bg-primary/5 text-center">
-                      <p className="text-lg font-black text-primary">{count}</p>
-                      <p className="text-[10px] text-primary font-bold uppercase">Con Clase</p>
+                    <div className="p-3 rounded-xl bg-amber-50 text-center border border-amber-100">
+                      <p className="text-xl font-black text-amber-700">{promedio === 0 ? '—' : `${promedio.toFixed(0)}%`}</p>
+                      <p className="text-[10px] text-amber-600 font-bold uppercase">Promedio Ocupación</p>
+                      <p className="text-[8px] text-muted-foreground">de las franjas activas</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-red-50 text-center border border-red-100">
+                      <p className="text-xl font-black text-red-700">{sobrecupos}</p>
+                      <p className="text-[10px] text-red-600 font-bold uppercase">Sobrecupos</p>
+                      <p className="text-[8px] text-muted-foreground">estudiantes &gt; capacidad</p>
                     </div>
                   </>
                 );
