@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext, useMemo } from 'react';
+import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { reservaService, aulaService, espacioService } from '../../services/api';
@@ -289,16 +289,99 @@ export default function ReservaFloatingWidget() {
 
     const activasCount = misReservas.filter(r => r.estado === 'activa' || r.estado === 'pendiente_aprobacion').length;
 
+    // ── Lógica para arrastrar el botón flotante ─────────────────────────
+    const [position, setPosition] = useState<{ x: number; y: number } | null>(() => {
+        try {
+            const saved = localStorage.getItem('reserva_widget_pos');
+            if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return null;
+    });
+
+    const isDraggingRef = useRef(false);
+    const hasDraggedRef = useRef(false);
+    const dragStartRef = useRef<{ x: number; y: number; buttonX: number; buttonY: number }>({ x: 0, y: 0, buttonX: 0, buttonY: 0 });
+    const buttonRef = useRef<HTMLButtonElement>(null);
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        isDraggingRef.current = true;
+        hasDraggedRef.current = false;
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+        const rect = buttonRef.current?.getBoundingClientRect();
+        const currentX = rect ? rect.left : (window.innerWidth - 80);
+        const currentY = rect ? rect.top : (window.innerHeight - 80);
+
+        dragStartRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            buttonX: currentX,
+            buttonY: currentY,
+        };
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+        if (!isDraggingRef.current) return;
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+            hasDraggedRef.current = true;
+        }
+
+        if (hasDraggedRef.current) {
+            let newX = dragStartRef.current.buttonX + dx;
+            let newY = dragStartRef.current.buttonY + dy;
+
+            const size = 56;
+            const padding = 12;
+            newX = Math.max(padding, Math.min(window.innerWidth - size - padding, newX));
+            newY = Math.max(padding, Math.min(window.innerHeight - size - padding, newY));
+
+            setPosition({ x: newX, y: newY });
+        }
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+        if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            try {
+                (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+            } catch (err) {}
+            if (hasDraggedRef.current && position) {
+                try {
+                    localStorage.setItem('reserva_widget_pos', JSON.stringify(position));
+                } catch (e) {}
+            }
+        }
+    };
+
+    const handleButtonClick = () => {
+        if (hasDraggedRef.current) {
+            hasDraggedRef.current = false;
+            return;
+        }
+        setIsOpen(true);
+    };
+
     // ── Render ─────────────────────────────────────────────────────────────────
     return (
         <>
             <button
+                ref={buttonRef}
                 id="tour-reserva-flotante"
-                onClick={() => setIsOpen(true)}
-                className="fixed bottom-6 right-6 z-50 size-14 bg-primary text-white rounded-full shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
-                title="Reservar espacio"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onClick={handleButtonClick}
+                className={`fixed z-50 size-14 bg-primary text-white rounded-full shadow-lg shadow-primary/30 flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-105 active:scale-95 transition-transform touch-none select-none ${
+                    position ? '' : 'bottom-6 right-6'
+                }`}
+                style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
+                title="Mantén presionado para mover · Clic para abrir"
             >
-                <CalendarPlus className="size-6" />
+                <CalendarPlus className="size-6 pointer-events-none" />
             </button>
 
             {isOpen && createPortal(

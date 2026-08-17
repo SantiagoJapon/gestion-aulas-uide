@@ -120,16 +120,16 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
     const term = debouncedSearch.toLowerCase();
     return data.aulas.filter(a => {
       const matchMeta =
-        a.codigo.toLowerCase().includes(term) ||
-        a.nombre.toLowerCase().includes(term) ||
-        a.edificio.toLowerCase().includes(term);
+        (a.codigo || '').toLowerCase().includes(term) ||
+        (a.nombre || '').toLowerCase().includes(term) ||
+        (a.edificio || '').toLowerCase().includes(term);
       const matchClase = data.horas.some(hora =>
         DIAS.some(dia => {
           const celda = data.datos[getKey(a.id, hora, dia)];
           return celda && (
-            celda.clase?.toLowerCase().includes(term) ||
-            celda.carrera?.toLowerCase().includes(term) ||
-            celda.docente?.toLowerCase().includes(term)
+            (celda.clase || '').toLowerCase().includes(term) ||
+            (celda.carrera || '').toLowerCase().includes(term) ||
+            (celda.docente || '').toLowerCase().includes(term)
           );
         })
       );
@@ -501,16 +501,32 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
         <div className="relative overflow-auto rounded-2xl border border-border bg-card shadow-sm max-h-[70vh]" onMouseLeave={() => setTooltip(null)}>
           <table className="w-full border-collapse text-xs">
             <thead>
-              <tr className="sticky top-0 z-20 bg-muted border-b border-border">
-                <th className="sticky left-0 z-30 bg-muted p-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border min-w-[80px]">
-                  Hora \ Aula
-                </th>
-                {aulasFiltradas.map(aula => (
-                  <th key={aula.id} className="p-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border/50 min-w-[90px] max-w-[120px] cursor-pointer hover:bg-muted/80"
-                    onClick={() => handleOpenModal(aula)}>
-                    <div className="truncate">{aula.codigo}</div>
-                    <div className="text-[8px] font-normal text-muted-foreground/60">{aula.capacidad} cupos · {promedioPorAula.get(aula.id) || 0}%</div>
+              {data.dias.length > 1 && (
+                <tr className="sticky top-0 z-20 bg-muted border-b border-border">
+                  <th rowSpan={2} className="sticky left-0 z-30 bg-muted p-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border min-w-[80px]">
+                    Hora \ Aula
                   </th>
+                  {data.dias.map(dia => (
+                    <th key={dia} colSpan={aulasFiltradas.length} className="p-1.5 text-center text-xs font-black text-primary border-r-2 border-border/80 uppercase tracking-wider bg-muted/90">
+                      {dia}
+                    </th>
+                  ))}
+                </tr>
+              )}
+              <tr className={`${data.dias.length > 1 ? 'sticky top-[31px] z-20' : 'sticky top-0 z-20'} bg-muted border-b border-border`}>
+                {data.dias.length === 1 && (
+                  <th className="sticky left-0 z-30 bg-muted p-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border min-w-[80px]">
+                    Hora \ Aula
+                  </th>
+                )}
+                {data.dias.map(dia => (
+                  aulasFiltradas.map(aula => (
+                    <th key={`${dia}-${aula.id}`} className="p-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border/50 min-w-[90px] max-w-[120px] cursor-pointer hover:bg-muted/80"
+                      onClick={() => handleOpenModal(aula)}>
+                      <div className="truncate">{aula.codigo}</div>
+                      <div className="text-[8px] font-normal text-muted-foreground/60">{aula.capacidad} cupos · {promedioPorAula.get(aula.id) || 0}%</div>
+                    </th>
+                  ))
                 ))}
               </tr>
             </thead>
@@ -523,14 +539,15 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
                       : `${String(hGroup[0]).padStart(2, '0')}:00`}
                   </td>
                   {data.dias.map(dia => (
-                    aulasFiltradas.map(aula => {
+                    aulasFiltradas.map((aula, ai) => {
                       const celda = getOcupacion(aula.id, hGroup.length === 1 ? hGroup[0] : hGroup, dia);
                       const pct = celda?.ocupacion ?? 0;
                       const colors = getColor(pct);
+                      const isLastAulaOfDay = ai === aulasFiltradas.length - 1;
                       return (
                         <td
                           key={`${dia}-${aula.id}-${hi}`}
-                          className={`p-1 border-r border-border/30 relative ${colors.bg} ${colors.border} border-b cursor-pointer`}
+                          className={`p-1 ${isLastAulaOfDay ? 'border-r-2 border-r-border/80' : 'border-r border-border/30'} relative ${colors.bg} ${colors.border} border-b cursor-pointer`}
                           onMouseEnter={(e) => {
                             const rect = (e.target as HTMLElement).getBoundingClientRect();
                             setTooltip({ x: rect.left, y: rect.top - 10, aula, hora: hGroup[0], dia, celda });

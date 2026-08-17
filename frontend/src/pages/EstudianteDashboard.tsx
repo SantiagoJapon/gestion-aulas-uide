@@ -36,7 +36,7 @@ const getStatusClass = (start: string, end: string) => {
 
 const TimelineClases = ({ clases, filter }: { clases: any[], filter?: string }) => {
   const filtered = filter
-    ? clases.filter(c => c.materia.toLowerCase().includes(filter.toLowerCase()))
+    ? clases.filter(c => (c.materia || '').toLowerCase().includes(filter.toLowerCase()))
     : clases;
 
   if (filtered.length === 0) {
