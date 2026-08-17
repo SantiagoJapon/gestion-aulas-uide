@@ -91,11 +91,11 @@ exports.misNotificaciones = async (req, res) => {
             if (carreraIds.length > 0) {
                 whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: { [Op.in]: carreraIds } });
             }
-        } else if (rol === 'director' && req.usuario.carrera_director) {
-            // Director: buscar carrera por nombre en carrera_director
-            const carrera = await Carrera.findOne({ where: { carrera: req.usuario.carrera_director } });
-            if (carrera) {
-                whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: carrera.id });
+        } else if (rol === 'director') {
+            // Director: notificaciones de CUALQUIERA de sus carreras asignadas
+            const carreraIds = req.usuario.carreraIds || [];
+            if (carreraIds.length > 0) {
+                whereClause[Op.or].push({ tipo: 'CARRERA', carrera_id: { [Op.in]: carreraIds } });
             }
         } else if (rol === 'profesor' || rol === 'docente') {
             // Profesor/Docente: buscar su carrera_id via la tabla docentes (vinculada por usuario_id)

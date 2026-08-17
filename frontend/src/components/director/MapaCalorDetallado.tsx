@@ -675,155 +675,191 @@ export default function MapaCalorDetallado({ carreraId, esAdmin, vistaCompacta }
 
       {/* Modal: Detalle de Aula */}
       {modalAula && data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setModalAula(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            {/* Header con info del aula */}
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setModalAula(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-5 border border-border" onClick={e => e.stopPropagation()}>
+            
+            {/* Header del Modal */}
+            <div className="flex items-start justify-between border-b border-border pb-4">
               <div>
-                <h3 className="font-black text-lg">{modalAula.nombre}</h3>
-                <p className="text-sm text-muted-foreground">{modalAula.codigo} · {modalAula.edificio} · {modalAula.capacidad} cupos · {modalAula.tipo}</p>
-                {(() => {
-                  let count = 0, libre = 0, sobrecupos = 0, clasesSet = new Set<string>();
-                  data.horas.forEach(hora => {
-                    DIAS.forEach(dia => {
-                      const celda = data.datos[getKey(modalAula.id, hora, dia)];
-                      if (celda) {
-                        count++;
-                        clasesSet.add(celda.clase);
-                        if (celda.estudiantes > celda.capacidad_aula) sobrecupos++;
-                      } else {
-                        libre++;
-                      }
-                    });
-                  });
-                  return (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
-                        {clasesSet.size} materias programadas
-                      </span>
-                      {sobrecupos > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">
-                          ⚠ {sobrecupos} sobrecupo{sobrecupos > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
+                <div className="flex items-center gap-3">
+                  <h3 className="font-black text-2xl text-foreground tracking-tight">{modalAula.nombre}</h3>
+                  <span className="px-3 py-1 text-xs font-extrabold rounded-full bg-primary/10 text-primary border border-primary/20">
+                    {modalAula.codigo}
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-muted-foreground mt-1">
+                  Edificio: <strong className="text-foreground">{modalAula.edificio}</strong> · Capacidad: <strong className="text-foreground">{modalAula.capacidad} cupos</strong> · Tipo: <strong className="text-foreground">{modalAula.tipo}</strong>
+                </p>
               </div>
-              <button onClick={() => setModalAula(null)}><span className="material-symbols-outlined">close</span></button>
+              <button 
+                onClick={() => setModalAula(null)} 
+                className="p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Cerrar modal"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
             </div>
+
+            {/* Banner Informativo de Contexto */}
+            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/15 flex items-start gap-3">
+              <span className="material-symbols-outlined text-primary text-xl mt-0.5 shrink-0">info</span>
+              <div className="text-xs space-y-1">
+                <p className="font-bold text-primary">¿Para qué sirve esta vista de ocupación semanal?</p>
+                <p className="text-muted-foreground leading-relaxed">
+                  Esta Hoja de Vida evalúa la eficiencia de uso del espacio. Utilice este mapa para <strong>detectar franjas libres</strong> para reserva de eventos, 
+                  identificar <strong>sobrecupos</strong> (clases con más alumnos que la capacidad del aula) y reconocer materias con <strong>baja ocupación</strong> para optimizar la distribución académica.
+                </p>
+              </div>
+            </div>
+
+            {/* Tarjetas Ejecutivas KPIs en la parte superior */}
+            {(() => {
+              let total = 0, count = 0, libre = 0, sobrecupos = 0;
+              data.horas.forEach(hora => {
+                DIAS.forEach(dia => {
+                  const celda = data.datos[getKey(modalAula.id, hora, dia)];
+                  if (celda) {
+                    total += celda.ocupacion;
+                    count++;
+                    if (celda.estudiantes > celda.capacidad_aula) sobrecupos++;
+                  } else {
+                    libre++;
+                  }
+                });
+              });
+              const totalPosibles = data.horas.length * DIAS.length;
+              const promedio = count > 0 ? (total / count) : 0;
+              const porcentajeGeneral = totalPosibles > 0 ? Math.round((count / totalPosibles) * 100) : 0;
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/15 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-primary">
+                      <span className="text-[10px] font-black uppercase tracking-wider">Utilización Semanal</span>
+                      <span className="material-symbols-outlined text-base">percent</span>
+                    </div>
+                    <p className="text-2xl font-black text-primary mt-2">{porcentajeGeneral}%</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{count} de {totalPosibles} franjas activas</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-emerald-700">
+                      <span className="text-[10px] font-black uppercase tracking-wider">Franjas Libres</span>
+                      <span className="material-symbols-outlined text-base">event_available</span>
+                    </div>
+                    <p className="text-2xl font-black text-emerald-700 mt-2">{libre}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">Disponibles para reserva instantánea</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/20 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-amber-700">
+                      <span className="text-[10px] font-black uppercase tracking-wider">Promedio Ocupación</span>
+                      <span className="material-symbols-outlined text-base">monitoring</span>
+                    </div>
+                    <p className="text-2xl font-black text-amber-700 mt-2">{promedio === 0 ? '—' : `${promedio.toFixed(0)}%`}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">De las horas en las que hay clase</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/20 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-red-700">
+                      <span className="text-[10px] font-black uppercase tracking-wider">Alertas / Sobrecupos</span>
+                      <span className="material-symbols-outlined text-base">warning</span>
+                    </div>
+                    <p className="text-2xl font-black text-red-700 mt-2">{sobrecupos}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">Clases con alumnos &gt; capacidad</p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Horario semanal del aula */}
-            <div className="overflow-auto rounded-xl border border-border">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-muted">
-                    <th className="p-2 text-left text-[10px] font-bold text-muted-foreground border-r border-border">Hora</th>
-                    {DIAS.map(d => (
-                      <th key={d} className="p-2 text-center text-[10px] font-bold text-muted-foreground border-r border-border/50">{d.substring(0, 3)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.horas.map(hora => (
-                    <tr key={hora} className="border-b border-border/30 hover:bg-muted/20">
-                      <td className="p-2 text-[10px] font-bold text-muted-foreground border-r border-border whitespace-nowrap">
-                        {String(hora).padStart(2, '0')}:00
-                      </td>
-                      {DIAS.map(dia => {
-                        const celda = data.datos[getKey(modalAula.id, hora, dia)];
-                        const pct = celda?.ocupacion ?? 0;
-                        const colors = getColor(pct);
-                        return (
-                          <td key={dia} className={`p-1 border-r border-border/30 ${colors.bg} ${colors.border}`}>
-                            <div className="flex flex-col items-center justify-center min-h-[48px] py-1">
-                              {celda ? (
-                                <>
-                                  <span className="text-[9px] font-bold text-foreground leading-tight text-center line-clamp-2 px-0.5">
-                                    {celda.clase}
-                                  </span>
-                                  <span className="text-[8px] text-muted-foreground leading-tight text-center truncate max-w-[80px]">
-                                    {celda.docente}
-                                  </span>
-                                  <span className={`text-[10px] font-black mt-0.5 ${
-                                    celda.ocupacion >= 100 ? 'text-red-600' :
-                                    celda.ocupacion >= 80 ? 'text-amber-600' : 'text-emerald-600'
-                                  }`}>
-                                    {celda.ocupacion}%
-                                  </span>
-                                  <span className="text-[7px] text-muted-foreground">
-                                    {celda.estudiantes}/{celda.capacidad_aula} est
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-[9px] text-emerald-600 font-medium">Disponible</span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="overflow-x-auto max-h-[50vh]">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="sticky top-0 z-20 bg-muted/90 backdrop-blur-sm border-b border-border">
+                      <th className="p-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border min-w-[70px]">
+                        Hora
+                      </th>
+                      {DIAS.map(d => (
+                        <th key={d} className="p-2.5 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border/50">
+                          {d}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.horas.map(hora => (
+                      <tr key={hora} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
+                        <td className="p-2 text-[10px] font-bold text-muted-foreground border-r border-border whitespace-nowrap bg-muted/30">
+                          {String(hora).padStart(2, '0')}:00
+                        </td>
+                        {DIAS.map(dia => {
+                          const celda = data.datos[getKey(modalAula.id, hora, dia)];
+                          const pct = celda?.ocupacion ?? 0;
+                          const esSobrecupo = celda && celda.estudiantes > celda.capacidad_aula;
+
+                          return (
+                            <td key={dia} className="p-1 border-r border-border/30 align-top">
+                              <div className="flex flex-col items-center justify-center min-h-[54px] p-1.5 rounded-xl transition-all">
+                                {celda ? (
+                                  <>
+                                    <span className="text-[10px] font-bold text-foreground leading-snug text-center line-clamp-2">
+                                      {celda.clase}
+                                    </span>
+                                    <span className="text-[8px] font-medium text-muted-foreground leading-tight text-center truncate max-w-[90px] mt-0.5">
+                                      {celda.docente}
+                                    </span>
+                                    <div className="mt-1.5 flex items-center gap-1 flex-wrap justify-center">
+                                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-tight ${
+                                        esSobrecupo 
+                                          ? 'bg-red-100 text-red-700 border border-red-200' 
+                                          : pct >= 80 
+                                            ? 'bg-red-50 text-red-600 border border-red-100'
+                                            : pct >= 40 
+                                              ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      }`}>
+                                        {pct}%
+                                      </span>
+                                      <span className="text-[8px] text-muted-foreground font-semibold">
+                                        ({celda.estudiantes}/{celda.capacidad_aula} est)
+                                      </span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex flex-col items-center gap-0.5 text-emerald-600/70 hover:text-emerald-700 cursor-pointer">
+                                    <span className="material-symbols-outlined text-sm">add_circle_outline</span>
+                                    <span className="text-[9px] font-semibold">Disponible</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Leyenda de colores */}
-            <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
-              <span className="font-bold">Colores:</span>
-              <div className="flex items-center gap-1"><div className="size-2 rounded bg-emerald-100 border border-emerald-200" /> &lt;40%</div>
-              <div className="flex items-center gap-1"><div className="size-2 rounded bg-amber-100 border border-amber-300" /> 40-80%</div>
-              <div className="flex items-center gap-1"><div className="size-2 rounded bg-red-100 border border-red-300" /> &gt;80%</div>
-              <div className="flex items-center gap-1"><div className="size-2 rounded bg-emerald-50 border border-emerald-200" /> Disponible</div>
+            {/* Leyenda explicativa al pie */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] text-muted-foreground pt-2 border-t border-border">
+              <div className="flex items-center gap-3">
+                <span className="font-bold text-foreground uppercase tracking-wider">Estados:</span>
+                <div className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-emerald-500" /> &lt;40% (Baja ocupación)</div>
+                <div className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-amber-500" /> 40%-80% (Óptima)</div>
+                <div className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-red-500" /> &gt;80% (Alta)</div>
+                <div className="flex items-center gap-1.5"><span className="px-1 py-0.5 rounded bg-red-100 text-red-700 font-bold text-[8px]">Sobrecupo</span> &gt; Capacidad</div>
+              </div>
+              <button 
+                onClick={() => setModalAula(null)} 
+                className="w-full sm:w-auto px-6 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl font-bold text-xs transition-colors shadow-sm"
+              >
+                Cerrar Detalle
+              </button>
             </div>
-
-            {/* Resumen expandido */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {(() => {
-                let total = 0, count = 0, libre = 0, sobrecupos = 0;
-                data.horas.forEach(hora => {
-                  DIAS.forEach(dia => {
-                    const celda = data.datos[getKey(modalAula.id, hora, dia)];
-                    if (celda) {
-                      total += celda.ocupacion;
-                      count++;
-                      if (celda.estudiantes > celda.capacidad_aula) sobrecupos++;
-                    } else {
-                      libre++;
-                    }
-                  });
-                });
-                const totalPosibles = data.horas.length * DIAS.length;
-                const promedio = count > 0 ? (total / count) : 0;
-                const porcentajeGeneral = totalPosibles > 0 ? Math.round((count / totalPosibles) * 100) : 0;
-                return (
-                  <>
-                    <div className="p-3 rounded-xl bg-primary/5 text-center border border-primary/10">
-                      <p className="text-xl font-black text-primary">{porcentajeGeneral}%</p>
-                      <p className="text-[10px] text-primary font-bold uppercase">Utilización Semanal</p>
-                      <p className="text-[8px] text-muted-foreground">{count} de {totalPosibles} franjas</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-emerald-50 text-center border border-emerald-100">
-                      <p className="text-xl font-black text-emerald-700">{libre}</p>
-                      <p className="text-[10px] text-emerald-600 font-bold uppercase">Franjas Libres</p>
-                      <p className="text-[8px] text-muted-foreground">disponibles para reserva</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-amber-50 text-center border border-amber-100">
-                      <p className="text-xl font-black text-amber-700">{promedio === 0 ? '—' : `${promedio.toFixed(0)}%`}</p>
-                      <p className="text-[10px] text-amber-600 font-bold uppercase">Promedio Ocupación</p>
-                      <p className="text-[8px] text-muted-foreground">de las franjas activas</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-red-50 text-center border border-red-100">
-                      <p className="text-xl font-black text-red-700">{sobrecupos}</p>
-                      <p className="text-[10px] text-red-600 font-bold uppercase">Sobrecupos</p>
-                      <p className="text-[8px] text-muted-foreground">estudiantes &gt; capacidad</p>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <button onClick={() => setModalAula(null)} className="w-full py-2 bg-primary text-primary-foreground rounded-xl font-bold text-sm">Cerrar</button>
           </div>
         </div>
       )}

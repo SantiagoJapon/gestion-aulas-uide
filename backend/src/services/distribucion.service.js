@@ -321,7 +321,19 @@ class DistribucionService {
   async obtenerHorario(carreraId = null) {
     try {
       const whereClause = {};
-      if (carreraId) {
+      if (Array.isArray(carreraId)) {
+        // Lista de ids o nombres (ej: director asignado a varias carreras)
+        const idsNumericos = carreraId.filter((c) => !isNaN(c));
+        const nombresDirectos = carreraId.filter((c) => isNaN(c));
+        let nombres = [...nombresDirectos];
+        if (idsNumericos.length > 0) {
+          const carreras = await Carrera.findAll({ where: { id: idsNumericos }, attributes: ['carrera'], raw: true });
+          nombres = nombres.concat(carreras.map((c) => c.carrera));
+        }
+        if (nombres.length > 0) {
+          whereClause.carrera = { [Op.in]: nombres };
+        }
+      } else if (carreraId) {
         if (!isNaN(carreraId)) {
           const carrera = await Carrera.findByPk(carreraId);
           if (carrera) {

@@ -92,7 +92,7 @@ const DirectorDashboard = () => {
   };
 
   const [uploading, setUploading] = useState(false);
-  const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, sobrecupos: 0, porcentaje_completado: 0 });
+  const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, conflictos: 0, sobrecupos: 0, porcentaje_completado: 0 });
   const [misClases, setMisClases] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [editingClase, setEditingClase] = useState<any>(null);
@@ -117,9 +117,13 @@ const DirectorDashboard = () => {
       ]);
 
       if (resStats.success) {
+        // getEstado() (global) no calcula conflictos/sobrecupo — se recalculan
+        // aquí a partir de las clases ya evaluadas por getMiDistribucion(),
+        // que sí marca cada clase con su estado real (conflicto/sobrecupo).
         const clases = resHorario.success ? (resHorario.clases || []) : [];
         setStats({
           ...resStats.estadisticas,
+          conflictos: clases.filter((c: any) => c.estado === 'conflicto').length,
           sobrecupos: clases.filter((c: any) => c.sobrecupo).length
         });
       }
@@ -203,7 +207,7 @@ const DirectorDashboard = () => {
                 { label: 'Clases Totales', value: stats.total_clases, icon: 'analytics', color: 'blue', desc: 'Carga académica' },
                 { label: 'Asignadas', value: stats.clases_asignadas, icon: 'verified', color: 'emerald', desc: 'Con aula física' },
                 { label: 'Pendientes', value: stats.clases_pendientes, icon: 'clock_loader_40', color: 'orange', desc: 'Por distribuir' },
-                { label: 'Conflictos', value: (stats as any).conflictos || 0, icon: 'warning', color: 'red', desc: 'Solapamientos' },
+                { label: 'Conflictos', value: stats.conflictos, icon: 'warning', color: 'red', desc: 'Solapamientos' },
                 { label: 'Sobrecupo', value: stats.sobrecupos, icon: 'event_seat', color: 'amber', desc: 'Capacidad excedida' },
                 { label: 'Eficiencia', value: `${stats.porcentaje_completado}%`, icon: 'query_stats', color: 'purple', desc: 'Meta institucional' }
               ].map((kpi, i) => (
@@ -236,7 +240,52 @@ const DirectorDashboard = () => {
               </DashboardWidget>
             </div>
 
-            {/* 3. PANEL DE ALERTAS DE SOBRECUPO */}
+            {/* 3a. PANEL DE ALERTAS DE CONFLICTOS DE HORARIO */}
+            {misClases.filter((c: any) => c.estado === 'conflicto').length > 0 && (
+              <div className="rounded-3xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 overflow-hidden">
+                <div className="px-6 py-4 border-b border-red-200 dark:border-red-900/50 flex items-center gap-3">
+                  <div className="size-9 rounded-2xl bg-red-500/15 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-red-600 text-xl">warning</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-red-800 dark:text-red-300 uppercase tracking-widest">Conflictos de Horario</h3>
+                    <p className="text-[10px] text-red-600/80 dark:text-red-400/60 font-medium">
+                      {misClases.filter((c: any) => c.estado === 'conflicto').length} clase(s) comparten la misma aula en un horario solapado — corrige reasignando una de ellas
+                    </p>
+                  </div>
+                </div>
+                <div className="divide-y divide-red-100 dark:divide-red-900/30">
+                  {misClases
+                    .filter((c: any) => c.estado === 'conflicto')
+                    .sort((a: any, b: any) => `${a.aula_asignada}${a.dia}${a.hora_inicio}`.localeCompare(`${b.aula_asignada}${b.dia}${b.hora_inicio}`))
+                    .map((clase: any, i: number) => (
+                      <div key={i} className="px-6 py-4 flex items-center gap-4 hover:bg-red-100/40 dark:hover:bg-red-900/20 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-foreground truncate">{clase.materia}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                            {clase.docente || 'Sin docente'} · Ciclo {clase.ciclo}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right">
+                            <p className="text-[10px] font-black text-red-700 dark:text-red-400 uppercase">{clase.aula_asignada}</p>
+                            <p className="text-[10px] text-muted-foreground font-medium">{clase.dia} · {clase.hora_inicio}–{clase.hora_fin}</p>
+                          </div>
+                          <button
+                            onClick={() => { setEditingClase(clase); setIsEditModalOpen(true); }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-[10px] font-black uppercase transition-colors shadow-sm"
+                          >
+                            <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                            Reasignar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3b. PANEL DE ALERTAS DE SOBRECUPO */}
             {misClases.filter((c: any) => c.sobrecupo).length > 0 && (
               <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 overflow-hidden">
                 <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/50 flex items-center gap-3">
@@ -542,6 +591,12 @@ const DirectorDashboard = () => {
             <div>
               <IncidenciasView />
             </div>
+          </div>
+        );
+      case 'incidencias':
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <IncidenciasView />
           </div>
         );
       default:

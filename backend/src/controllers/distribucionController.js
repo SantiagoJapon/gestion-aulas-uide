@@ -71,7 +71,11 @@ const getEstadoDistribucion = async (req, res) => {
       LEFT JOIN LATERAL (
         SELECT u.nombre, u.email
         FROM usuarios u
-        WHERE u.carrera_director = ca.carrera AND u.rol = 'director'
+        WHERE u.rol = 'director'
+          AND (
+            u.id IN (SELECT dc.usuario_id FROM director_carreras dc WHERE dc.carrera_id = ca.id)
+            OR u.carrera_director = ca.carrera
+          )
         LIMIT 1
       ) dir ON true
       WHERE ca.activa = true ${carrera_id && !isNaN(carrera_id) ? ' AND ca.id = :carrera_id' : ''}
@@ -120,7 +124,23 @@ const ejecutarDistribucionLocal = async (req, res) => {
   try {
     console.log('🎯 Ejecutando distribución de aulas (algoritmo local)...');
 
-    const carreraId = req.query.carrera_id || req.body.carrera_id;
+    let carreraId = req.query.carrera_id || req.body.carrera_id;
+    const usuario = req.usuario;
+
+    // Seguridad: un director solo puede ejecutar la distribución sobre
+    // alguna de sus propias carreras (el algoritmo opera sobre una a la vez).
+    if (usuario && usuario.rol === 'director') {
+      const carreraIds = usuario.carreraIds || [];
+      if (carreraIds.length === 0) {
+        return res.status(403).json({ success: false, mensaje: 'No tienes ninguna carrera asignada' });
+      }
+      const solicitadoNum = carreraId ? parseInt(carreraId) : null;
+      if (solicitadoNum && !carreraIds.includes(solicitadoNum)) {
+        return res.status(403).json({ success: false, mensaje: 'No tienes permiso para distribuir esta carrera' });
+      }
+      carreraId = solicitadoNum || carreraIds[0];
+    }
+
     const resultado = await distribucionService.ejecutarDistribucion(carreraId);
     res.json(resultado);
   } catch (error) {
@@ -145,9 +165,9 @@ const obtenerHorario = async (req, res) => {
     const usuario = req.usuario;
     let carreraId = req.query.carrera_id;
 
-    // Si es director, solo puede ver su carrera
-    if (usuario.rol === 'director' && usuario.carrera_director) {
-      carreraId = usuario.carrera_director;
+    // Si es director, solo puede ver sus carreras asignadas (soporta varias)
+    if (usuario.rol === 'director') {
+      carreraId = usuario.carreraIds || [];
     }
 
     const horario = await distribucionService.obtenerHorario(carreraId);
@@ -193,18 +213,29 @@ const obtenerMapaCalor = async (req, res) => {
   try {
     const usuario = req.usuario;
     let carreraId = req.query.carrera_id;
+    let carreraIds = null;
 
-    if (usuario.rol === 'director' && usuario.carrera_director) {
-      carreraId = usuario.carrera_director;
+    if (usuario.rol === 'director') {
+      carreraIds = usuario.carreraIds || [];
     }
 
     let whereClause = '';
-    if (carreraId) {
+    const replacements = {};
+    if (carreraIds) {
+      // Director: puede tener 0, 1 o varias carreras asignadas
+      if (carreraIds.length > 0) {
+        whereClause = 'AND c.carrera_id IN (:carrera_ids)';
+        replacements.carrera_ids = carreraIds;
+      } else {
+        whereClause = 'AND 1=0';
+      }
+    } else if (carreraId) {
       if (!isNaN(carreraId)) {
         whereClause = 'AND c.carrera_id = :carrera_id';
       } else {
         whereClause = 'AND c.carrera = :carrera_id';
       }
+      replacements.carrera_id = carreraId;
     }
 
     const clases = await sequelize.query(`
@@ -217,7 +248,7 @@ const obtenerMapaCalor = async (req, res) => {
       WHERE c.aula_asignada IS NOT NULL ${whereClause}
       ORDER BY c.dia, c.hora_inicio
     `, {
-      replacements: { carrera_id: carreraId },
+      replacements,
       type: QueryTypes.SELECT
     });
 
@@ -330,14 +361,18 @@ const obtenerMapaCalorDetallado = async (req, res) => {
   try {
     const usuario = req.usuario;
     let carreraId = req.query.carrera_id;
+    const esDirector = usuario.rol === 'director';
+    const carreraIdsDirector = esDirector ? (usuario.carreraIds || []) : null;
+    const carreraNombresDirector = esDirector ? (usuario.carreraNombres || []) : null;
     const edificio = req.query.edificio;
     const capacidadMinima = parseInt(req.query.capacidad_minima) || 0;
     const diasParam = req.query.dias; // "Lunes,Martes,Miercoles"
     const franja = req.query.franja; // "manana" | "tarde" | "noche" | ""
 
-    // Forzar carrera si es director
-    if (usuario.rol === 'director' && usuario.carrera_director) {
-      carreraId = usuario.carrera_director;
+    // Si es director sin carrera_id explícito, ya no forzamos un solo valor:
+    // usamos directamente sus listas de ids/nombres más abajo.
+    if (esDirector) {
+      carreraId = null;
     }
 
     const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -365,8 +400,20 @@ const obtenerMapaCalorDetallado = async (req, res) => {
       replacements.capacidad_minima = capacidadMinima;
     }
 
-    // Si es director, obtener aulas de su carrera
-    if (carreraId) {
+    // Si es director, obtener aulas disponibles para CUALQUIERA de sus carreras
+    if (esDirector) {
+      if (carreraNombresDirector.length > 0) {
+        whereAula += ` AND (a.restriccion_carrera IS NULL OR ${carreraNombresDirector
+          .map((_, i) => `a.restriccion_carrera LIKE '%' || :carrera_busqueda_${i} || '%'`)
+          .join(' OR ')})`;
+        carreraNombresDirector.forEach((nombre, i) => {
+          replacements[`carrera_busqueda_${i}`] = nombre;
+        });
+      } else {
+        // Director sin carreras asignadas: no debe ver ninguna aula
+        whereAula += ' AND 1=0';
+      }
+    } else if (carreraId) {
       whereAula += ` AND (a.restriccion_carrera IS NULL OR a.restriccion_carrera LIKE '%' || :carrera_busqueda || '%')`;
       replacements.carrera_busqueda = String(carreraId);
     }
@@ -387,6 +434,9 @@ const obtenerMapaCalorDetallado = async (req, res) => {
 
     // 2) Obtener clases con aula_asignada en esas aulas
     const aulaIds = aulas.map(a => a.id);
+    const filtroCarreraClases = esDirector
+      ? (carreraIdsDirector.length > 0 ? 'AND c.carrera_id IN (:carreraIds)' : 'AND 1=0')
+      : (carreraId && !isNaN(Number(carreraId)) ? 'AND c.carrera_id = :carreraId' : '');
     const clases = await sequelize.query(`
       SELECT
         c.id, c.materia, c.carrera, c.dia, c.hora_inicio, c.hora_fin,
@@ -396,10 +446,14 @@ const obtenerMapaCalorDetallado = async (req, res) => {
       JOIN aulas a ON a.codigo = c.aula_asignada
       WHERE a.id IN (:aulaIds)
         AND c.aula_asignada IS NOT NULL
-      ${carreraId && !isNaN(Number(carreraId)) ? 'AND c.carrera_id = :carreraId' : ''}
+      ${filtroCarreraClases}
       ORDER BY c.dia, c.hora_inicio
     `, {
-      replacements: { aulaIds, ...(carreraId && !isNaN(Number(carreraId)) ? { carreraId: Number(carreraId) } : {}) },
+      replacements: {
+        aulaIds,
+        ...(esDirector && carreraIdsDirector.length > 0 ? { carreraIds: carreraIdsDirector } : {}),
+        ...(!esDirector && carreraId && !isNaN(Number(carreraId)) ? { carreraId: Number(carreraId) } : {})
+      },
       type: QueryTypes.SELECT
     });
 
@@ -526,19 +580,35 @@ const getClasesDistribucion = async (req, res) => {
       }
     }
 
-    // Agregar estado a cada clase
-    const clasesConEstado = clases.map(c => ({
-      ...c,
-      materia: fixEncoding(c.materia),
-      carrera: fixEncoding(c.carrera),
-      docente: fixEncoding(c.docente),
-      estado: !c.aula_asignada ? 'pendiente' : conflictos.has(c.id) ? 'conflicto' : 'asignada'
-    }));
+    // Agregar estado a cada clase (incluye sobrecupo, igual que getMiDistribucion)
+    const clasesConEstado = clases.map(c => {
+      const numEst = c.num_estudiantes || 0;
+      const capAula = c.aula_capacidad || 0;
+      const esSobrecupo = c.aula_asignada && capAula > 0 && numEst > capAula;
+      const porcentajeUso = capAula > 0 ? Math.round((numEst / capAula) * 100) : null;
+
+      let estado;
+      if (!c.aula_asignada) estado = 'pendiente';
+      else if (conflictos.has(c.id)) estado = 'conflicto';
+      else if (esSobrecupo) estado = 'sobrecupo';
+      else estado = 'asignada';
+
+      return {
+        ...c,
+        materia: fixEncoding(c.materia),
+        carrera: fixEncoding(c.carrera),
+        docente: fixEncoding(c.docente),
+        sobrecupo: !!esSobrecupo,
+        porcentaje_uso: porcentajeUso,
+        estado
+      };
+    });
 
     const totalClases = clases.length;
     const asignadas = clases.filter(c => c.aula_asignada).length;
     const pendientes = totalClases - asignadas;
     const totalConflictos = conflictos.size;
+    const totalSobrecupos = clasesConEstado.filter(c => c.sobrecupo).length;
 
     res.json({
       success: true,
@@ -548,6 +618,7 @@ const getClasesDistribucion = async (req, res) => {
         asignadas,
         pendientes,
         conflictos: totalConflictos,
+        sobrecupos: totalSobrecupos,
         porcentaje_completado: totalClases > 0 ? Math.round((asignadas / totalClases) * 100) : 0
       }
     });
@@ -614,21 +685,62 @@ const updateClase = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Clase no encontrada' });
     }
 
-    // Seguridad: Si es director, validar que la clase sea de su carrera
-    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+    // Seguridad: Si es director, validar que la clase pertenezca a alguna de sus carreras
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(clase.carrera_id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para modificar esta clase' });
     }
 
+    // Formatear horas a formato 24h HH:MM:SS
+    const formatTime = (t) => {
+      if (!t) return null;
+      let str = String(t).trim();
+      const match12 = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)?$/i);
+      if (match12) {
+        let hrs = parseInt(match12[1], 10);
+        const mins = match12[2];
+        const ampm = match12[4];
+        if (ampm) {
+          const isPM = ampm.toLowerCase().includes('p');
+          if (isPM && hrs < 12) hrs += 12;
+          if (!isPM && hrs === 12) hrs = 0;
+        }
+        return `${String(hrs).padStart(2, '0')}:${mins}:00`;
+      }
+      return str;
+    };
+
+    const hInicio = formatTime(hora_inicio) || clase.hora_inicio;
+    const hFin = formatTime(hora_fin) || clase.hora_fin;
+    const diaClase = dia || clase.dia;
+    const numEst = (num_estudiantes !== undefined && num_estudiantes !== null && !isNaN(num_estudiantes)) ? Number(num_estudiantes) : clase.num_estudiantes;
+
     // Actualizar la clase
     await sequelize.query(`
       UPDATE clases
-      SET materia = $1, dia = $2, hora_inicio = $3, hora_fin = $4,
-          aula_asignada = $5, docente = $6, num_estudiantes = $7,
-          ciclo = COALESCE($8, ciclo), paralelo = COALESCE($9, paralelo)
+      SET materia = COALESCE(NULLIF($1, ''), materia),
+          dia = $2,
+          hora_inicio = $3,
+          hora_fin = $4,
+          aula_asignada = $5,
+          docente = COALESCE(NULLIF($6, ''), docente),
+          num_estudiantes = $7,
+          ciclo = COALESCE(NULLIF($8, ''), ciclo),
+          paralelo = COALESCE(NULLIF($9, ''), paralelo)
       WHERE id = $10
     `, {
-      bind: [materia, dia, hora_inicio, hora_fin, aula_asignada, docente, num_estudiantes, ciclo || null, paralelo || null, id],
+      bind: [
+        materia || null,
+        diaClase,
+        hInicio,
+        hFin,
+        aula_asignada || null,
+        docente || null,
+        numEst,
+        ciclo || null,
+        paralelo || null,
+        id
+      ],
       type: QueryTypes.UPDATE,
       transaction
     });
@@ -642,19 +754,31 @@ const updateClase = async (req, res) => {
       );
 
       if (aulaRow) {
-        await sequelize.query(`
-          INSERT INTO distribucion (clase_id, aula_id, dia, hora_inicio, hora_fin)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (clase_id) DO UPDATE
-          SET aula_id = EXCLUDED.aula_id,
-              dia = EXCLUDED.dia,
-              hora_inicio = EXCLUDED.hora_inicio,
-              hora_fin = EXCLUDED.hora_fin
-        `, {
-          bind: [id, aulaRow.id, dia, hora_inicio, hora_fin],
-          type: QueryTypes.INSERT,
-          transaction
-        });
+        const [distRow] = await sequelize.query(
+          'SELECT id FROM distribucion WHERE clase_id = $1 LIMIT 1',
+          { bind: [id], type: QueryTypes.SELECT, transaction }
+        );
+
+        if (distRow) {
+          await sequelize.query(`
+            UPDATE distribucion
+            SET aula_id = $1, dia = $2, hora_inicio = $3, hora_fin = $4
+            WHERE clase_id = $5
+          `, {
+            bind: [aulaRow.id, diaClase, hInicio, hFin, id],
+            type: QueryTypes.UPDATE,
+            transaction
+          });
+        } else {
+          await sequelize.query(`
+            INSERT INTO distribucion (clase_id, aula_id, dia, hora_inicio, hora_fin)
+            VALUES ($1, $2, $3, $4, $5)
+          `, {
+            bind: [id, aulaRow.id, diaClase, hInicio, hFin],
+            type: QueryTypes.INSERT,
+            transaction
+          });
+        }
       }
     }
 
@@ -727,7 +851,7 @@ const getMiDistribucion = async (req, res) => {
           replacements.docente = `%${nombreCompleto}%`;
         }
       }
-    } else if (usuario.rol === 'director' && usuario.carrera_director) {
+    } else if (usuario.rol === 'director') {
       if (req.query.como_docente === 'true') {
         // El director quiere ver SUS PROPIAS clases como docente
         const docenteRecord = await Docente.findOne({ where: { usuario_id: usuario.id } });
@@ -743,8 +867,10 @@ const getMiDistribucion = async (req, res) => {
           if (nombreCompleto) replacements.docente = `%${nombreCompleto}%`;
         }
       } else {
-        whereClause = 'WHERE c.carrera = :carrera';
-        replacements.carrera = usuario.carrera_director;
+        // Ve las clases de TODAS sus carreras asignadas
+        const carreraIds = usuario.carreraIds || [];
+        whereClause = carreraIds.length > 0 ? 'WHERE c.carrera_id IN (:carreraIds)' : 'WHERE 1=0';
+        replacements.carreraIds = carreraIds;
       }
     } else if (usuario.rol === 'estudiante') {
       // Cargar datos del estudiante para filtrar por carrera
@@ -957,9 +1083,10 @@ const getDocentesCarga = async (req, res) => {
     let whereClause = "WHERE c.docente IS NOT NULL AND TRIM(c.docente) <> ''";
     const replacements = {};
 
-    if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
-      whereClause += ' AND LOWER(c.carrera) = LOWER(:carrera)';
-      replacements.carrera = req.usuario.carrera_director;
+    if (req.usuario.rol === 'director') {
+      const carreraIds = req.usuario.carreraIds || [];
+      whereClause += carreraIds.length > 0 ? ' AND c.carrera_id IN (:carrera_ids)' : ' AND 1=0';
+      replacements.carrera_ids = carreraIds;
     } else if (carreraId) {
       if (!isNaN(carreraId)) {
         whereClause += ' AND c.carrera_id = :carrera_id';
@@ -1269,8 +1396,8 @@ const deleteClase = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Clase no encontrada' });
     }
 
-    // Seguridad: Si es director, validar que la clase sea de su carrera
-    if (usuario.rol === 'director' && (clase.carrera !== usuario.carrera_director)) {
+    // Seguridad: Si es director, validar que la clase pertenezca a alguna de sus carreras
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(clase.carrera_id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para eliminar esta clase' });
     }
@@ -1333,8 +1460,8 @@ const createClase = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Carrera asociada a la materia no encontrada' });
     }
 
-    // Seguridad: Director solo crea clases en su carrera
-    if (usuario.rol === 'director' && carrera.carrera !== usuario.carrera_director) {
+    // Seguridad: Director solo crea clases en alguna de sus carreras asignadas
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(carrera.id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para crear clases en esta carrera' });
     }

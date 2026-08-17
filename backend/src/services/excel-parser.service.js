@@ -1464,7 +1464,7 @@ function parseSchedule(diaRaw, horaRaw, horaInicioRaw, horaFinRaw) {
         });
       }
     }
-    return sessions;
+    if (sessions.length > 0) return sessions;
   }
 
   // Caso 4: solo dia
@@ -1482,18 +1482,32 @@ function parseSchedule(diaRaw, horaRaw, horaInicioRaw, horaFinRaw) {
     return sessions;
   }
 
+  // Caso 5: Fallback si no se obtuvieron sesiones y horaRaw o diaRaw contiene texto combinado (ej: "Lunes 09:00 11:00")
+  if (sessions.length === 0 && (horaRaw || diaRaw)) {
+    const rawText = `${diaRaw || ''} ${horaRaw || ''}`.trim();
+    const dayMatch = rawText.match(/(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i);
+    const horaParsed = parseHoraRange(rawText);
+    if (dayMatch && horaParsed) {
+      sessions.push({
+        dia: normalizeDia(dayMatch[1]),
+        hora_inicio: horaParsed.inicio,
+        hora_fin: horaParsed.fin
+      });
+    }
+  }
+
   return sessions;
 }
 
 /**
- * Parsea un rango de hora como "08:00 - 10:00" o "08H00 - 10H00"
+ * Parsea un rango de hora como "08:00 - 10:00", "08H00 - 10H00", "09:00 11:00", "09:00 a 11:00", "09.00 11.00"
  */
 function parseHoraRange(text) {
   if (!text) return null;
   const clean = String(text).trim();
 
-  // Formato: "08:00 - 10:00", "08:00-10:00", "08H00 - 10H00"
-  const match = clean.match(/(\d{1,2})[:\-hH](\d{2})\s*[-–a]\s*(\d{1,2})[:\-hH](\d{2})/);
+  // Pattern 1: HH:MM [sep] HH:MM (soporta :, H, h, .) con cualquier separador (espacios, guion, 'a', 'hasta', 'to', slash, pipe, tilde)
+  const match = clean.match(/(\d{1,2})[:\-hH.](\d{2})\s*(?:[-–—aA/|~]|\s+|hasta|to)\s*(\d{1,2})[:\-hH.](\d{2})/i);
   if (match) {
     return {
       inicio: `${match[1].padStart(2, '0')}:${match[2]}`,
@@ -1501,12 +1515,21 @@ function parseHoraRange(text) {
     };
   }
 
-  // Formato: "10:00 - 13:00" (ya con :)
-  const match2 = clean.match(/(\d{1,2}:\d{2})\s*[-–a]\s*(\d{1,2}:\d{2})/);
-  if (match2) {
+  // Pattern 2: 4 dígitos seguidos (ej. "0900 1100" o "0900-1100")
+  const match4 = clean.match(/^(\d{2})(\d{2})\s*(?:[-–—aA/|~]|\s+|hasta|to)\s*(\d{2})(\d{2})$/i);
+  if (match4) {
     return {
-      inicio: normalizeHora(match2[1]),
-      fin: normalizeHora(match2[2])
+      inicio: `${match4[1]}:${match4[2]}`,
+      fin: `${match4[3]}:${match4[4]}`
+    };
+  }
+
+  // Pattern 3: Buscar todas las ocurrencias de horas en la cadena (ej. "09:00", "11:00")
+  const times = clean.match(/(\d{1,2}[:\-hH.]\d{2})/g);
+  if (times && times.length >= 2) {
+    return {
+      inicio: normalizeHora(times[0]),
+      fin: normalizeHora(times[times.length - 1])
     };
   }
 

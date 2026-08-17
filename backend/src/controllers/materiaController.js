@@ -22,9 +22,9 @@ exports.getMaterias = async (req, res) => {
 
         // Filtro por carrera
         if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (carreraObj) {
-                where.carrera_id = carreraObj.id;
+            const carreraIds = usuario.carreraIds || [];
+            if (carreraIds.length > 0) {
+                where.carrera_id = { [Op.in]: carreraIds };
             } else {
                 return res.json({ success: true, materias: [] });
             }
@@ -98,12 +98,9 @@ exports.createMateria = async (req, res) => {
     try {
         const { codigo, nombre, creditos, ciclo, carrera_id, docente_id, docente_nombre } = req.body;
 
-        // Si es director, validar que la carrera le pertenezca
-        if (req.usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: req.usuario.carrera_director } });
-            if (!carreraObj || carreraObj.id !== parseInt(carrera_id)) {
-                return res.status(403).json({ success: false, message: 'No tiene permiso para añadir materias a esta carrera' });
-            }
+        // Si es director, validar que la carrera le pertenezca (alguna de las suyas)
+        if (req.usuario.rol === 'director' && !(req.usuario.carreraIds || []).includes(parseInt(carrera_id))) {
+            return res.status(403).json({ success: false, message: 'No tiene permiso para añadir materias a esta carrera' });
         }
 
         const nuevaMateria = await MateriaCatalogo.create({
@@ -140,11 +137,8 @@ exports.updateMateria = async (req, res) => {
         if (!materia) return res.status(404).json({ success: false, message: 'Materia no encontrada' });
 
         // Validar permisos si es director
-        if (req.usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: req.usuario.carrera_director } });
-            if (!carreraObj || materia.carrera_id !== carreraObj.id) {
-                return res.status(403).json({ success: false, message: 'No tiene permiso para editar esta materia' });
-            }
+        if (req.usuario.rol === 'director' && !(req.usuario.carreraIds || []).includes(materia.carrera_id)) {
+            return res.status(403).json({ success: false, message: 'No tiene permiso para editar esta materia' });
         }
 
         await materia.update({ codigo, nombre, creditos, ciclo, docente_id, docente_nombre });
@@ -170,11 +164,8 @@ exports.deleteMateria = async (req, res) => {
         if (!materia) return res.status(404).json({ success: false, message: 'Materia no encontrada' });
 
         // Validar permisos si es director
-        if (req.usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: req.usuario.carrera_director } });
-            if (!carreraObj || materia.carrera_id !== carreraObj.id) {
-                return res.status(403).json({ success: false, message: 'No tiene permiso para eliminar esta materia' });
-            }
+        if (req.usuario.rol === 'director' && !(req.usuario.carreraIds || []).includes(materia.carrera_id)) {
+            return res.status(403).json({ success: false, message: 'No tiene permiso para eliminar esta materia' });
         }
 
         // Usamos borrado lógico para no romper historial de clases
@@ -198,13 +189,26 @@ exports.syncMaterias = async (req, res) => {
         const { carrera_id } = req.body;
         const usuario = req.usuario;
 
-        let targetCarreraId = carrera_id;
+        let targetCarreraId = carrera_id ? parseInt(carrera_id) : null;
 
-        // Validar permisos
+        // Validar permisos: la sincronización opera sobre UNA carrera a la vez
         if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (!carreraObj) return res.status(404).json({ success: false, message: 'Carrera no vinculada a su usuario' });
-            targetCarreraId = carreraObj.id;
+            const carreraIds = usuario.carreraIds || [];
+            if (carreraIds.length === 0) {
+                return res.status(404).json({ success: false, message: 'Carrera no vinculada a su usuario' });
+            }
+            if (targetCarreraId && !carreraIds.includes(targetCarreraId)) {
+                return res.status(403).json({ success: false, message: 'No tiene permiso para sincronizar esta carrera' });
+            }
+            if (!targetCarreraId) {
+                if (carreraIds.length > 1) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Tiene más de una carrera asignada — especifique carrera_id para sincronizar'
+                    });
+                }
+                targetCarreraId = carreraIds[0];
+            }
         }
 
         if (!targetCarreraId) return res.status(400).json({ success: false, message: 'ID de carrera requerido' });

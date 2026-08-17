@@ -221,7 +221,8 @@ gestion-aulas-uide/
 │   │   │   ├── director/            # Componentes para Directores
 │   │   │   │   └── SubirPlanificacion.tsx
 │   │   │   ├── reservas/            # Componentes de reservas
-│   │   │   │   └── ReservaWidget.tsx
+│   │   │   │   ├── ReservaFloatingWidget.tsx  # Ventana flotante (crear/cancelar reservas)
+│   │   │   │   └── ReservasAdminView.tsx      # Gestión de reservas (admin/director)
 │   │   │   └── *.tsx               # Varios componentes
 │   │   ├── pages/                   # Páginas principales
 │   │   │   ├── Login.tsx            # Login de usuarios
@@ -604,7 +605,8 @@ src/
 │   │   └── DirectorModal.tsx      # Gestión de directores
 │   │
 │   ├── reservas/         # Componentes de reservas
-│   │   └── ReservaWidget.tsx      # Widget de reservas
+│   │   ├── ReservaFloatingWidget.tsx  # Ventana flotante esquinera (crear/cancelar reservas)
+│   │   └── ReservasAdminView.tsx      # Gestión de reservas (admin/director)
 │   │
 │   └── *.tsx            # Componentes de características
 │

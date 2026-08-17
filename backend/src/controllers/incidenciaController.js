@@ -1,6 +1,7 @@
 const path = require('path');
 const { Incidencia, User: Usuario, Docente, Carrera, Notificacion } = require('../models');
 const { Op } = require('sequelize');
+const { obtenerDirectoresDeCarrera } = require('../utils/directorScope');
 
 // ─── Crear incidencia ─────────────────────────────────────────────────────────
 exports.crearIncidencia = async (req, res) => {
@@ -33,13 +34,14 @@ exports.crearIncidencia = async (req, res) => {
                 carreraNombre = docente.carrera.carrera;
             }
         } else if (usuarioRol === 'director') {
-            const user = await Usuario.findByPk(usuarioId, { attributes: ['carrera_director'] });
-            if (user?.carrera_director) {
-                const carrera = await Carrera.findOne({ where: { carrera: user.carrera_director } });
-                if (carrera) {
-                    carreraId = carrera.id;
-                    carreraNombre = carrera.carrera;
-                }
+            // Un director puede tener varias carreras asignadas; al reportar una
+            // incidencia (caso poco común) usamos la primera como respaldo, ya
+            // que no hay forma de saber a cuál de sus carreras se refiere.
+            const nombres = req.usuario?.carreraNombres || [];
+            const ids = req.usuario?.carreraIds || [];
+            if (nombres.length > 0) {
+                carreraNombre = nombres[0];
+                carreraId = ids[0];
             }
         }
 
@@ -56,12 +58,10 @@ exports.crearIncidencia = async (req, res) => {
             usuario_id: usuarioId
         });
 
-        // ── Notificación in-app al director de la carrera ────────────────────
-        if (carreraNombre) {
-            const director = await Usuario.findOne({
-                where: { rol: 'director', carrera_director: carreraNombre }
-            });
-            if (director) {
+        // ── Notificación in-app a TODOS los directores de la carrera ──────────
+        if (carreraId || carreraNombre) {
+            const directores = await obtenerDirectoresDeCarrera({ carreraId, carreraNombre });
+            for (const director of directores) {
                 await Notificacion.create({
                     titulo: `Nueva incidencia en ${aula_codigo}`,
                     mensaje: `${req.usuario?.nombre || 'Un docente'} reportó: ${titulo}`,
@@ -93,16 +93,13 @@ exports.listarIncidencias = async (req, res) => {
         if (rol === 'admin' || rol === 'soporte') {
             // Admin ve todas
         } else if (rol === 'director') {
-            // Director ve las de su carrera
-            const user = await Usuario.findByPk(req.usuarioId, { attributes: ['carrera_director'] });
-            if (user?.carrera_director) {
-                const carrera = await Carrera.findOne({ where: { carrera: user.carrera_director } });
-                if (carrera) {
-                    where.carrera_id = carrera.id;
-                } else {
-                    // No hay carrera asociada, retornar vacío
-                    return res.json({ success: true, incidencias: [] });
-                }
+            // Director ve las de CUALQUIERA de sus carreras asignadas
+            const carreraIds = req.usuario?.carreraIds || [];
+            if (carreraIds.length > 0) {
+                where.carrera_id = { [Op.in]: carreraIds };
+            } else {
+                // No tiene ninguna carrera asociada, retornar vacío
+                return res.json({ success: true, incidencias: [] });
             }
         } else {
             // Profesor/docente/estudiante: solo las propias
@@ -138,15 +135,9 @@ exports.actualizarEstado = async (req, res) => {
         const incidencia = await Incidencia.findByPk(id);
         if (!incidencia) return res.status(404).json({ error: 'Incidencia no encontrada' });
 
-        // Director solo puede gestionar incidencias de su carrera
-        if (rol === 'director') {
-            const user = await Usuario.findByPk(req.usuarioId, { attributes: ['carrera_director'] });
-            const carrera = user?.carrera_director
-                ? await Carrera.findOne({ where: { carrera: user.carrera_director } })
-                : null;
-            if (!carrera || incidencia.carrera_id !== carrera.id) {
-                return res.status(403).json({ error: 'Esta incidencia no pertenece a tu carrera' });
-            }
+        // Director solo puede gestionar incidencias de alguna de sus carreras asignadas
+        if (rol === 'director' && !(req.usuario?.carreraIds || []).includes(incidencia.carrera_id)) {
+            return res.status(403).json({ error: 'Esta incidencia no pertenece a tu carrera' });
         }
 
         if (estado) incidencia.estado = estado;

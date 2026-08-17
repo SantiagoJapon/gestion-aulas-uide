@@ -27,6 +27,12 @@ export interface User {
     carrera: string;
     carrera_normalizada: string;
   };
+  // Todas las carreras asignadas (un director puede tener más de una)
+  carreras?: {
+    id: number;
+    carrera: string;
+    carrera_normalizada: string;
+  }[];
   estado: 'activo' | 'inactivo';
   requiere_cambio_password?: boolean;
 }
@@ -363,8 +369,15 @@ export const usuarioService = {
     return response.data;
   },
 
+  // Agrega esta carrera a las que ya tiene el director (no elimina las demás)
   updateDirectorCarrera: async (id: number, carrera: string | null): Promise<{ success: boolean; message: string; usuario: User }> => {
     const response = await api.put(`/usuarios/${id}/carrera`, { carrera });
+    return response.data;
+  },
+
+  // Quita únicamente esta carrera; conserva el resto de carreras asignadas
+  removeDirectorCarrera: async (id: number, carrera: string | number): Promise<{ success: boolean; message: string; usuario: User }> => {
+    const response = await api.put(`/usuarios/${id}/carrera`, { remove_carrera: carrera });
     return response.data;
   },
 
@@ -435,32 +448,57 @@ export interface MapaCalorResponse {
   detalles: DetalleMapaCalor[];
 }
 
+// Estado de validación de una clase dentro de la distribución de aulas.
+// 'conflicto' = dos clases comparten la misma aula en un horario solapado.
+// 'sobrecupo' = la clase tiene más estudiantes que la capacidad del aula asignada.
+export type EstadoValidacionClase = 'pendiente' | 'asignada' | 'conflicto' | 'sobrecupo';
+
+export interface ClaseConEstadoDistribucion {
+  id: number;
+  materia: string;
+  carrera?: string;
+  ciclo?: string;
+  paralelo?: string;
+  dia: string;
+  hora_inicio: string;
+  hora_fin: string;
+  aula_asignada?: string | null;
+  aula_nombre?: string | null;
+  aula?: string | null;
+  aula_capacidad?: number | null;
+  docente: string;
+  num_estudiantes?: number;
+  estudiantes?: number;
+  sobrecupo?: boolean;
+  porcentaje_uso?: number | null;
+  estado: EstadoValidacionClase;
+}
+
+export interface EstadisticasValidacionDistribucion {
+  total_clases: number;
+  clases_asignadas?: number;
+  asignadas?: number;
+  clases_pendientes?: number;
+  pendientes?: number;
+  conflictos: number;
+  sobrecupos: number;
+  porcentaje_completado: number;
+}
+
 export interface MiDistribucionResponse {
   success: boolean;
   rol: string;
-  estadisticas: {
-    total_clases: number;
-    clases_asignadas: number;
-    clases_pendientes: number;
-    porcentaje_completado: number;
-  };
-  clases: Array<{
-    id: number;
-    materia: string;
-    codigo: string;
-    nivel: string;
-    paralelo: string;
-    dia: string;
-    hora_inicio: string;
-    hora_fin: string;
-    aula: string | null;
-    docente: string;
-    estudiantes: number;
-    estado: string;
-  }>;
-  por_dia: {
+  estadisticas: EstadisticasValidacionDistribucion;
+  clases: ClaseConEstadoDistribucion[];
+  por_dia?: {
     [key: string]: Array<any>;
   };
+}
+
+export interface ClasesDistribucionResponse {
+  success: boolean;
+  clases: ClaseConEstadoDistribucion[];
+  estadisticas: EstadisticasValidacionDistribucion;
 }
 
 export interface AulaInfo {
@@ -589,8 +627,8 @@ export const distribucionService = {
     return response.data;
   },
 
-  // Obtener todas las clases con estado de distribución
-  getClasesDistribucion: async () => {
+  // Obtener todas las clases con estado de distribución (admin — todas las carreras)
+  getClasesDistribucion: async (): Promise<ClasesDistribucionResponse> => {
     const response = await api.get('/distribucion/clases');
     return response.data;
   },
@@ -985,7 +1023,7 @@ export const reservaService = {
     return response.data;
   },
 
-  getDisponibles: async (params: { fecha: string; hora_inicio: string; hora_fin: string; tipo?: string }): Promise<{ success: boolean; aulas: Aula[] }> => {
+  getDisponibles: async (params: { fecha: string; hora_inicio: string; hora_fin: string; tipo?: string }): Promise<{ success: boolean; aulas: Aula[]; espacios: Espacio[] }> => {
     const response = await api.get('/reservas/disponibles', { params });
     return response.data;
   },

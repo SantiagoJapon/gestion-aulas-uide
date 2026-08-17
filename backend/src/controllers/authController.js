@@ -1,4 +1,4 @@
-const { User: Usuario, Carrera } = require('../models');
+const { User: Usuario, Carrera, DirectorCarrera } = require('../models');
 const bcrypt = require('bcryptjs');
 const { generarToken } = require('../utils/jwt');
 const whatsappService = require('../services/whatsappService');
@@ -9,7 +9,7 @@ const emailService = require('../services/emailService');
 // ==========================================
 exports.registrarUsuario = async (req, res) => {
     try {
-        const { nombre, apellido, email, password, rol, cedula, telefono } = req.body;
+        const { nombre, apellido, email, password, cedula, telefono } = req.body;
 
         // Verificar si el usuario ya existe
         const usuarioExistente = await Usuario.findOne({ where: { email } });
@@ -27,12 +27,18 @@ exports.registrarUsuario = async (req, res) => {
 
         // Crear usuario — convertir strings vacíos en null para evitar
         // errores de validación del modelo (cedula/telefono son opcionales)
+        //
+        // El rol NUNCA se toma del body: este endpoint es público y sin
+        // autenticación, así que aceptar un `rol` arbitrario permitiría a
+        // cualquier visitante autoasignarse admin/director/docente. El
+        // autoregistro solo puede crear cuentas de estudiante; el resto de
+        // roles se provisionan por rutas protegidas (ej. POST /auth/crear-director).
         const nuevoUsuario = await Usuario.create({
             nombre,
             apellido,
             email,
             password: password,
-            rol: rol || 'estudiante',
+            rol: 'estudiante',
             cedula: cedula?.trim() || null,
             telefono: telefono?.trim() || null,
             estado: 'activo'
@@ -71,13 +77,21 @@ exports.loginUsuario = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Buscar usuario por email e incluir la Carrera si es director
+        // Buscar usuario por email e incluir sus carreras si es director
+        // (carrera: legado/compatibilidad — una sola; carrerasAsignadas: todas)
         const usuario = await Usuario.findOne({
             where: { email },
             include: [
                 {
                     model: Carrera,
                     as: 'carrera',
+                    required: false
+                },
+                {
+                    model: Carrera,
+                    as: 'carrerasAsignadas',
+                    attributes: ['id', 'carrera', 'carrera_normalizada'],
+                    through: { attributes: [] },
                     required: false
                 }
             ]
@@ -114,6 +128,12 @@ exports.loginUsuario = async (req, res) => {
         const token = generarToken(usuario);
 
         // Preparar respuesta
+        const carrerasAsignadas = (usuario.carrerasAsignadas || []).map((c) => ({
+            id: c.id,
+            nombre: c.carrera,
+            normalizada: c.carrera_normalizada
+        }));
+
         const usuarioData = {
             id: usuario.id,
             nombre: usuario.nombre,
@@ -128,6 +148,8 @@ exports.loginUsuario = async (req, res) => {
                 nombre: usuario.carrera.carrera,
                 normalizada: usuario.carrera.carrera_normalizada
             } : null,
+            // Lista completa de carreras asignadas (soporta directores con más de una)
+            carreras: carrerasAsignadas,
             estado: usuario.estado,
             requiere_cambio_password: usuario.requiere_cambio_password || false
         };
@@ -164,7 +186,16 @@ exports.obtenerPerfil = async (req, res) => {
 
         const usuario = await Usuario.findByPk(req.usuario.id, {
             attributes: { exclude: ['password'] },
-            include: [{ model: Carrera, as: 'carrera', required: false }]
+            include: [
+                { model: Carrera, as: 'carrera', required: false },
+                {
+                    model: Carrera,
+                    as: 'carrerasAsignadas',
+                    attributes: ['id', 'carrera', 'carrera_normalizada'],
+                    through: { attributes: [] },
+                    required: false
+                }
+            ]
         });
 
         if (!usuario) {
@@ -174,9 +205,17 @@ exports.obtenerPerfil = async (req, res) => {
             });
         }
 
+        const usuarioJson = usuario.toJSON();
+        usuarioJson.carreras = (usuarioJson.carrerasAsignadas || []).map((c) => ({
+            id: c.id,
+            nombre: c.carrera,
+            normalizada: c.carrera_normalizada
+        }));
+        delete usuarioJson.carrerasAsignadas;
+
         res.json({
             success: true,
-            usuario
+            usuario: usuarioJson
         });
 
     } catch (error) {
@@ -404,6 +443,15 @@ exports.crearDirector = async (req, res) => {
             carrera_director,
             telefono: telefono || null
         });
+
+        // Registrar también en la tabla puente director_carreras — esta es la
+        // fuente de verdad para el soporte de múltiples carreras por director.
+        // Sin esto, un director recién creado solo existiría en el campo legado
+        // y perdería esta carrera en cuanto se le asigne una segunda.
+        const carreraInicial = await Carrera.findOne({ where: { carrera: carrera_director } });
+        if (carreraInicial) {
+            await DirectorCarrera.create({ usuario_id: nuevo.id, carrera_id: carreraInicial.id });
+        }
 
         let whatsapp_enviado = false;
         let email_enviado = false;

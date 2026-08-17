@@ -9,8 +9,7 @@ const Estudiante = sequelize.define('Estudiante', {
   },
   cedula: {
     type: DataTypes.STRING(20),
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   nombre: {
     type: DataTypes.STRING(100),
@@ -42,7 +41,13 @@ const Estudiante = sequelize.define('Estudiante', {
   }
 }, {
   tableName: 'estudiantes',
-  timestamps: false
+  timestamps: false,
+  indexes: [
+    {
+      unique: true,
+      fields: ['cedula']
+    }
+  ]
 });
 
 module.exports = Estudiante;

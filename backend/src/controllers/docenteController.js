@@ -118,9 +118,12 @@ exports.getDocentes = async (req, res) => {
 
         // Filtrado por carrera
         if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (carreraObj) {
-                where.carrera_id = carreraObj.id;
+            const carreraIdsDirector = usuario.carreraIds || [];
+            if (carreraIdsDirector.length > 0) {
+                // Si además filtró por una carrera específica (de las suyas), respetarla
+                where.carrera_id = (carreraIdNum && carreraIdsDirector.includes(carreraIdNum))
+                    ? carreraIdNum
+                    : { [Op.in]: carreraIdsDirector };
             } else {
                 return res.json({ success: true, docentes: [] });
             }
@@ -297,13 +300,14 @@ exports.createDocente = async (req, res) => {
             finalCarreraId = parsed;
         }
 
-        // Si es director, forzar su carrera
+        // Si es director, solo puede crear docentes en alguna de sus carreras asignadas.
+        // Si envió una carrera_id válida y suya, se respeta; si no, se usa la primera.
         if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (!carreraObj) {
-                return res.status(404).json({ success: false, message: 'Carrera del director no encontrada' });
+            const carreraIdsDirector = usuario.carreraIds || [];
+            if (carreraIdsDirector.length === 0) {
+                return res.status(404).json({ success: false, message: 'No tienes ninguna carrera asignada' });
             }
-            finalCarreraId = carreraObj.id;
+            finalCarreraId = carreraIdsDirector.includes(finalCarreraId) ? finalCarreraId : carreraIdsDirector[0];
         }
 
         if (!finalCarreraId) {
@@ -414,12 +418,9 @@ exports.updateDocente = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Docente no encontrado' });
         }
 
-        // Seguridad: Si es director, validar que el docente sea de su carrera
-        if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (!carreraObj || docente.carrera_id !== carreraObj.id) {
-                return res.status(403).json({ success: false, message: 'No tienes permiso para editar este docente' });
-            }
+        // Seguridad: Si es director, validar que el docente sea de alguna de sus carreras
+        if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(docente.carrera_id)) {
+            return res.status(403).json({ success: false, message: 'No tienes permiso para editar este docente' });
         }
 
         const tenia_cuenta = !!docente.usuario_id;
@@ -553,12 +554,9 @@ exports.crearCuentaDocente = async (req, res) => {
         });
         if (!docente) return res.status(404).json({ success: false, message: 'Docente no encontrado' });
 
-        // Seguridad: director solo puede gestionar su carrera
-        if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (!carreraObj || docente.carrera_id !== carreraObj.id) {
-                return res.status(403).json({ success: false, message: 'No tienes permiso para gestionar este docente' });
-            }
+        // Seguridad: director solo puede gestionar docentes de alguna de sus carreras
+        if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(docente.carrera_id)) {
+            return res.status(403).json({ success: false, message: 'No tienes permiso para gestionar este docente' });
         }
 
         let user;
@@ -683,13 +681,14 @@ exports.generarCredencialesMasivo = async (req, res) => {
         let { carrera_id } = req.body;
         const where = { usuario_id: null };
 
-        // Si es director, forzar que solo sea su carrera
+        // Si es director, limitar a sus carreras asignadas (una en particular si la
+        // especificó y es suya, o todas las suyas si no especificó ninguna)
         if (usuario.rol === 'director') {
-            const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-            if (!carreraObj) {
-                return res.status(404).json({ success: false, message: 'Carrera del director no encontrada' });
+            const carreraIdsDirector = usuario.carreraIds || [];
+            if (carreraIdsDirector.length === 0) {
+                return res.status(404).json({ success: false, message: 'No tienes ninguna carrera asignada' });
             }
-            carrera_id = carreraObj.id;
+            carrera_id = carreraIdsDirector.includes(carrera_id) ? carrera_id : { [Op.in]: carreraIdsDirector };
         }
 
         if (carrera_id) where.carrera_id = carrera_id;

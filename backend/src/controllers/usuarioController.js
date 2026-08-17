@@ -1,7 +1,8 @@
-const { User, Carrera, sequelize } = require('../models');
-const { QueryTypes } = require('sequelize');
+const { User, Carrera, DirectorCarrera, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const N8nService = require('../services/n8n.service');
 const emailService = require('../services/emailService');
+const { sincronizarCarreraLegado } = require('../utils/directorScope');
 
 /**
  * Función centralizada para loggeo de errores 500
@@ -53,13 +54,12 @@ const getUsuarios = async (req, res) => {
     const where = {};
     if (rol) where.rol = rol;
 
-    // Si el usuario es director, forzar filtro por su carrera
+    // Si el usuario es director, forzar filtro por TODAS sus carreras asignadas
     if (req.usuario.rol === 'director') {
-      where.carrera_director = req.usuario.carrera_director;
+      const nombres = req.usuario.carreraNombres || [];
+      where.carrera_director = nombres.length > 0 ? { [Op.in]: nombres } : '__NON_EXISTENT__';
     } else if (carrera_id) {
-      // Si es admin y pasa carrera_id, filtrar por esa carrera
-      const { Carrera: CarreraModel } = require('../models');
-      const carreraObj = await CarreraModel.findByPk(carrera_id);
+      const carreraObj = await Carrera.findByPk(carrera_id);
       if (carreraObj) {
         where.carrera_director = carreraObj.carrera;
       } else {
@@ -67,12 +67,19 @@ const getUsuarios = async (req, res) => {
       }
     }
 
-    // Si estamos buscando directores, incluir información de la carrera
+    // Si estamos buscando directores, incluir información de las carreras asociadas
     const include = rol === 'director' ? [
       {
         model: Carrera,
         as: 'carrera',
         attributes: ['id', 'carrera', 'carrera_normalizada'],
+        required: false
+      },
+      {
+        model: Carrera,
+        as: 'carrerasAsignadas',
+        attributes: ['id', 'carrera', 'carrera_normalizada'],
+        through: { attributes: [] },
         required: false
       }
     ] : [];
@@ -88,11 +95,15 @@ const getUsuarios = async (req, res) => {
       total: usuarios.length,
       usuarios: usuarios.map((u) => {
         const json = u.toJSON();
-        // Si tiene carrera asociada, incluir el nombre
-        if (json.carrera) {
+        if (json.carrerasAsignadas && json.carrerasAsignadas.length > 0) {
+          json.carreras = json.carrerasAsignadas;
+          json.carrera_nombre = json.carrerasAsignadas.map(c => c.carrera).join(', ');
+        } else if (json.carrera) {
           json.carrera_nombre = json.carrera.carrera;
-          delete json.carrera; // Remover el objeto anidado
+          json.carreras = [json.carrera];
         }
+        delete json.carrera;
+        delete json.carrerasAsignadas;
         return json;
       })
     });
@@ -101,10 +112,61 @@ const getUsuarios = async (req, res) => {
   }
 };
 
+// Resuelve un identificador de carrera (id numérico, nombre exacto o nombre
+// normalizado) al registro Carrera correspondiente. Devuelve null si no existe.
+const resolverCarrera = async (item) => {
+  let result = null;
+  if (typeof item === 'number' || (!isNaN(item) && Number.isInteger(Number(item)))) {
+    result = await Carrera.findByPk(item);
+  }
+  if (!result && typeof item === 'string') {
+    result = await Carrera.findOne({ where: { carrera: item, activa: true } });
+  }
+  if (!result && typeof item === 'string') {
+    const normKey = normalizeCarreraKey(item);
+    result = await Carrera.findOne({ where: { carrera_normalizada: normKey, activa: true } });
+  }
+  return result;
+};
+
+const respuestaConCarreras = async (usuario, mensaje) => {
+  const updatedUser = await User.findByPk(usuario.id, {
+    include: [{
+      model: Carrera,
+      as: 'carrerasAsignadas',
+      attributes: ['id', 'carrera', 'carrera_normalizada'],
+      through: { attributes: [] }
+    }]
+  });
+
+  const userJson = updatedUser.toJSON();
+  userJson.carreras = userJson.carrerasAsignadas;
+  delete userJson.carrerasAsignadas;
+  delete userJson.carrera;
+
+  return { success: true, message: mensaje, usuario: userJson };
+};
+
+/**
+ * Gestiona la asignación de carreras de un director. Un director puede estar
+ * asignado a más de una carrera a la vez (ej: dirige Ingeniería en Sistemas
+ * Y Tecnologías de la Información simultáneamente).
+ *
+ * Formas de uso (mutuamente excluyentes, se evalúan en este orden):
+ *   1. { carrera_ids: [1, 2] } o { carreras: ["A", "B"] }
+ *        → REEMPLAZA el conjunto completo por exactamente estas carreras.
+ *   2. { remove_carrera: "X" | id }
+ *        → QUITA únicamente esa carrera; conserva las demás asignadas.
+ *   3. { carrera: "X" | id }
+ *        → AGREGA esa carrera al conjunto actual; conserva las demás.
+ *          (Esta es la forma que usa la UI de "Asignar Director" por carrera.)
+ *   4. { carrera: null } sin ninguno de los anteriores
+ *        → Desasigna TODAS las carreras del director.
+ */
 const updateDirectorCarrera = async (req, res) => {
   try {
     const { id } = req.params;
-    const { carrera } = req.body;
+    const { carrera, carreras, carrera_ids, remove_carrera } = req.body;
 
     const usuario = await User.findByPk(id);
     if (!usuario) {
@@ -121,46 +183,77 @@ const updateDirectorCarrera = async (req, res) => {
       });
     }
 
-    if (!carrera || !carrera.trim()) {
-      await usuario.update({ carrera_director: null });
-      return res.json({
-        success: true,
-        message: 'Carrera desasignada',
-        usuario: usuario.toJSON()
+    // ── Modo 1: reemplazo total explícito (lista completa) ──────────────
+    if (Array.isArray(carrera_ids) || Array.isArray(carreras)) {
+      const listInput = Array.isArray(carrera_ids) ? carrera_ids : carreras;
+
+      if (listInput.length === 0) {
+        await DirectorCarrera.destroy({ where: { usuario_id: usuario.id } });
+        await usuario.update({ carrera_director: null });
+        return res.json(await respuestaConCarreras(usuario, 'Carreras desasignadas'));
+      }
+
+      const carrerasEncontradas = [];
+      for (const item of listInput) {
+        const result = await resolverCarrera(item);
+        if (result && !carrerasEncontradas.some((c) => c.id === result.id)) {
+          carrerasEncontradas.push(result);
+        }
+      }
+
+      if (carrerasEncontradas.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ninguna de las carreras especificadas existe o está activa'
+        });
+      }
+
+      await DirectorCarrera.destroy({ where: { usuario_id: usuario.id } });
+      for (const c of carrerasEncontradas) {
+        await DirectorCarrera.create({ usuario_id: usuario.id, carrera_id: c.id });
+      }
+      await usuario.update({ carrera_director: carrerasEncontradas[0].carrera });
+
+      if (usuario.telefono) {
+        N8nService.emit('notificacion', {
+          tipo: 'director_notificado',
+          datos: {
+            nombre: `${usuario.nombre} ${usuario.apellido}`,
+            telefono: usuario.telefono,
+            password: '(usa tu contraseña actual)',
+            carrera: carrerasEncontradas.map((c) => c.carrera).join(', ')
+          }
+        });
+      }
+
+      return res.json(await respuestaConCarreras(usuario, 'Carreras asignadas correctamente'));
+    }
+
+    // ── Modo 2: quitar una carrera puntual (conserva el resto) ───────────
+    if (remove_carrera !== undefined && remove_carrera !== null) {
+      const carreraAQuitar = await resolverCarrera(remove_carrera);
+      if (!carreraAQuitar) {
+        return res.status(400).json({ success: false, error: 'La carrera a quitar no existe' });
+      }
+
+      await DirectorCarrera.destroy({
+        where: { usuario_id: usuario.id, carrera_id: carreraAQuitar.id }
       });
+      await sincronizarCarreraLegado(usuario);
+
+      return res.json(await respuestaConCarreras(usuario, `Carrera "${carreraAQuitar.carrera}" desvinculada`));
     }
 
-    // Buscar en uploads_carreras - primero búsqueda exacta, luego parcial
-    let carreraResult = await sequelize.query(
-      `SELECT id, carrera FROM uploads_carreras
-       WHERE carrera = $1 AND activa = true
-       LIMIT 1`,
-      { bind: [carrera], type: QueryTypes.SELECT }
-    );
-
-    // Si no encuentra, intentar búsqueda por ID
-    if (!carreraResult.length && !isNaN(carrera)) {
-      carreraResult = await sequelize.query(
-        `SELECT id, carrera FROM uploads_carreras
-         WHERE id = $1 AND activa = true
-         LIMIT 1`,
-        { bind: [parseInt(carrera)], type: QueryTypes.SELECT }
-      );
+    // ── Modo 4: desasignación total (carrera explícitamente null/vacío) ──
+    if (carrera === null || carrera === undefined || (typeof carrera === 'string' && !carrera.trim())) {
+      await DirectorCarrera.destroy({ where: { usuario_id: usuario.id } });
+      await usuario.update({ carrera_director: null });
+      return res.json(await respuestaConCarreras(usuario, 'Carreras desasignadas'));
     }
 
-    // Si tampoco, búsqueda parcial normalizada
-    if (!carreraResult.length) {
-      const carreraNormalizada = normalizeCarreraKey(carrera);
-      carreraResult = await sequelize.query(
-        `SELECT id, carrera FROM uploads_carreras
-         WHERE (LOWER(carrera) LIKE $1 OR carrera_normalizada LIKE $1)
-         AND activa = true
-         LIMIT 1`,
-        { bind: [`%${carreraNormalizada}%`], type: QueryTypes.SELECT }
-      );
-    }
-
-    if (!carreraResult.length) {
+    // ── Modo 3: agregar UNA carrera al conjunto actual ───────────────────
+    const nuevaCarrera = await resolverCarrera(typeof carrera === 'string' ? carrera.trim() : carrera);
+    if (!nuevaCarrera) {
       return res.status(400).json({
         success: false,
         error: 'La carrera no está activa o no existe',
@@ -168,26 +261,34 @@ const updateDirectorCarrera = async (req, res) => {
       });
     }
 
-    await usuario.update({ carrera_director: carreraResult[0].carrera });
+    const [, creado] = await DirectorCarrera.findOrCreate({
+      where: { usuario_id: usuario.id, carrera_id: nuevaCarrera.id },
+      defaults: { usuario_id: usuario.id, carrera_id: nuevaCarrera.id }
+    });
 
-    // Notificar al director si tiene telefono (fire-and-forget)
-    if (usuario.telefono) {
+    // Si ya no tenía ninguna carrera (o esta es la única), sincronizamos el
+    // campo legado. Si ya tenía otra(s) asignada(s), la dejamos intacta —
+    // agregar una segunda carrera nunca debe pisar la principal existente.
+    if (!usuario.carrera_director) {
+      await usuario.update({ carrera_director: nuevaCarrera.carrera });
+    }
+
+    if (creado && usuario.telefono) {
       N8nService.emit('notificacion', {
         tipo: 'director_notificado',
         datos: {
           nombre: `${usuario.nombre} ${usuario.apellido}`,
           telefono: usuario.telefono,
           password: '(usa tu contraseña actual)',
-          carrera: carreraResult[0].carrera
+          carrera: nuevaCarrera.carrera
         }
       });
     }
 
-    res.json({
-      success: true,
-      message: 'Carrera asignada',
-      usuario: usuario.toJSON()
-    });
+    return res.json(await respuestaConCarreras(
+      usuario,
+      creado ? 'Carrera asignada correctamente' : 'El director ya estaba asignado a esta carrera'
+    ));
   } catch (error) {
     handle500(res, error, 'updateDirectorCarrera');
   }
@@ -203,7 +304,14 @@ const createUsuario = async (req, res) => {
 
     if (req.usuario.rol === 'director') {
       if (finalRol === 'admin') finalRol = 'docente';
-      finalCarrera = req.usuario.carrera_director;
+      // Un director puede crear docentes en CUALQUIERA de sus carreras asignadas.
+      // Si el valor enviado no le pertenece (o no envió ninguno), usamos su
+      // primera carrera como respaldo — nunca dejamos que asigne una carrera
+      // fuera de su alcance.
+      const carrerasDelDirector = req.usuario.carreraNombres || [];
+      finalCarrera = carrerasDelDirector.includes(carrera_director)
+        ? carrera_director
+        : carrerasDelDirector[0] || null;
     }
 
     // Para directores: usar contraseña temporal estándar
@@ -222,6 +330,15 @@ const createUsuario = async (req, res) => {
       estado: 'activo',
       requiere_cambio_password: true
     });
+
+    // Si se creó un director con una carrera inicial, registrarla también en
+    // la tabla puente director_carreras (fuente de verdad para multi-carrera).
+    if (finalRol === 'director' && finalCarrera) {
+      const carreraInicial = await Carrera.findOne({ where: { carrera: finalCarrera } });
+      if (carreraInicial) {
+        await DirectorCarrera.create({ usuario_id: newUsuario.id, carrera_id: carreraInicial.id });
+      }
+    }
 
     // Notificar al usuario si tiene telefono
     let whatsapp_enviado = false;
@@ -351,8 +468,8 @@ const resetPasswordUsuario = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
     }
 
-    // Directores solo pueden resetear docentes de su carrera
-    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
+    // Directores solo pueden resetear docentes de alguna de sus carreras asignadas
+    if (req.usuario.rol === 'director' && !(req.usuario.carreraNombres || []).includes(usuario.carrera_director)) {
       return res.status(403).json({ success: false, error: 'No tienes permiso para este usuario' });
     }
 
@@ -385,7 +502,9 @@ const updateUsuario = async (req, res) => {
       });
     }
 
-    if (req.usuario.rol === 'director' && usuario.carrera_director !== req.usuario.carrera_director) {
+    const carrerasDelDirector = req.usuario.carreraNombres || [];
+
+    if (req.usuario.rol === 'director' && !carrerasDelDirector.includes(usuario.carrera_director)) {
       return res.status(403).json({
         success: false,
         error: 'No tienes permiso para editar este usuario'
@@ -397,8 +516,12 @@ const updateUsuario = async (req, res) => {
     if (req.usuario.rol === 'director') {
       // Director no puede escalar privilegios: no puede asignar admin ni director
       if (rol && ['admin', 'director'].includes(rol)) delete updatedFields.rol;
-      // Director no puede reasignar usuarios a otra carrera
-      updatedFields.carrera_director = req.usuario.carrera_director;
+      // Director puede mover al usuario entre SUS PROPIAS carreras, pero nunca
+      // hacia una carrera fuera de su alcance. Si el valor enviado no le
+      // pertenece (o no se envió), conservamos la carrera actual del usuario.
+      updatedFields.carrera_director = carrerasDelDirector.includes(carrera_director)
+        ? carrera_director
+        : usuario.carrera_director;
       // Director no puede editar admins ni a otros directores
       if (['admin', 'director'].includes(usuario.rol)) {
         return res.status(403).json({
@@ -440,7 +563,7 @@ const deleteUsuario = async (req, res) => {
           error: 'No tienes permiso para eliminar directores o administradores'
         });
       }
-      if (usuario.carrera_director !== req.usuario.carrera_director) {
+      if (!(req.usuario.carreraNombres || []).includes(usuario.carrera_director)) {
         return res.status(403).json({
           success: false,
           error: 'No tienes permiso para eliminar este usuario'

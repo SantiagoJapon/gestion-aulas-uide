@@ -10,6 +10,25 @@ interface DocenteCargaModalProps {
     onUpdate: () => void;
 }
 
+const generarOpcionesHoras = () => {
+    const opciones: { value: string; label: string }[] = [];
+    for (let h = 7; h <= 22; h++) {
+        for (const m of [0, 30]) {
+            if (h === 22 && m === 30) break;
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            const value = `${hh}:${mm}`;
+            const period = h >= 12 ? 'p. m.' : 'a. m.';
+            const h12 = h % 12 === 0 ? 12 : h % 12;
+            const label = `${String(h12).padStart(2, '0')}:${mm} ${period} (${value})`;
+            opciones.push({ value, label });
+        }
+    }
+    return opciones;
+};
+
+const opcionesHoras = generarOpcionesHoras();
+
 const DocenteCargaModal: React.FC<DocenteCargaModalProps> = ({ docente, isOpen, onClose, onUpdate }) => {
     const [view, setView] = useState<'LIST' | 'CREATE' | 'STUDENTS'>('LIST');
     const [clases, setClases] = useState<any[]>([]);
@@ -269,10 +288,18 @@ const DocenteCargaModal: React.FC<DocenteCargaModalProps> = ({ docente, isOpen, 
                                                 <option key={d} value={d}>{d}</option>
                                             ))}
                                         </select>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <input type="time" value={newClase.hora_inicio} onChange={e => setNewClase({ ...newClase, hora_inicio: e.target.value })} className="h-12 bg-muted/30 border border-border rounded-xl px-4 text-xs font-bold outline-none" />
-                                            <input type="time" value={newClase.hora_fin} onChange={e => setNewClase({ ...newClase, hora_fin: e.target.value })} className="h-12 bg-muted/30 border border-border rounded-xl px-4 text-xs font-bold outline-none" />
-                                        </div>
+                                         <div className="grid grid-cols-2 gap-3">
+                                             <select value={newClase.hora_inicio} onChange={e => setNewClase({ ...newClase, hora_inicio: e.target.value })} className="h-12 bg-muted/30 border border-border rounded-xl px-4 text-xs font-bold outline-none cursor-pointer">
+                                                 {opcionesHoras.map(opt => (
+                                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                 ))}
+                                             </select>
+                                             <select value={newClase.hora_fin} onChange={e => setNewClase({ ...newClase, hora_fin: e.target.value })} className="h-12 bg-muted/30 border border-border rounded-xl px-4 text-xs font-bold outline-none cursor-pointer">
+                                                 {opcionesHoras.map(opt => (
+                                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                 ))}
+                                             </select>
+                                         </div>
                                     </div>
                                 </div>
                             </div>

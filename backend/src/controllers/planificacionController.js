@@ -549,9 +549,10 @@ exports.obtenerEstadoDistribucion = async (req, res) => {
 
     const replacements = {};
 
-    if (carreraFilter.carrera_id) {
-      replacements.carrera_id = carreraFilter.carrera_id;
-      query += ` AND c.carrera_id = :carrera_id`;
+    if (carreraFilter.carreraIds) {
+      // Director: puede tener una o varias carreras asignadas
+      replacements.carrera_ids = carreraFilter.carreraIds;
+      query += ` AND c.carrera_id IN (:carrera_ids)`;
     } else if (rol === 'admin' && carrera_id && carrera_id !== 'todas') {
       replacements.carrera_id = carrera_id;
       query += ` AND c.carrera_id = :carrera_id`;
@@ -631,10 +632,16 @@ exports.detectarConflictos = async (req, res) => {
     const { carrera_id: carrera_id_param } = req.params;
     const { getDirectorCarreraFilter } = require('../middleware/auth');
     const carreraFilter = await getDirectorCarreraFilter(req);
-    const carrera_id = carreraFilter.carrera_id || carrera_id_param;
+
+    // Director: puede tener una o varias carreras asignadas → filtramos por IN.
+    // Admin: usa el carrera_id explícito de la ruta (comportamiento sin cambios).
+    const carreraIds = carreraFilter.carreraIds || (carrera_id_param ? [carrera_id_param] : []);
+    const whereCarrera = carreraIds.length > 0
+      ? 'WHERE c1.carrera_id IN (:carrera_ids) OR c2.carrera_id IN (:carrera_ids)'
+      : 'WHERE 1=1';
 
     const conflictos = await sequelize.query(`
-      SELECT 
+      SELECT
         c1.id as clase1_id,
         c1.materia as clase1_nombre,
         c2.id as clase2_id,
@@ -647,13 +654,13 @@ exports.detectarConflictos = async (req, res) => {
       JOIN clases c2 ON c1.aula_asignada = c2.aula_asignada
         AND c1.id < c2.id
         AND c1.dia = c2.dia
-        AND c1.horario_inicio < c2.horario_fin
-        AND c1.horario_fin > c2.horario_inicio
+        AND c1.hora_inicio < c2.hora_fin
+        AND c1.hora_fin > c2.hora_inicio
       JOIN aulas a ON a.codigo = c1.aula_asignada
-      WHERE c1.carrera_id = :carrera_id OR c2.carrera_id = :carrera_id
+      ${whereCarrera}
       ORDER BY c1.dia, c1.hora_inicio
     `, {
-      replacements: { carrera_id },
+      replacements: { carrera_ids: carreraIds },
       type: QueryTypes.SELECT
     });
 
@@ -683,15 +690,10 @@ exports.listarPlanificaciones = async (req, res) => {
     // Construir filtro según rol (excluir planificaciones reemplazadas/historicas)
     const { Op } = require('sequelize');
     const whereClause = { estado: { [Op.notIn]: ['reemplazado', 'historico'] } };
-    if (usuario.rol === 'director' && usuario.carrera_director) {
-      const { Carrera } = require('../models');
-      const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-      if (carreraObj) {
-        whereClause.carrera_id = carreraObj.id;
-      } else {
-        // Si no se encuentra la carrera asignada, el director no debería ver nada
-        whereClause.carrera_id = -1;
-      }
+    if (usuario.rol === 'director') {
+      const carreraIds = usuario.carreraIds || [];
+      // Si no tiene ninguna carrera asignada, el director no debería ver nada
+      whereClause.carrera_id = carreraIds.length > 0 ? { [Op.in]: carreraIds } : -1;
     }
     // Admin ve todas (no filtro)
 
@@ -745,11 +747,10 @@ exports.descargarPlanificacion = async (req, res) => {
       });
     }
 
-    // Verificar permisos: Admin ve todas, director solo las de su carrera
+    // Verificar permisos: Admin ve todas, director solo las de sus carreras asignadas
     if (usuario.rol === 'director') {
-      const { getDirectorCarreraFilter } = require('../middleware/auth');
-      const carreraFilter = await getDirectorCarreraFilter(req);
-      if (carreraFilter.carrera_id !== planificacion.carrera_id) {
+      const carreraIds = usuario.carreraIds || [];
+      if (!carreraIds.includes(planificacion.carrera_id)) {
         return res.status(403).json({
           success: false,
           mensaje: 'No tiene permisos para descargar esta planificación'

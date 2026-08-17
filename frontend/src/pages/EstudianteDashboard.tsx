@@ -5,7 +5,6 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { distribucionService, notificacionService, Notificacion } from '../services/api';
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
-import ReservaWidget from '../components/reservas/ReservaWidget';
 import GuidedTour from '../components/common/GuidedTour';
 import IncidenciasView from '../components/IncidenciasView';
 import { Step } from 'react-joyride';
@@ -264,8 +263,8 @@ export default function EstudianteDashboard() {
       content: 'En tu jornada verás las materias de hoy. Las clases activas se resaltan automáticamente.',
     },
     {
-      target: '#tour-reservas',
-      content: '¿Necesitas un lugar para estudiar? Usa el widget de reserva rápida para asegurar un espacio.',
+      target: '#tour-reserva-flotante',
+      content: '¿Necesitas un lugar para estudiar? Usa este botón para buscar un aula específica o reservar un espacio disponible.',
     },
     {
       target: '#tour-nav-horario',
@@ -379,53 +378,42 @@ export default function EstudianteDashboard() {
               </div>
             </div>
 
-            {/* Main Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left Column (Timeline) */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Avisos Importantes */}
-                <DashboardWidget
-                  title="Notificaciones y Avisos"
-                  subtitle="Mensajes de Docentes y Cambios"
-                  icon="notifications_active"
-                  iconColor="text-red-500"
-                >
-                  <AvisosWidget />
-                </DashboardWidget>
+            {/* Avisos Importantes */}
+            <DashboardWidget
+              title="Notificaciones y Avisos"
+              subtitle="Mensajes de Docentes y Cambios"
+              icon="notifications_active"
+              iconColor="text-red-500"
+            >
+              <AvisosWidget />
+            </DashboardWidget>
 
-                {/* Widget Timeline */}
-                <div id="tour-timeline">
-                  <DashboardWidget
-                    title="Tu Jornada"
-                    subtitle="Clases de Hoy"
-                    icon="timeline"
-                    iconColor="text-uide-blue"
-                    action={
-                      <div className="relative group">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-uide-blue transition-colors">search</span>
-                        <input
-                          type="text"
-                          placeholder="Filtrar materia..."
-                          value={subjectFilter}
-                          onChange={(e) => setSubjectFilter(e.target.value)}
-                          className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none w-32 sm:w-48 transition-all"
-                        />
-                      </div>
-                    }
-                  >
-                    {loading ? (
-                      <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
-                    ) : (
-                      <TimelineClases clases={clasesHoy} filter={subjectFilter} />
-                    )}
-                  </DashboardWidget>
-                </div>
-              </div>
-
-              {/* Right Column (Widgets) */}
-              <div id="tour-reservas" className="space-y-6">
-                <ReservaWidget />
-              </div>
+            {/* Widget Timeline */}
+            <div id="tour-timeline">
+              <DashboardWidget
+                title="Tu Jornada"
+                subtitle="Clases de Hoy"
+                icon="timeline"
+                iconColor="text-uide-blue"
+                action={
+                  <div className="relative group">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 group-focus-within:text-uide-blue transition-colors">search</span>
+                    <input
+                      type="text"
+                      placeholder="Filtrar materia..."
+                      value={subjectFilter}
+                      onChange={(e) => setSubjectFilter(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-uide-blue/20 outline-none w-32 sm:w-48 transition-all"
+                    />
+                  </div>
+                }
+              >
+                {loading ? (
+                  <div className="py-12 text-center text-muted-foreground text-sm">Cargando horario...</div>
+                ) : (
+                  <TimelineClases clases={clasesHoy} filter={subjectFilter} />
+                )}
+              </DashboardWidget>
             </div>
           </div>
         );

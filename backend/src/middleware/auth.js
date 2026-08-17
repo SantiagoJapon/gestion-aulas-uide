@@ -1,5 +1,7 @@
 const { verificarToken } = require('../utils/jwt');
-const { User, Estudiante, Carrera } = require('../models');
+const { User, Estudiante } = require('../models');
+const { Op } = require('sequelize');
+const { resolverCarrerasDeDirector } = require('../utils/directorScope');
 
 /**
  * Middleware para verificar el token JWT en las peticiones
@@ -69,6 +71,15 @@ const verificarAuth = async (req, res, next) => {
     req.usuarioId = usuario.id;
     req.usuarioRol = usuario.rol;
 
+    // Si es director, resolver TODAS sus carreras asignadas (soporta multi-carrera).
+    // Se adjuntan como propiedades en memoria (no se persisten ni se serializan
+    // en toJSON) para que cualquier controlador pueda usarlas sin repetir la consulta.
+    if (usuario.rol === 'director') {
+      const { ids, nombres } = await resolverCarrerasDeDirector(usuario.id, usuario.carrera_director);
+      usuario.carreraIds = ids;
+      usuario.carreraNombres = nombres;
+    }
+
     next();
   } catch (error) {
     console.error('Error en middleware de autenticación:', error);
@@ -130,22 +141,23 @@ const verificarAdminODocente = verificarRol('admin', 'docente', 'profesor');
 
 /**
  * Helper: Resuelve el filtro de carrera para directores.
- * Retorna { carrera_id: X } si es director, o {} si es admin (ve todo).
- * Lanza error si el director no tiene carrera asignada.
+ * Retorna {} si es admin (ve todo, sin restricción).
+ * Si es director, retorna:
+ *   - carrera_id: cláusula Sequelize { [Op.in]: ids } lista para usar en un `where` ORM
+ *   - carreraIds: array plano de IDs, para usar en SQL crudo con `IN (:carreraIds)`
+ * Soporta directores asignados a múltiples carreras.
+ * Lanza error si el director no tiene ninguna carrera asignada.
  */
 const getDirectorCarreraFilter = async (req) => {
   const usuario = req.usuario;
   if (usuario.rol === 'admin') return {};
 
   if (usuario.rol === 'director') {
-    if (!usuario.carrera_director) {
+    const ids = usuario.carreraIds || [];
+    if (ids.length === 0) {
       throw new Error('Director sin carrera asignada');
     }
-    const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-    if (!carreraObj) {
-      throw new Error(`Carrera "${usuario.carrera_director}" no encontrada`);
-    }
-    return { carrera_id: carreraObj.id };
+    return { carrera_id: { [Op.in]: ids }, carreraIds: ids };
   }
 
   throw new Error(`Rol "${usuario.rol}" no tiene acceso a este recurso`);

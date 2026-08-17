@@ -1,14 +1,17 @@
 const ReporteService = require('../services/reporte.service');
-const { ReporteHistorial, User, Carrera } = require('../models');
+const { ReporteHistorial, User } = require('../models');
 
 /**
  * Resuelve el carrera_id según el rol del usuario.
- * Directores solo pueden ver/generar reportes de su propia carrera.
+ * Directores solo pueden ver/generar reportes de alguna de sus carreras
+ * asignadas (un reporte cubre una sola carrera a la vez).
  */
 async function resolverCarreraId(usuario, carreraIdSolicitado) {
-    if (usuario.rol === 'director' && usuario.carrera_director) {
-        const carreraObj = await Carrera.findOne({ where: { carrera: usuario.carrera_director } });
-        return carreraObj ? carreraObj.id : null;
+    if (usuario.rol === 'director') {
+        const carreraIds = usuario.carreraIds || [];
+        if (carreraIds.length === 0) return null;
+        const solicitadoNum = carreraIdSolicitado ? parseInt(carreraIdSolicitado) : null;
+        return (solicitadoNum && carreraIds.includes(solicitadoNum)) ? solicitadoNum : carreraIds[0];
     }
     return carreraIdSolicitado || null;
 }
@@ -169,10 +172,11 @@ class ReporteController {
                 return res.status(404).json({ success: false, error: 'Archivo no encontrado' });
             }
 
-            // Director solo puede descargar reportes de su carrera
+            // Director solo puede descargar reportes generados por alguien de alguna de sus carreras
             if (req.usuarioRol === 'director') {
                 const reporteCarrera = reporte.generadoPor?.carrera_director;
-                if (!reporteCarrera || reporteCarrera !== req.usuario.carrera_director) {
+                const carrerasDelDirector = req.usuario.carreraNombres || [];
+                if (!reporteCarrera || !carrerasDelDirector.includes(reporteCarrera)) {
                     return res.status(403).json({ success: false, error: 'No tiene permisos para descargar este reporte' });
                 }
             }

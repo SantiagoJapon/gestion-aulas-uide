@@ -17,6 +17,8 @@ const Incidencia = require('./Incidencia');
 const HistorialCarga = require('./HistorialCarga');
 const EstudianteMateria = require('./EstudianteMateria');
 
+const DirectorCarrera = require('./DirectorCarrera');
+
 // ============================================
 // RELACIONES ENTRE MODELOS
 // ============================================
@@ -72,10 +74,23 @@ User.hasMany(ReporteHistorial, { foreignKey: 'usuario_id', as: 'reportes' });
 // RELACIÓN USUARIOS-CARRERAS (Directores)
 // ============================================
 
-// User <-> Carrera
-// NOTA: Usamos carrera_director (string) para vincular con el nombre de la carrera
+// User <-> Carrera (Legado 1-a-1 por string)
 User.belongsTo(Carrera, { foreignKey: 'carrera_director', targetKey: 'carrera', as: 'carrera' });
 Carrera.hasMany(User, { foreignKey: 'carrera_director', sourceKey: 'carrera', as: 'directores' });
+
+// User <-> Carrera (Relación N-a-M para múltiples carreras por director)
+User.belongsToMany(Carrera, {
+  through: DirectorCarrera,
+  foreignKey: 'usuario_id',
+  otherKey: 'carrera_id',
+  as: 'carrerasAsignadas'
+});
+Carrera.belongsToMany(User, {
+  through: DirectorCarrera,
+  foreignKey: 'carrera_id',
+  otherKey: 'usuario_id',
+  as: 'directoresAsignados'
+});
 
 // ============================================
 // NUEVAS RELACIONES (tablas catálogo)
@@ -144,5 +159,6 @@ module.exports = {
   Notificacion,
   Incidencia,
   HistorialCarga,
-  EstudianteMateria
+  EstudianteMateria,
+  DirectorCarrera
 };

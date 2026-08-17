@@ -15,6 +15,7 @@ const {
   inscribirNivelCompleto
 } = require('../controllers/estudianteController');
 const { verificarAuth, verificarAdmin, verificarRol } = require('../middleware/auth');
+const { authLimiter } = require('../middleware/security');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -57,14 +58,20 @@ router.get(
  * @desc    Buscar estudiante por email institucional
  * @access  Public
  */
-router.get('/lookup', lookupEstudianteByEmail);
+router.get('/lookup', authLimiter, lookupEstudianteByEmail);
 
 /**
  * @route   GET /api/estudiantes/login/:cedula
  * @desc    Login estudiante por cedula (carga datos + materias)
  * @access  Public
+ *
+ * SEGURIDAD: la cédula es el único factor — no hay contraseña ni OTP.
+ * authLimiter frena la enumeración por fuerza bruta (10 intentos/15min
+ * por IP), pero esto es una mitigación, no una solución: una cédula
+ * ecuatoriana no es secreta. Considerar un segundo factor (código
+ * enviado por WhatsApp/email) antes de depender de esta ruta en producción.
  */
-router.get('/login/:cedula', loginEstudianteByCedula);
+router.get('/login/:cedula', authLimiter, loginEstudianteByCedula);
 
 /**
  * @route   POST /api/estudiantes/subir

@@ -26,7 +26,7 @@ interface ClaseDistribucion {
   aula_asignada: string | null;
   aula_nombre: string | null;
   aula_capacidad: number | null;
-  estado: 'asignada' | 'pendiente' | 'conflicto';
+  estado: 'asignada' | 'pendiente' | 'conflicto' | 'sobrecupo';
 }
 
 interface Estadisticas {
@@ -70,8 +70,29 @@ export default function DistribucionEspacios() {
       setError('');
       const response = await distribucionService.getClasesDistribucion();
       if (response.success) {
-        setClases(response.clases);
-        setEstadisticas(response.estadisticas);
+        setClases(response.clases.map((c): ClaseDistribucion => ({
+          id: c.id,
+          carrera: c.carrera || '',
+          materia: c.materia,
+          ciclo: c.ciclo || '',
+          paralelo: c.paralelo || '',
+          dia: c.dia,
+          hora_inicio: c.hora_inicio,
+          hora_fin: c.hora_fin,
+          num_estudiantes: c.num_estudiantes || 0,
+          docente: c.docente,
+          aula_asignada: c.aula_asignada ?? null,
+          aula_nombre: c.aula_nombre ?? null,
+          aula_capacidad: c.aula_capacidad ?? null,
+          estado: c.estado
+        })));
+        setEstadisticas({
+          total_clases: response.estadisticas.total_clases,
+          asignadas: response.estadisticas.asignadas ?? response.estadisticas.clases_asignadas ?? 0,
+          pendientes: response.estadisticas.pendientes ?? response.estadisticas.clases_pendientes ?? 0,
+          conflictos: response.estadisticas.conflictos,
+          porcentaje_completado: response.estadisticas.porcentaje_completado
+        });
       }
     } catch (err: any) {
       console.error('Error al cargar distribución:', err);

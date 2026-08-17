@@ -1,7 +1,6 @@
 const { Reserva, Aula, Clase, Distribucion, Espacio, Notificacion, User } = require('../models');
 const { Op } = require('sequelize');
 const N8nService = require('../services/n8n.service');
-const { getDirectorCarreraFilter } = require('../middleware/auth');
 
 // Máquina de estados para reservas
 const TRANSICIONES_VALIDAS = {
@@ -481,18 +480,16 @@ exports.listarPendientes = async (req, res) => {
             whereClause.estado = 'pendiente_aprobacion';
         }
 
-        // Director solo ve reservas de su carrera
+        // Director solo ve reservas de solicitantes de alguna de sus carreras
         const includeFilter = [];
         if (req.usuarioRol === 'director') {
-            const carreraFilter = await getDirectorCarreraFilter(req);
-            if (carreraFilter.carrera_id) {
-                includeFilter.push({
-                    model: User,
-                    as: 'usuario',
-                    where: { carrera_director: req.usuario.carrera_director },
-                    attributes: ['id', 'nombre', 'email', 'carrera_director']
-                });
-            }
+            const carrerasDelDirector = req.usuario.carreraNombres || [];
+            includeFilter.push({
+                model: User,
+                as: 'usuario',
+                where: { carrera_director: { [Op.in]: carrerasDelDirector.length > 0 ? carrerasDelDirector : ['__NINGUNA__'] } },
+                attributes: ['id', 'nombre', 'email', 'carrera_director']
+            });
         } else {
             includeFilter.push({
                 model: User,
@@ -539,10 +536,11 @@ exports.cambiarEstado = async (req, res) => {
             });
         }
 
-        // Director solo puede modificar reservas de su carrera
+        // Director solo puede modificar reservas de solicitantes de alguna de sus carreras
         if (req.usuarioRol === 'director') {
             const reservaCarrera = reserva.usuario?.carrera_director;
-            if (!reservaCarrera || reservaCarrera !== req.usuario.carrera_director) {
+            const carrerasDelDirector = req.usuario.carreraNombres || [];
+            if (!reservaCarrera || !carrerasDelDirector.includes(reservaCarrera)) {
                 return res.status(403).json({ error: "No tiene permisos para modificar esta reserva" });
             }
         }
@@ -638,13 +636,14 @@ exports.listarTodas = async (req, res) => {
             ];
         }
 
-        // Director solo ve reservas de su carrera
+        // Director solo ve reservas de solicitantes de alguna de sus carreras
         const includeFilter = [];
         if (req.usuarioRol === 'director') {
+            const carrerasDelDirector = req.usuario.carreraNombres || [];
             includeFilter.push({
                 model: User,
                 as: 'usuario',
-                where: { carrera_director: req.usuario.carrera_director },
+                where: { carrera_director: { [Op.in]: carrerasDelDirector.length > 0 ? carrerasDelDirector : ['__NINGUNA__'] } },
                 attributes: ['id', 'nombre', 'email', 'carrera_director']
             });
         } else {

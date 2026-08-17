@@ -12,7 +12,6 @@ export default function Register() {
     email: '',
     password: '',
     passwordConfirm: '',
-    rol: 'estudiante' as 'admin' | 'director' | 'profesor' | 'estudiante' | 'docente',
     cedula: '',
     telefono: '',
   });
@@ -46,7 +45,7 @@ export default function Register() {
   useEffect(() => {
     const email = formData.email.trim().toLowerCase();
 
-    if (!email || !validateEmail(email) || formData.rol !== 'estudiante') {
+    if (!email || !validateEmail(email)) {
       setLookupStatus({ loading: false, found: false, message: '' });
       return;
     }
@@ -102,7 +101,7 @@ export default function Register() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [formData.email, formData.rol, autoFillEmail, lookupStatus.found]);
+  }, [formData.email, autoFillEmail, lookupStatus.found]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -158,15 +157,8 @@ export default function Register() {
     try {
       const { passwordConfirm, ...registerData } = formData;
       await register(registerData);
-      // Redirigir según el rol
-      const rolePath: Record<string, string> = {
-        admin: '/admin',
-        director: '/director',
-        profesor: '/profesor',
-        docente: '/profesor',
-        estudiante: '/estudiante',
-      };
-      navigate(rolePath[formData.rol] || '/');
+      // El autoregistro público solo crea cuentas de estudiante.
+      navigate('/estudiante');
     } catch (err: any) {
       console.error('Error completo al registrar:', err);
       console.error('Response data:', err.response?.data);
@@ -360,39 +352,19 @@ export default function Register() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="rol" className="block text-sm font-medium text-muted-foreground mb-2">
-                Rol *
-              </label>
-              <select
-                id="rol"
-                name="rol"
-                value={formData.rol}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-              >
-                <option value="estudiante">Estudiante</option>
-                <option value="profesor">Profesor</option>
-                <option value="director">Director</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="cedula" className="block text-sm font-medium text-muted-foreground mb-2">
-                Cédula (opcional)
-              </label>
-              <input
-                type="text"
-                id="cedula"
-                name="cedula"
-                value={formData.cedula}
-                onChange={handleChange}
-                maxLength={10}
-                className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
-              />
-            </div>
+          <div>
+            <label htmlFor="cedula" className="block text-sm font-medium text-muted-foreground mb-2">
+              Cédula (opcional)
+            </label>
+            <input
+              type="text"
+              id="cedula"
+              name="cedula"
+              value={formData.cedula}
+              onChange={handleChange}
+              maxLength={10}
+              className="w-full px-4 py-2 border border-input rounded-lg bg-background focus:ring-2 focus:ring-ring focus:border-transparent"
+            />
           </div>
 
           <div>

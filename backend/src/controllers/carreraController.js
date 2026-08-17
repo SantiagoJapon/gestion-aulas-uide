@@ -1,4 +1,5 @@
-const { Carrera, User, sequelize } = require('../models');
+const { Carrera, User, DirectorCarrera, sequelize } = require('../models');
+const { sincronizarCarreraLegado } = require('../utils/directorScope');
 
 // Función para limpiar y normalizar el nombre de la carrera (mantiene tildes y ñ)
 const normalizeCarrera = (value) => {
@@ -175,7 +176,23 @@ const updateCarrera = async (req, res) => {
 
     // Sincronizar con Directores
     if (updates.activa === false) {
-      // Si se desactiva, dejar a los directores sin carrera
+      // Si se desactiva, quitar la vinculación en la tabla puente (fuente de
+      // verdad) y resincronizar el campo legado de cada director afectado —
+      // si tenía OTRA carrera activa, la conserva; si esta era la única, queda sin carrera.
+      const filasAfectadas = await DirectorCarrera.findAll({
+        where: { carrera_id: registro.id },
+        attributes: ['usuario_id'],
+        raw: true
+      });
+      await DirectorCarrera.destroy({ where: { carrera_id: registro.id } });
+      const directoresAfectados = await User.findAll({
+        where: { id: filasAfectadas.map((f) => f.usuario_id) }
+      });
+      for (const director of directoresAfectados) {
+        await sincronizarCarreraLegado(director);
+      }
+      // Respaldo legado: por si algún director apuntaba a esta carrera por
+      // nombre sin tener fila en director_carreras (dato no migrado)
       await User.update(
         { carrera_director: null },
         { where: { carrera_director: oldName } }
@@ -219,14 +236,33 @@ const deleteCarrera = async (req, res) => {
 
     const carreraNombre = registro.carrera;
 
-    // 1. Quitar vinculación de directores (importante hacerlo antes de eliminar la carrera)
-    await User.update(
-      { carrera_director: null },
-      { where: { carrera_director: carreraNombre } }
-    );
+    // 1. Identificar directores afectados ANTES de eliminar (por la tabla
+    // puente y, como respaldo, por el campo legado) para poder resincronizar
+    // su carrera_director con lo que les quede después del borrado.
+    const filasAfectadas = await DirectorCarrera.findAll({
+      where: { carrera_id: registro.id },
+      attributes: ['usuario_id'],
+      raw: true
+    });
+    const directoresPorLegado = await User.findAll({
+      where: { carrera_director: carreraNombre },
+      attributes: ['id']
+    });
+    const idsAfectados = [...new Set([
+      ...filasAfectadas.map((f) => f.usuario_id),
+      ...directoresPorLegado.map((d) => d.id)
+    ])];
 
-    // 2. ELIMINACIÓN FÍSICA de la base de datos
+    // 2. ELIMINACIÓN FÍSICA de la base de datos (director_carreras se limpia
+    // automáticamente por el ON DELETE CASCADE de la migración)
     await registro.destroy();
+
+    // 3. Resincronizar el campo legado de cada director afectado con su
+    // carrera restante (o null si esta era la única que tenía)
+    const directoresAfectados = await User.findAll({ where: { id: idsAfectados } });
+    for (const director of directoresAfectados) {
+      await sincronizarCarreraLegado(director);
+    }
 
     await updateCarreraCountConfig();
 

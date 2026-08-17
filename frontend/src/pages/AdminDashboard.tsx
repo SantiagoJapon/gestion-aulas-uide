@@ -21,6 +21,7 @@ import ReservasAdminView from '../components/reservas/ReservasAdminView';
 import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
 
 import DashboardWidget from '../components/dashboard/DashboardWidget';
+import ValidacionDistribucion from '../components/dashboard/ValidacionDistribucion';
 
 export default function AdminDashboard() {
   const { user } = useContext(AuthContext);
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'reservas' | 'espacios' | 'gestion_academica' | 'docentes' | 'estudiantes' | 'reportes' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'reservas' | 'espacios' | 'gestion_academica' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -188,6 +189,11 @@ export default function AdminDashboard() {
               ))}
             </div>
 
+            {/* 1b. VALIDACIÓN DE DISTRIBUCIÓN — conflictos y sobrecupo, con detalle */}
+            <div id="tour-validacion-distribucion">
+              <ValidacionDistribucion />
+            </div>
+
             {/* 2. LIDERAZGO ACADÉMICO */}
             <div id="tour-liderazgo" className="bg-white dark:bg-slate-900 border border-border/50 rounded-[2.5rem] shadow-sm">
               <div className="px-6 py-4 border-b border-border/50">
@@ -325,6 +331,13 @@ export default function AdminDashboard() {
               </div>
               <IncidenciasView />
             </div>
+          </div>
+        );
+
+      case 'incidencias':
+        return (
+          <div className="space-y-6 animate-fade-in pb-20">
+            <IncidenciasView />
           </div>
         );
 

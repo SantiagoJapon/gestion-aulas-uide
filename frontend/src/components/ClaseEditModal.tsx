@@ -9,6 +9,40 @@ interface ClaseEditModalProps {
     onUpdate: () => void;
 }
 
+const generarOpcionesHoras = () => {
+    const opciones: { value: string; label: string }[] = [];
+    for (let h = 7; h <= 22; h++) {
+        for (const m of [0, 30]) {
+            if (h === 22 && m === 30) break;
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            const value = `${hh}:${mm}`;
+            const period = h >= 12 ? 'p. m.' : 'a. m.';
+            const h12 = h % 12 === 0 ? 12 : h % 12;
+            const label = `${String(h12).padStart(2, '0')}:${mm} ${period} (${value})`;
+            opciones.push({ value, label });
+        }
+    }
+    return opciones;
+};
+
+const opcionesHoras = generarOpcionesHoras();
+
+const normalizarHora = (t: string) => {
+    if (!t) return '';
+    const match = String(t).trim().match(/^(\d{1,2}):(\d{2})/);
+    if (match) {
+        let hrs = parseInt(match[1], 10);
+        const mins = match[2];
+        const isPM = /p\.?\s*m\.?|pm/i.test(t);
+        const isAM = /a\.?\s*m\.?|am/i.test(t);
+        if (isPM && hrs < 12) hrs += 12;
+        if (isAM && hrs === 12) hrs = 0;
+        return `${String(hrs).padStart(2, '0')}:${mins}`;
+    }
+    return t;
+};
+
 const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose, onUpdate }) => {
     const [formData, setFormData] = useState({
         materia: '',
@@ -186,21 +220,33 @@ const ClaseEditModal: React.FC<ClaseEditModalProps> = ({ clase, isOpen, onClose,
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Inicio</label>
-                                <input
-                                    type="time"
-                                    value={formData.hora_inicio}
+                                <select
+                                    value={normalizarHora(formData.hora_inicio)}
                                     onChange={e => setFormData({ ...formData, hora_inicio: e.target.value })}
-                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none"
-                                />
+                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none cursor-pointer"
+                                >
+                                    <option value="">Seleccionar hora</option>
+                                    {opcionesHoras.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 block">Fin</label>
-                                <input
-                                    type="time"
-                                    value={formData.hora_fin}
+                                <select
+                                    value={normalizarHora(formData.hora_fin)}
                                     onChange={e => setFormData({ ...formData, hora_fin: e.target.value })}
-                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none"
-                                />
+                                    className="w-full bg-muted/50 border border-border rounded-xl px-4 py-2.5 text-xs font-bold outline-none cursor-pointer"
+                                >
+                                    <option value="">Seleccionar hora</option>
+                                    {opcionesHoras.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 

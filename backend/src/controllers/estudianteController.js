@@ -146,17 +146,21 @@ const listarEstudiantes = async (req, res) => {
     const { search, escuela, nivel } = req.query;
     const where = {};
 
-    // Filtro por Rol: Si es director, solo ve su carrera
-    if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
-      const carreraOriginal = req.usuario.carrera_director.trim();
-      const carreraSinAcentos = carreraOriginal.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-      where.escuela = {
-        [Op.or]: [
-          { [Op.iLike]: `%${carreraOriginal}%` },
-          { [Op.iLike]: `%${carreraSinAcentos}%` }
-        ]
-      };
+    // Filtro por Rol: Si es director, solo ve estudiantes de alguna de sus carreras
+    if (req.usuario.rol === 'director') {
+      const carrerasDelDirector = req.usuario.carreraNombres || [];
+      if (carrerasDelDirector.length === 0) {
+        where.escuela = '__NINGUNA__';
+      } else {
+        const condiciones = [];
+        for (const nombre of carrerasDelDirector) {
+          const original = nombre.trim();
+          const sinAcentos = original.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          condiciones.push({ [Op.iLike]: `%${original}%` });
+          if (sinAcentos !== original) condiciones.push({ [Op.iLike]: `%${sinAcentos}%` });
+        }
+        where.escuela = { [Op.or]: condiciones };
+      }
     } else if (escuela && String(escuela).trim() !== '') {
       // Si es admin y pasó un filtro de escuela
       where.escuela = { [Op.iLike]: `%${String(escuela).trim()}%` };
@@ -603,18 +607,23 @@ const subirEstudiantes = async (req, res) => {
         const escuelaExcel = escuelaRaw ? String(escuelaRaw).trim() : null;
         let escuela = 'Sin especificar';
 
-        if (req.usuario.rol === 'director' && req.usuario.carrera_director) {
-          const directorCarrera = req.usuario.carrera_director;
+        if (req.usuario.rol === 'director' && (req.usuario.carreraNombres || []).length > 0) {
+          const carrerasDelDirector = req.usuario.carreraNombres;
           if (escuelaExcel) {
-            // El Excel tiene columna de carrera: normalizar y filtrar por carrera del director
+            // El Excel tiene columna de carrera: normalizar y buscar coincidencia
+            // contra CUALQUIERA de las carreras asignadas al director.
             const escuelaNorm = normalizarEscuela(escuelaExcel);
-            if (!carrerasCoinciden(escuelaNorm, directorCarrera)) {
+            const carreraCoincidente = carrerasDelDirector.find((c) => carrerasCoinciden(escuelaNorm, c));
+            if (!carreraCoincidente) {
               estudiantesSaltados++;
-              continue; // Saltar estudiante de otra carrera
+              continue; // Saltar estudiante de una carrera que no es del director
             }
+            escuela = carreraCoincidente;
+          } else {
+            // Sin columna de carrera en el Excel: no hay forma de saber a cuál de
+            // sus carreras pertenece, así que usamos la primera como respaldo.
+            escuela = carrerasDelDirector[0];
           }
-          // Sin columna de carrera en Excel, o coincide: asignar la carrera canónica del director
-          escuela = directorCarrera;
         } else if (req.body.escuela) {
           escuela = String(req.body.escuela).trim();
         } else if (escuelaExcel) {
@@ -1032,7 +1041,7 @@ const inscribirEstudiantesManual = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Clase no encontrada' });
     }
 
-    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(clase.carrera_id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
     }
@@ -1087,7 +1096,7 @@ const desinscribirEstudiante = async (req, res) => {
       transaction
     });
 
-    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(clase.carrera_id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
     }
@@ -1137,7 +1146,7 @@ const inscribirNivelCompleto = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Clase no encontrada' });
     }
 
-    if (usuario.rol === 'director' && clase.carrera !== usuario.carrera_director) {
+    if (usuario.rol === 'director' && !(usuario.carreraIds || []).includes(clase.carrera_id)) {
       await transaction.rollback();
       return res.status(403).json({ success: false, error: 'No tienes permiso para gestionar esta clase' });
     }
@@ -1206,11 +1215,14 @@ const getEstudianteLoad = async (req, res) => {
 
     // Verificar permisos si es director
     if (usuario.rol === 'director') {
-      const carreraOriginal = usuario.carrera_director.trim();
-      const escuelaEstudiante = (estudiante.escuela || '').trim();
-      // Comparación flexible
-      if (!escuelaEstudiante.toLowerCase().includes(carreraOriginal.toLowerCase()) &&
-        !carreraOriginal.toLowerCase().includes(escuelaEstudiante.toLowerCase())) {
+      const escuelaEstudiante = (estudiante.escuela || '').trim().toLowerCase();
+      const carrerasDelDirector = usuario.carreraNombres || [];
+      // Comparación flexible contra CUALQUIERA de sus carreras asignadas
+      const tienePermiso = carrerasDelDirector.some((nombre) => {
+        const carreraOriginal = nombre.trim().toLowerCase();
+        return escuelaEstudiante.includes(carreraOriginal) || carreraOriginal.includes(escuelaEstudiante);
+      });
+      if (!tienePermiso) {
         return res.status(403).json({ success: false, error: 'No tienes permiso para ver estudiantes de otras carreras' });
       }
     }

@@ -574,7 +574,9 @@ export default function DirectorAssignmentView() {
                                 )}
                                 {filteredDirectors.map(director => {
                                     const isSelected = selectedDirectorId === director.id;
-                                    const isAssignedToOther = director.carrera_nombre && director.carrera_nombre !== selectedCarrera?.nombre_carrera;
+                                    const carrerasDelDirector = director.carreras || [];
+                                    const yaAsignadoAEsta = !!selectedCarrera && carrerasDelDirector.some(c => c.id === selectedCarrera.id);
+                                    const otrasCarreras = carrerasDelDirector.filter(c => c.id !== selectedCarrera?.id);
 
                                     return (
                                         <div
@@ -592,8 +594,12 @@ export default function DirectorAssignmentView() {
                                                 <p className={`text-sm font-bold truncate ${isSelected ? 'text-uide-blue' : 'text-slate-900 dark:text-white'}`}>
                                                     {director.nombre} {director.apellido}
                                                 </p>
-                                                <p className={`text-[11px] font-medium truncate ${isAssignedToOther ? 'text-amber-500' : 'text-slate-400'}`}>
-                                                    {isAssignedToOther ? `↗ Asignado a: ${director.carrera_nombre}` : '✓ Disponible'}
+                                                <p className={`text-[11px] font-medium truncate ${yaAsignadoAEsta ? 'text-emerald-500' : otrasCarreras.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
+                                                    {yaAsignadoAEsta
+                                                        ? `✓ Ya dirige esta carrera${otrasCarreras.length > 0 ? ` (+ ${otrasCarreras.map(c => c.carrera).join(', ')})` : ''}`
+                                                        : otrasCarreras.length > 0
+                                                            ? `↗ También dirige: ${otrasCarreras.map(c => c.carrera).join(', ')}`
+                                                            : '✓ Disponible'}
                                                 </p>
                                             </div>
                                             {isSelected && (
@@ -623,21 +629,20 @@ export default function DirectorAssignmentView() {
                             {selectedCarrera?.director_nombre && (
                                 <button
                                     onClick={async () => {
-                                        if (!confirm('¿Estás seguro de desvincular al director actual?')) return;
+                                        if (!confirm(`¿Desvincular a ${selectedCarrera.director_nombre} de ${selectedCarrera.nombre_carrera}? (conserva sus otras carreras, si tiene)`)) return;
                                         try {
-                                            if (selectedCarrera.director_nombre) {
-                                                const currentDir = directores.find(d => d.nombre + ' ' + d.apellido === selectedCarrera.director_nombre);
-                                                if (currentDir) {
-                                                    await usuarioService.updateDirectorCarrera(currentDir.id, null);
-                                                    setIsDrawerOpen(false);
-                                                    loadData();
-                                                }
+                                            const currentDir = directores.find(d => d.nombre + ' ' + d.apellido === selectedCarrera.director_nombre);
+                                            if (currentDir) {
+                                                // Quita SOLO esta carrera — no toca las demás que el director tenga asignadas
+                                                await usuarioService.removeDirectorCarrera(currentDir.id, selectedCarrera.id);
+                                                setIsDrawerOpen(false);
+                                                loadData();
                                             }
                                         } catch (e) { console.error(e); }
                                     }}
                                     className="w-full text-red-500 text-xs font-bold hover:text-red-600 py-1 transition-colors"
                                 >
-                                    Desvincular Director Actual
+                                    Desvincular de esta carrera
                                 </button>
                             )}
                         </div>

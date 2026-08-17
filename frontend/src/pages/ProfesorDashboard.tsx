@@ -4,7 +4,6 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 import { distribucionService, notificacionService, incidenciaService } from '../services/api';
 import UserSettings from '../components/UserSettings';
 import HorarioVisual from '../components/HorarioVisual';
-import ReservaWidget from '../components/reservas/ReservaWidget';
 import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
 import IncidenciasView from '../components/IncidenciasView';
@@ -562,8 +561,8 @@ export default function ProfesorDashboard() {
       content: 'Aquí tiene su lista de clases de hoy. Al hacer clic en una, podrá enviar avisos a sus alumnos o reportar problemas técnicos en el aula.',
     },
     {
-      target: '#tour-reservas-profe',
-      content: 'Como docente, también puede reservar espacios especiales para tutorías o reuniones.',
+      target: '#tour-reserva-flotante',
+      content: 'Como docente, también puede usar este botón para buscar un espacio específico o reservar uno disponible para tutorías o reuniones.',
     },
     {
       target: '#tour-nav-horario',
@@ -768,9 +767,7 @@ export default function ProfesorDashboard() {
               </div>
 
               {/* Sidebar Column */}
-              <div id="tour-reservas-profe" className="space-y-6">
-                <ReservaWidget />
-
+              <div className="space-y-6">
                 <div className="bg-gradient-to-br from-primary to-primary/80 rounded-2xl p-6 text-white shadow-lg">
                   <h4 className="font-black text-lg mb-2">¿Necesitas Ayuda?</h4>
                   <p className="text-xs text-white/80 mb-4 leading-relaxed">

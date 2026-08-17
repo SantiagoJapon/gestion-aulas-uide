@@ -157,25 +157,44 @@ export default function EjecutarDistribucion({ onDistribucionCompletada }: Ejecu
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Clases Totales</p>
-              <p className="text-3xl font-black text-slate-900 dark:text-white leading-none">{resultado.estadisticas?.total_procesadas || 0}</p>
+              <p className="text-3xl font-black text-slate-900 dark:text-white leading-none">{resultado.estadisticas?.total ?? 0}</p>
             </div>
             <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
               <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest mb-1">Asignadas</p>
-              <p className="text-3xl font-black text-emerald-600 leading-none">{resultado.estadisticas?.exitosas || 0}</p>
+              <p className="text-3xl font-black text-emerald-600 leading-none">{resultado.estadisticas?.exitosas ?? 0}</p>
             </div>
             <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
               <p className="text-[10px] font-black uppercase text-orange-500 tracking-widest mb-1">Sin Cupo</p>
-              <p className="text-3xl font-black text-orange-600 leading-none">{resultado.estadisticas?.fallidas || 0}</p>
+              <p className="text-3xl font-black text-orange-600 leading-none">{resultado.estadisticas?.fallidas ?? 0}</p>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+              <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest mb-1">Sobrecupo</p>
+              <p className="text-3xl font-black text-amber-600 leading-none">{resultado.estadisticas?.sobrecupos ?? 0}</p>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900/50 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+              <p className="text-[10px] font-black uppercase text-uide-blue tracking-widest mb-1">Eficiencia</p>
+              <p className="text-3xl font-black text-uide-blue leading-none">{resultado.estadisticas?.eficiencia ?? '0.0%'}</p>
             </div>
           </div>
 
           {resultado.estadisticas?.fallidas > 0 && (
             <div className="mt-6 flex items-center gap-3 p-4 bg-orange-50 dark:bg-orange-900/10 rounded-2xl border border-orange-100 dark:border-orange-900/20">
               <span className="material-symbols-outlined text-orange-600">warning</span>
-              <p className="text-sm font-bold text-orange-800 dark:text-orange-400">Existen conflictos de capacidad que requieren su intervención manual para reubicación.</p>
+              <p className="text-sm font-bold text-orange-800 dark:text-orange-400">
+                {resultado.estadisticas.fallidas} {resultado.estadisticas.fallidas === 1 ? 'clase no encontró' : 'clases no encontraron'} aula disponible y requieren reubicación manual.
+              </p>
+            </div>
+          )}
+
+          {resultado.estadisticas?.sobrecupos > 0 && (
+            <div className="mt-3 flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-900/20">
+              <span className="material-symbols-outlined text-amber-600">groups</span>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-400">
+                {resultado.estadisticas.sobrecupos} {resultado.estadisticas.sobrecupos === 1 ? 'clase fue asignada' : 'clases fueron asignadas'} a un aula con capacidad menor a su número de estudiantes (máx. 25% de tolerancia). Revísalas en el mapa de calor o el reporte ejecutivo.
+              </p>
             </div>
           )}
         </div>

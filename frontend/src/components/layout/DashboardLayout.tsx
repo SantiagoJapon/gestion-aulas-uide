@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import CommandKSearch from './CommandKSearch';
-import QuickReserveFAB from '../QuickReserveFAB';
+import ReservaFloatingWidget from '../reservas/ReservaFloatingWidget';
 import { notificacionService, Notificacion } from '../../services/api';
 
 interface NavItem {
@@ -435,7 +435,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                 )}
             </main>
 
-            <QuickReserveFAB />
+            <ReservaFloatingWidget />
         </div>
     );
 };
