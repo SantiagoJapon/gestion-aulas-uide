@@ -4,7 +4,7 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { AuthContext } from '../context/AuthContext';
 import MapaCalor from '../components/MapaCalor';
 import HorarioVisual from '../components/HorarioVisual';
-import { planificacionService, distribucionService } from '../services/api';
+import { planificacionService, distribucionService, carreraService } from '../services/api';
 import { Button } from '../components/common/Button';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
@@ -25,6 +25,12 @@ const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('general');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Multi-carrera state
+  const [carrerasDirector, setCarrerasDirector] = useState<Array<{ id: number; carrera: string }>>([]);
+  const [carreraFiltroId, setCarreraFiltroId] = useState<number | undefined>(undefined);
+  const [selectedFilesPerCarrera, setSelectedFilesPerCarrera] = useState<Record<number, File | null>>({});
+  const [uploadingPerCarrera, setUploadingPerCarrera] = useState<Record<number, boolean>>({});
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -91,7 +97,6 @@ const DirectorDashboard = () => {
     setRunTour(false);
   };
 
-  const [uploading, setUploading] = useState(false);
   const [stats, setStats] = useState({ total_clases: 0, clases_asignadas: 0, clases_pendientes: 0, conflictos: 0, sobrecupos: 0, porcentaje_completado: 0 });
   const [misClases, setMisClases] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -103,23 +108,37 @@ const DirectorDashboard = () => {
 
   useEffect(() => {
     if (user) {
-      loadStats();
+      loadCarrerasDirector();
     }
   }, [user]);
 
-  const loadStats = async () => {
+  useEffect(() => {
+    if (user) {
+      loadStats(carreraFiltroId);
+    }
+  }, [user, carreraFiltroId]);
+
+  const loadCarrerasDirector = async () => {
+    try {
+      const res = await carreraService.getMisCarreras();
+      if (res.success && res.carreras && res.carreras.length > 0) {
+        setCarrerasDirector(res.carreras);
+      }
+    } catch (err) {
+      console.error('Error cargando carreras del director:', err);
+    }
+  };
+
+  const loadStats = async (filtroCarreraId?: number) => {
     try {
       setLoadingStats(true);
-      const carreraId = user?.carrera?.id;
+      const carreraId = filtroCarreraId || user?.carrera?.id;
       const [resStats, resHorario] = await Promise.all([
         distribucionService.getEstado(carreraId),
         distribucionService.getMiDistribucion(carreraId)
       ]);
 
       if (resStats.success) {
-        // getEstado() (global) no calcula conflictos/sobrecupo — se recalculan
-        // aquí a partir de las clases ya evaluadas por getMiDistribucion(),
-        // que sí marca cada clase con su estado real (conflicto/sobrecupo).
         const clases = resHorario.success ? (resHorario.clases || []) : [];
         setStats({
           ...resStats.estadisticas,
@@ -138,7 +157,7 @@ const DirectorDashboard = () => {
   const handleClaseUpdate = async () => {
     setIsEditModalOpen(false);
     setEditingClase(null);
-    await loadStats();
+    await loadStats(carreraFiltroId);
   };
 
   const handleEditClaseFromReport = async (claseId: number) => {
@@ -153,26 +172,20 @@ const DirectorDashboard = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-    }
+  const handleFileChangeForCarrera = (carreraId: number, file: File | null) => {
+    setSelectedFilesPerCarrera(prev => ({ ...prev, [carreraId]: file }));
   };
 
-  const handleUpload = async (e: React.FormEvent) => {
+  const handleUploadCarrera = async (carreraId: number, e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) return;
-
-    const carreraId = user?.carrera?.id;
-    if (!carreraId) {
-      alert('No se pudo determinar el ID de tu carrera. Contacta al administrador.');
-      return;
-    }
+    const file = selectedFilesPerCarrera[carreraId] || selectedFile;
+    if (!file) return;
 
     try {
-      setUploading(true);
-      const res = await planificacionService.subirPlanificacion(selectedFile, carreraId);
+      setUploadingPerCarrera(prev => ({ ...prev, [carreraId]: true }));
+      const res = await planificacionService.subirPlanificacion(file, carreraId);
       if (res.success) {
+        setSelectedFilesPerCarrera(prev => ({ ...prev, [carreraId]: null }));
         setSelectedFile(null);
         if (res.reporte_salud) {
           setHealthReport(res.reporte_salud);
@@ -180,14 +193,14 @@ const DirectorDashboard = () => {
         } else {
           alert('Planificación subida exitosamente');
         }
-        loadStats();
+        loadStats(carreraFiltroId);
       }
     } catch (error: any) {
       const mensaje = error.response?.data?.mensaje || error.message || 'Error al subir planificación';
       alert(mensaje);
       console.error('Upload error:', error);
     } finally {
-      setUploading(false);
+      setUploadingPerCarrera(prev => ({ ...prev, [carreraId]: false }));
     }
   };
 
@@ -200,6 +213,26 @@ const DirectorDashboard = () => {
       case 'general':
         return (
           <div className="space-y-10 pb-20 animate-fade-in px-1">
+
+            {/* Selector Multi-Carrera para Directores con varias carreras asignadas */}
+            {carrerasDirector.length > 1 && (
+              <div className="flex flex-wrap items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-border shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">school</span>
+                  <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">Carrera Visualizada:</span>
+                </div>
+                <select
+                  value={carreraFiltroId || ''}
+                  onChange={(e) => setCarreraFiltroId(e.target.value ? Number(e.target.value) : undefined)}
+                  className="px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-border rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary outline-none cursor-pointer"
+                >
+                  <option value="">Todas mis carreras ({carrerasDirector.length})</option>
+                  {carrerasDirector.map(c => (
+                    <option key={c.id} value={c.id}>{c.carrera}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* 1. KPIs SUPERIORES - Vista Panorámica */}
             <div id="tour-kpis-director" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -419,26 +452,45 @@ const DirectorDashboard = () => {
                 <div id="tour-centro-datos">
                   <DashboardWidget title="Centro de Datos" icon="database">
                     <div className="space-y-8">
-                      {/* Horarios */}
-                      <div className="p-6 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
-                        <div className="relative z-10">
-                          <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-sm">backup</span>
-                            Subir Planificación
-                          </h4>
-                          <form onSubmit={handleUpload} className="space-y-4">
-                            <label className="relative flex flex-col items-center justify-center p-8 border-2 border-dashed border-primary/20 rounded-3xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
-                              <input type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-                              <span className="material-symbols-outlined text-4xl text-primary/30 group-hover/label:text-primary transition-colors">upload_file</span>
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase mt-3 text-center truncate w-full">
-                                {selectedFile ? selectedFile.name : 'Seleccionar Excel'}
-                              </span>
-                            </label>
-                            <Button variant="primary" fullWidth loading={uploading} size="sm" disabled={!selectedFile}>
-                              Procesar Ahora
-                            </Button>
-                          </form>
-                        </div>
+                      {/* Horarios por Carrera */}
+                      <div className="space-y-4">
+                        {(carrerasDirector.length > 0
+                          ? carrerasDirector
+                          : [{ id: user?.carrera?.id || 1, carrera: user?.carrera?.carrera || 'Mi Carrera' }]
+                        ).map((carreraItem) => {
+                          const fileForCarrera = selectedFilesPerCarrera[carreraItem.id] || null;
+                          const isUploadingThis = uploadingPerCarrera[carreraItem.id] || false;
+                          return (
+                            <div key={carreraItem.id} className="p-5 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
+                              <div className="relative z-10">
+                                <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-1 flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-sm">backup</span>
+                                  Subir Planificación
+                                </h4>
+                                <p className="text-xs font-black text-slate-800 dark:text-slate-200 mb-3 truncate">
+                                  {carreraItem.carrera}
+                                </p>
+                                <form onSubmit={(e) => handleUploadCarrera(carreraItem.id, e)} className="space-y-3">
+                                  <label className="relative flex flex-col items-center justify-center p-5 border-2 border-dashed border-primary/20 rounded-2xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
+                                    <input
+                                      type="file"
+                                      accept=".xlsx,.xls"
+                                      onChange={(e) => handleFileChangeForCarrera(carreraItem.id, e.target.files?.[0] || null)}
+                                      className="absolute inset-0 opacity-0 cursor-pointer"
+                                    />
+                                    <span className="material-symbols-outlined text-3xl text-primary/40 group-hover/label:text-primary transition-colors">upload_file</span>
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase mt-2 text-center truncate w-full">
+                                      {fileForCarrera ? fileForCarrera.name : 'Seleccionar Excel'}
+                                    </span>
+                                  </label>
+                                  <Button variant="primary" fullWidth loading={isUploadingThis} size="sm" disabled={!fileForCarrera}>
+                                    Procesar {carreraItem.carrera.length > 15 ? 'Carrera' : carreraItem.carrera}
+                                  </Button>
+                                </form>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* Gestión Manual */}

@@ -307,6 +307,11 @@ export const carreraService = {
     return response.data;
   },
 
+  getMisCarreras: async (): Promise<{ success: boolean; carreras: Array<{ id: number; carrera: string }> }> => {
+    const response = await api.get('/carreras/mis-carreras');
+    return response.data;
+  },
+
   createCarrera: async (carrera: string, facultad?: string): Promise<{ success: boolean; message: string; carrera: Carrera }> => {
     const response = await api.post('/carreras', { carrera, facultad });
     return response.data;

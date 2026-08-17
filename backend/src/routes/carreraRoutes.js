@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
   getCarreras,
+  getMisCarreras,
   createCarrera,
   updateCarrera,
   deleteCarrera
@@ -11,6 +12,7 @@ const {
 const { verificarAuth, verificarAdmin } = require('../middleware/auth');
 
 router.get('/', verificarAuth, getCarreras);
+router.get('/mis-carreras', verificarAuth, getMisCarreras);
 router.post('/', verificarAuth, verificarAdmin, createCarrera);
 router.put('/:id', verificarAuth, verificarAdmin, updateCarrera);
 router.delete('/:id', verificarAuth, verificarAdmin, deleteCarrera);

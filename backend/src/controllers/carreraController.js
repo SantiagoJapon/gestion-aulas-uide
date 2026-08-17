@@ -277,11 +277,38 @@ const deleteCarrera = async (req, res) => {
       error: 'Error al eliminar carrera. Es posible que existan clases vinculadas a esta carrera.',
       message: error.message
     });
+const getMisCarreras = async (req, res) => {
+  try {
+    const usuarioId = req.usuarioId || req.usuario?.id;
+    const rol = req.usuarioRol || req.usuario?.rol;
+
+    if (rol === 'admin') {
+      const carreras = await Carrera.findAll({ where: { activa: true }, order: [['carrera', 'ASC']] });
+      return res.json({ success: true, carreras });
+    }
+
+    const { resolverCarrerasDeDirector } = require('../utils/directorScope');
+    const { ids } = await resolverCarrerasDeDirector(usuarioId, req.usuario?.carrera_director);
+
+    if (!ids || ids.length === 0) {
+      return res.json({ success: true, carreras: [] });
+    }
+
+    const carreras = await Carrera.findAll({
+      where: { id: ids, activa: true },
+      order: [['carrera', 'ASC']]
+    });
+
+    res.json({ success: true, carreras });
+  } catch (error) {
+    console.error('Error al obtener mis carreras:', error);
+    res.status(500).json({ success: false, error: 'Error al obtener mis carreras', message: error.message });
   }
 };
 
 module.exports = {
   getCarreras,
+  getMisCarreras,
   createCarrera,
   updateCarrera,
   deleteCarrera
