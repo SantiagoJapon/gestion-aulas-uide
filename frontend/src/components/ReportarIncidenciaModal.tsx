@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { incidenciaService } from '../services/api';
 
 interface Props {
@@ -71,7 +72,7 @@ const ReportarIncidenciaModal = ({ aulaCode = '', onClose, onSuccess }: Props) =
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-card border border-border rounded-3xl shadow-2xl w-full max-w-md">
         {/* Header */}
@@ -219,7 +220,8 @@ const ReportarIncidenciaModal = ({ aulaCode = '', onClose, onSuccess }: Props) =
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
