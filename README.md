@@ -219,7 +219,10 @@ gestion-aulas-uide/
 │   │   │   │   ├── Navbar.tsx            # Barra de navegación
 │   │   │   │   └── CommandKSearch.tsx     # Búsqueda global (Cmd+K)
 │   │   │   ├── director/            # Componentes para Directores
-│   │   │   │   └── SubirPlanificacion.tsx
+│   │   │   │   ├── SubirPlanificacionCard.tsx  # Caja de subida de Excel, una por carrera asignada
+│   │   │   │   ├── HealthReportModal.tsx       # Reporte de salud de datos tras subir
+│   │   │   │   ├── ComunicadoModal.tsx
+│   │   │   │   └── MapaCalorDetallado.tsx
 │   │   │   ├── reservas/            # Componentes de reservas
 │   │   │   │   ├── ReservaFloatingWidget.tsx  # Ventana flotante (crear/cancelar reservas)
 │   │   │   │   └── ReservasAdminView.tsx      # Gestión de reservas (admin/director)
@@ -601,7 +604,7 @@ src/
 │   │   └── CommandKSearch.tsx     # Búsqueda global (Cmd+K)
 │   │
 │   ├── director/        # Componentes específicos de Directores
-│   │   ├── SubirPlanificacion.tsx # Upload de Excel
+│   │   ├── SubirPlanificacionCard.tsx # Upload de Excel, una caja por carrera asignada (multi-carrera)
 │   │   └── DirectorModal.tsx      # Gestión de directores
 │   │
 │   ├── reservas/         # Componentes de reservas

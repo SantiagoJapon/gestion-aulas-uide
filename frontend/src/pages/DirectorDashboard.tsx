@@ -4,7 +4,7 @@ import DashboardWidget from '../components/dashboard/DashboardWidget';
 import { AuthContext } from '../context/AuthContext';
 import MapaCalor from '../components/MapaCalor';
 import HorarioVisual from '../components/HorarioVisual';
-import { planificacionService, distribucionService, carreraService } from '../services/api';
+import { distribucionService, carreraService, SubirPlanificacionResponse } from '../services/api';
 import { Button } from '../components/common/Button';
 import UserSettings from '../components/UserSettings';
 import ReporteEjecutivo from '../components/ReporteEjecutivo';
@@ -16,6 +16,7 @@ import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
 
 import { HealthReportModal } from '../components/director/HealthReportModal';
+import SubirPlanificacionCard from '../components/director/SubirPlanificacionCard';
 import { ComunicadoModal } from '../components/director/ComunicadoModal';
 import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
 import IncidenciasView from '../components/IncidenciasView';
@@ -24,13 +25,10 @@ import ReservasAdminView from '../components/reservas/ReservasAdminView';
 const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('general');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Multi-carrera state
   const [carrerasDirector, setCarrerasDirector] = useState<Array<{ id: number; carrera: string }>>([]);
   const [carreraFiltroId, setCarreraFiltroId] = useState<number | undefined>(undefined);
-  const [selectedFilesPerCarrera, setSelectedFilesPerCarrera] = useState<Record<number, File | null>>({});
-  const [uploadingPerCarrera, setUploadingPerCarrera] = useState<Record<number, boolean>>({});
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -172,36 +170,14 @@ const DirectorDashboard = () => {
     }
   };
 
-  const handleFileChangeForCarrera = (carreraId: number, file: File | null) => {
-    setSelectedFilesPerCarrera(prev => ({ ...prev, [carreraId]: file }));
-  };
-
-  const handleUploadCarrera = async (carreraId: number, e: React.FormEvent) => {
-    e.preventDefault();
-    const file = selectedFilesPerCarrera[carreraId] || selectedFile;
-    if (!file) return;
-
-    try {
-      setUploadingPerCarrera(prev => ({ ...prev, [carreraId]: true }));
-      const res = await planificacionService.subirPlanificacion(file, carreraId);
-      if (res.success) {
-        setSelectedFilesPerCarrera(prev => ({ ...prev, [carreraId]: null }));
-        setSelectedFile(null);
-        if (res.reporte_salud) {
-          setHealthReport(res.reporte_salud);
-          setIsHealthModalOpen(true);
-        } else {
-          alert('Planificación subida exitosamente');
-        }
-        loadStats(carreraFiltroId);
-      }
-    } catch (error: any) {
-      const mensaje = error.response?.data?.mensaje || error.message || 'Error al subir planificación';
-      alert(mensaje);
-      console.error('Upload error:', error);
-    } finally {
-      setUploadingPerCarrera(prev => ({ ...prev, [carreraId]: false }));
+  const handleUploadSuccess = (res: SubirPlanificacionResponse) => {
+    if (res.reporte_salud) {
+      setHealthReport(res.reporte_salud);
+      setIsHealthModalOpen(true);
+    } else {
+      alert('Planificación subida exitosamente');
     }
+    loadStats(carreraFiltroId);
   };
 
   const openManualManagement = () => {
@@ -454,43 +430,24 @@ const DirectorDashboard = () => {
                     <div className="space-y-8">
                       {/* Horarios por Carrera */}
                       <div className="space-y-4">
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+                          <span className="material-symbols-outlined text-amber-600 text-base shrink-0">info</span>
+                          <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                            <span className="font-black">Incluye email, teléfono y cédula</span> de cada docente en el Excel para que el sistema cree sus cuentas de acceso automáticamente y envíe las credenciales.
+                          </p>
+                        </div>
+
                         {(carrerasDirector.length > 0
                           ? carrerasDirector
                           : [{ id: user?.carrera?.id || 1, carrera: user?.carrera?.carrera || 'Mi Carrera' }]
-                        ).map((carreraItem) => {
-                          const fileForCarrera = selectedFilesPerCarrera[carreraItem.id] || null;
-                          const isUploadingThis = uploadingPerCarrera[carreraItem.id] || false;
-                          return (
-                            <div key={carreraItem.id} className="p-5 bg-primary/5 rounded-[2rem] border border-primary/10 relative overflow-hidden group">
-                              <div className="relative z-10">
-                                <h4 className="text-[11px] font-black text-primary uppercase tracking-widest mb-1 flex items-center gap-2">
-                                  <span className="material-symbols-outlined text-sm">backup</span>
-                                  Subir Planificación
-                                </h4>
-                                <p className="text-xs font-black text-slate-800 dark:text-slate-200 mb-3 truncate">
-                                  {carreraItem.carrera}
-                                </p>
-                                <form onSubmit={(e) => handleUploadCarrera(carreraItem.id, e)} className="space-y-3">
-                                  <label className="relative flex flex-col items-center justify-center p-5 border-2 border-dashed border-primary/20 rounded-2xl hover:bg-primary/5 transition-all cursor-pointer group/label bg-white/50 dark:bg-black/20">
-                                    <input
-                                      type="file"
-                                      accept=".xlsx,.xls"
-                                      onChange={(e) => handleFileChangeForCarrera(carreraItem.id, e.target.files?.[0] || null)}
-                                      className="absolute inset-0 opacity-0 cursor-pointer"
-                                    />
-                                    <span className="material-symbols-outlined text-3xl text-primary/40 group-hover/label:text-primary transition-colors">upload_file</span>
-                                    <span className="text-[10px] font-bold text-muted-foreground uppercase mt-2 text-center truncate w-full">
-                                      {fileForCarrera ? fileForCarrera.name : 'Seleccionar Excel'}
-                                    </span>
-                                  </label>
-                                  <Button variant="primary" fullWidth loading={isUploadingThis} size="sm" disabled={!fileForCarrera}>
-                                    Procesar {carreraItem.carrera.length > 15 ? 'Carrera' : carreraItem.carrera}
-                                  </Button>
-                                </form>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        ).map((carreraItem) => (
+                          <SubirPlanificacionCard
+                            key={carreraItem.id}
+                            carreraId={carreraItem.id}
+                            carreraNombre={carreraItem.carrera}
+                            onSuccess={handleUploadSuccess}
+                          />
+                        ))}
                       </div>
 
                       {/* Gestión Manual */}
@@ -533,9 +490,25 @@ const DirectorDashboard = () => {
                             fullWidth
                             size="sm"
                             onClick={async () => {
-                              if (!confirm('¿Iniciar distribución para ' + (user?.carrera?.carrera || 'su carrera') + '?')) return;
+                              // Con varias carreras asignadas, exigimos una selección explícita
+                              // en "Carrera Visualizada" — de lo contrario el backend distribuiría
+                              // silenciosamente sobre la primera carrera del director.
+                              const distribucionCarreraId = carreraFiltroId
+                                ?? (carrerasDirector.length === 1 ? carrerasDirector[0].id : undefined)
+                                ?? (carrerasDirector.length === 0 ? user?.carrera?.id : undefined);
+
+                              if (carrerasDirector.length > 1 && !distribucionCarreraId) {
+                                alert('Selecciona una carrera específica en "Carrera Visualizada" antes de ejecutar la distribución.');
+                                return;
+                              }
+
+                              const distribucionCarreraNombre = carrerasDirector.find(c => c.id === distribucionCarreraId)?.carrera
+                                || user?.carrera?.carrera
+                                || 'su carrera';
+
+                              if (!confirm('¿Iniciar distribución para ' + distribucionCarreraNombre + '?')) return;
                               try {
-                                const res = await distribucionService.ejecutarDistribucion(user?.carrera?.id);
+                                const res = await distribucionService.ejecutarDistribucion(distribucionCarreraId);
                                 if (res.success) {
                                   alert('Distribución completada: ' + res.estadisticas.exitosas + ' clases asignadas.');
                                   loadStats();

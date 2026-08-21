@@ -68,6 +68,20 @@ exports.subirPlanificacion = async (req, res) => {
       });
     }
 
+    // Verificar permisos: un director solo puede subir planificaciones a
+    // carreras que tiene asignadas (soporta multi-carrera). Admin sube a
+    // cualquier carrera. Mismo patrón que descargarPlanificacion.
+    if (req.usuario?.rol === 'director') {
+      const carreraIds = req.usuario.carreraIds || [];
+      if (!carreraIds.includes(Number(carrera_id))) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          mensaje: 'No tiene permisos para subir planificaciones a esta carrera'
+        });
+      }
+    }
+
     // Obtener el nombre de la carrera desde el modelo Carrera
     const { Carrera } = require('../models');
     const carreraObj = await Carrera.findByPk(carrera_id, { transaction });
