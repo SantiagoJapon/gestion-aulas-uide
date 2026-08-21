@@ -261,6 +261,22 @@ const updateDirectorCarrera = async (req, res) => {
       });
     }
 
+    // Una carrera tiene un único director a la vez. Si ya hay OTRO director
+    // vinculado a esta carrera, lo desvinculamos primero — solo de esta
+    // carrera, conserva el resto de sus carreras asignadas — antes de
+    // vincular al nuevo. Sin esto, ambos quedaban vinculados a la vez.
+    const vinculoAnterior = await DirectorCarrera.findOne({
+      where: { carrera_id: nuevaCarrera.id, usuario_id: { [Op.ne]: usuario.id } }
+    });
+    if (vinculoAnterior) {
+      const directorAnteriorId = vinculoAnterior.usuario_id;
+      await vinculoAnterior.destroy();
+      const directorAnterior = await User.findByPk(directorAnteriorId);
+      if (directorAnterior) {
+        await sincronizarCarreraLegado(directorAnterior);
+      }
+    }
+
     const [, creado] = await DirectorCarrera.findOrCreate({
       where: { usuario_id: usuario.id, carrera_id: nuevaCarrera.id },
       defaults: { usuario_id: usuario.id, carrera_id: nuevaCarrera.id }
@@ -586,6 +602,13 @@ const deleteUsuario = async (req, res) => {
       mensaje: 'Usuario eliminado exitosamente'
     });
   } catch (error) {
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(409).json({
+        success: false,
+        error: 'No se pudo eliminar: hay datos vinculados a este usuario que la base de datos no pudo reasignar automáticamente. Contacta a soporte técnico (falta una regla de eliminación en cascada para esta relación).',
+        message: error.message
+      });
+    }
     handle500(res, error, 'deleteUsuario');
   }
 };

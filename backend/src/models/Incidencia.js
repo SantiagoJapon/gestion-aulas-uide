@@ -64,7 +64,9 @@ const Incidencia = sequelize.define('Incidencia', {
         references: {
             model: Usuario,
             key: 'id'
-        }
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
     }
 }, {
     tableName: 'incidencias',

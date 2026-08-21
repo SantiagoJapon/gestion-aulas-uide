@@ -631,14 +631,22 @@ export default function DirectorAssignmentView() {
                                     onClick={async () => {
                                         if (!confirm(`¿Desvincular a ${selectedCarrera.director_nombre} de ${selectedCarrera.nombre_carrera}? (conserva sus otras carreras, si tiene)`)) return;
                                         try {
-                                            const currentDir = directores.find(d => d.nombre + ' ' + d.apellido === selectedCarrera.director_nombre);
+                                            // director_nombre solo trae el primer nombre (no compara igual
+                                            // contra "nombre + apellido"); el email sí es único y viene en
+                                            // la misma respuesta, así que es la clave confiable para matchear.
+                                            const currentDir = directores.find(d => d.email === selectedCarrera.director_email);
                                             if (currentDir) {
                                                 // Quita SOLO esta carrera — no toca las demás que el director tenga asignadas
                                                 await usuarioService.removeDirectorCarrera(currentDir.id, selectedCarrera.id);
                                                 setIsDrawerOpen(false);
                                                 loadData();
+                                            } else {
+                                                alert('No se pudo identificar al director para desvincularlo. Actualiza la página e intenta de nuevo.');
                                             }
-                                        } catch (e) { console.error(e); }
+                                        } catch (e) {
+                                            console.error(e);
+                                            alert('Error al desvincular al director.');
+                                        }
                                     }}
                                     className="w-full text-red-500 text-xs font-bold hover:text-red-600 py-1 transition-colors"
                                 >

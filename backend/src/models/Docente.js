@@ -46,7 +46,9 @@ const Docente = sequelize.define('Docente', {
     references: {
       model: 'usuarios',
       key: 'id'
-    }
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
   }
 }, {
   tableName: 'docentes',

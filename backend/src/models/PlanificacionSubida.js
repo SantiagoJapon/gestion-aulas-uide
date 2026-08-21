@@ -21,7 +21,9 @@ const PlanificacionSubida = sequelize.define('PlanificacionSubida', {
     references: {
       model: 'usuarios',
       key: 'id'
-    }
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
   },
   nombre_archivo_original: {
     type: DataTypes.STRING,

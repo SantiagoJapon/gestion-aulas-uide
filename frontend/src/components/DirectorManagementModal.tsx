@@ -51,9 +51,10 @@ export default function DirectorManagementModal({ isOpen, onClose }: DirectorMan
         try {
             await usuarioService.deleteDirector(id);
             loadDirectores();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert('Error al eliminar director');
+            const mensaje = error.response?.data?.error || error.response?.data?.mensaje || 'Error al eliminar director';
+            alert(mensaje);
         }
     };
 

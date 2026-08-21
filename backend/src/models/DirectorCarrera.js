@@ -13,7 +13,9 @@ const DirectorCarrera = sequelize.define('DirectorCarrera', {
     references: {
       model: 'usuarios',
       key: 'id'
-    }
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
   },
   carrera_id: {
     type: DataTypes.INTEGER,
@@ -21,7 +23,9 @@ const DirectorCarrera = sequelize.define('DirectorCarrera', {
     references: {
       model: 'uploads_carreras',
       key: 'id'
-    }
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
   }
 }, {
   tableName: 'director_carreras',

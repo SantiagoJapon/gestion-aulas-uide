@@ -42,7 +42,9 @@ const Notificacion = sequelize.define('Notificacion', {
         references: {
             model: Usuario,
             key: 'id'
-        }
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
     },
     destinatario_id: { // Para mensaje directo a un usuario del sistema (profesor/admin)
         type: DataTypes.INTEGER,
@@ -50,7 +52,9 @@ const Notificacion = sequelize.define('Notificacion', {
         references: {
             model: Usuario,
             key: 'id'
-        }
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
     },
     estudiante_id: { // Para mensaje directo a un estudiante
         type: DataTypes.INTEGER,

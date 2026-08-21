@@ -38,6 +38,7 @@ const HistorialCarga = sequelize.define('HistorialCarga', {
       model: 'usuarios',
       key: 'id'
     },
+    onUpdate: 'CASCADE',
     onDelete: 'SET NULL'
   }
 }, {

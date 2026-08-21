@@ -39,7 +39,9 @@ const ReporteHistorial = sequelize.define('ReporteHistorial', {
         references: {
             model: 'usuarios',
             key: 'id'
-        }
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
     }
 }, {
     tableName: 'reportes_historial',

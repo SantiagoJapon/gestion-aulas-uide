@@ -50,7 +50,9 @@ const Reserva = sequelize.define('Reserva', {
         references: {
             model: Usuario,
             key: 'id'
-        }
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
     },
     estudiante_id: {
         type: DataTypes.INTEGER,
