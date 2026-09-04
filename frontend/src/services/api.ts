@@ -1379,6 +1379,9 @@ export const healthService = {
   }
 };
 
+// Módulo de planificación colaborativa (archivo separado — ver comentario de cabecera)
+export * from './api/planificacionCarrera';
+
 export default api;
 
 

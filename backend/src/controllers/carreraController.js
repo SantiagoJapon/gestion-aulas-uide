@@ -277,6 +277,9 @@ const deleteCarrera = async (req, res) => {
       error: 'Error al eliminar carrera. Es posible que existan clases vinculadas a esta carrera.',
       message: error.message
     });
+  }
+};
+
 const getMisCarreras = async (req, res) => {
   try {
     const usuarioId = req.usuarioId || req.usuario?.id;

@@ -4,6 +4,7 @@ const app = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { seedData } = require('./utils/seed');
 const expirarPendientes = require('./cron/expirePendientes');
+const revertirPlanificacionesVencidas = require('./cron/revertirPlanificacionesVencidas');
 
 const PORT = process.env.PORT || 3000;
 
@@ -47,6 +48,20 @@ const iniciarServidor = async () => {
         );
       }, 60 * 60 * 1000); // cada 1 hora
       console.log('⏰ Cron de expiración de pendientes activado (cada 1h)');
+
+      // Cron: revertir borradores reabiertos cuyo plazo venció (regla 3.2
+      // del módulo de planificación colaborativa). Se corre una vez al
+      // arranque además del intervalo: si el servidor estuvo caído justo
+      // cuando vencía un plazo, no hay que esperar una hora más.
+      revertirPlanificacionesVencidas().catch(err =>
+        console.error('[CRON] Error en revertirPlanificacionesVencidas:', err.message)
+      );
+      setInterval(() => {
+        revertirPlanificacionesVencidas().catch(err =>
+          console.error('[CRON] Error en revertirPlanificacionesVencidas:', err.message)
+        );
+      }, 60 * 60 * 1000); // cada 1 hora
+      console.log('⏰ Cron de reversión por vencimiento de plazo activado (cada 1h)');
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);

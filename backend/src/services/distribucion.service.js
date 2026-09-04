@@ -558,6 +558,229 @@ class DistribucionService {
       throw error;
     }
   }
+
+  // ============================================================
+  // FASE 3 — Distribución "fill the gaps" (módulo de planificación
+  // colaborativa). Método NUEVO, aditivo — no reemplaza ni modifica
+  // ejecutarDistribucion() (que sigue intacto para los endpoints legado
+  // /distribucion/ejecutar y /distribucion/forzar).
+  //
+  // Diferencias clave frente a ejecutarDistribucion():
+  //   - NUNCA escribe en la base de datos. 100% lectura — devuelve una
+  //     propuesta. La escritura vive en
+  //     planificacionCarrera.service.js#aplicarDistribucionFillGaps(),
+  //     que además re-verifica CONFIRMADO justo antes de tocar cada bloque
+  //     (restricción de arquitectura: esta función ni siquiera tiene el
+  //     import de nada con permiso de escritura sobre bloques_disponibilidad).
+  //   - Nunca limpia nada primero (a diferencia del paso 1 de
+  //     ejecutarDistribucion, que siempre hace destroy+null antes de
+  //     reasignar). No hay "reshuffle" — solo huecos.
+  //   - Candidatas: clases sin bloque_disponibilidad, o con bloque en
+  //     estado LIBRE. Bloques CONFIRMADO (inmutables) y EN_REVISION (un
+  //     director editando activamente) quedan fuera del cálculo por
+  //     completo — ni se leen para reasignar, ni se tocan.
+  //   - Reutiliza buscarAulaOptima() (motor heurístico existente) tal
+  //     cual, sin ninguna modificación — mismo scoring, mismo manejo de
+  //     restricción exclusiva por carrera, mismo reintento no-estricto
+  //     con hasta 25% de sobrecupo.
+  // ============================================================
+  // periodoId acota el cálculo a un período: `undefined` mantiene el
+  // comportamiento transversal histórico, `null` son las clases sin período
+  // asignado. Sin filtro, la distribución mezclaba clases de períodos
+  // distintos y trataba un aula ocupada el año pasado como ocupada hoy.
+  async calcularDistribucionFillGaps(carreraId = null, periodoId = undefined) {
+    // Requires diferidos: mantiene el import top-of-file del archivo
+    // intacto (solo Clase/Aula/Distribucion/Carrera), sin tocar una
+    // línea de código preexistente en este servicio.
+    const { BloqueDisponibilidad } = require('../models');
+    const { construirOcupacionActual, registrarOcupacionEnMemoria } = require('../utils/ocupacionAulas');
+
+    let nombreCarrera = null;
+    if (carreraId) {
+      const carrera = await Carrera.findByPk(carreraId);
+      if (carrera) nombreCarrera = carrera.carrera;
+    }
+
+    const whereClases = {};
+    if (nombreCarrera) whereClases.carrera = nombreCarrera;
+    if (periodoId !== undefined) whereClases.periodo_id = periodoId;
+
+    const todasLasClasesScope = await Clase.findAll({ where: whereClases });
+    const bloquesExistentes = todasLasClasesScope.length > 0
+      ? await BloqueDisponibilidad.findAll({ where: { clase_id: todasLasClasesScope.map((c) => c.id) } })
+      : [];
+    const bloquePorClase = new Map(bloquesExistentes.map((b) => [b.clase_id, b]));
+
+    // Candidatas: sin bloque + sin asignación legado, o bloque LIBRE.
+    const candidatas = todasLasClasesScope.filter((c) => {
+      const bloque = bloquePorClase.get(c.id);
+      if (!bloque) return !c.aula_asignada;
+      return bloque.estado === 'LIBRE';
+    });
+
+    const todasAulas = await Aula.findAll({
+      where: sequelize.where(sequelize.fn('UPPER', sequelize.col('estado')), 'DISPONIBLE')
+    });
+    const aulas = todasAulas.filter(a => !aulaExcluidaDeDistribucion(a));
+
+    // El complemento de `candidatas`: lo que la distribución NO va a tocar.
+    // §3.4 exige que el preview muestre esto explícitamente, porque es la
+    // mitad de la evidencia con la que el admin aprueba: antes se filtraba
+    // en silencio arriba y nunca se le mostraba, así que aprobaba viendo
+    // solo lo que cambiaba y no lo que quedaba fijo.
+    //
+    // Se usa todasAulas (no `aulas`) para resolver el código: un bloque
+    // confirmado puede estar en un aula excluida de la distribución, y
+    // seguir siendo una restricción real que el admin necesita ver.
+    const aulaPorId = new Map(todasAulas.map((a) => [a.id, a]));
+    const setCandidatas = new Set(candidatas.map((c) => c.id));
+    const sinCambios = todasLasClasesScope
+      .filter((c) => !setCandidatas.has(c.id))
+      .map((c) => {
+        const bloque = bloquePorClase.get(c.id);
+        const aula = bloque?.aula_id ? aulaPorId.get(bloque.aula_id) : null;
+
+        let motivo;
+        if (bloque?.estado === 'CONFIRMADO') {
+          motivo = 'CONFIRMADO por su carrera: restricción fija de esta distribución';
+        } else if (bloque?.estado === 'EN_REVISION') {
+          motivo = 'EN_REVISION: un director lo está editando';
+        } else {
+          motivo = 'Asignación previa de la distribución maestra';
+        }
+
+        return {
+          claseId: c.id,
+          materia: c.materia,
+          carrera: c.carrera,
+          estado: bloque?.estado || 'LEGADO',
+          aulaCodigo: aula ? aula.codigo : (c.aula_asignada || null),
+          dia: bloque?.dia || c.dia || null,
+          horaInicio: bloque?.hora_inicio || c.hora_inicio || null,
+          horaFin: bloque?.hora_fin || c.hora_fin || null,
+          motivo,
+        };
+      });
+
+    // Ocupación fija de partida: legado (Clase.aula_asignada) + CONFIRMADO
+    // (bloques_disponibilidad). Cada asignación propuesta dentro de esta
+    // misma corrida se agrega en memoria para no chocar con la siguiente.
+    const ocupacion = await construirOcupacionActual({ periodoId });
+
+    // Mismo ranking de fases que ejecutarDistribucion(), para mantener
+    // la misma prioridad institucional (labs/talleres > masivas > resto).
+    const fase1 = candidatas.filter(c => {
+      const mat = normalizarTexto(c.materia);
+      return mat.includes('LAB') || mat.includes('TALLER') || mat.includes('AUDIENCIA') || mat.includes('PRACTI');
+    });
+    const fase2 = candidatas.filter(c => !fase1.includes(c) && c.num_estudiantes >= 35)
+      .sort((a, b) => b.num_estudiantes - a.num_estudiantes);
+    const fase3 = candidatas.filter(c => !fase1.includes(c) && !fase2.includes(c));
+
+    // Equidad entre carreras (solo en corrida institucional, sin carreraId):
+    // agrupa cada fase por carrera (preservando el orden/criterio interno de
+    // la fase — ej. num_estudiantes desc en fase2) y las intercala en
+    // round-robin. Sin esto, una carrera con muchas clases insertadas antes
+    // en la tabla agota las aulas buenas de una fase antes de que otra
+    // carrera reciba su primer turno. No cambia buscarAulaOptima ni el
+    // criterio de orden dentro de cada carrera — solo el orden ENTRE
+    // carreras al procesar la fase.
+    const agruparPorCarrera = (lista) => {
+      const porCarrera = new Map();
+      for (const clase of lista) {
+        const key = clase.carrera || '';
+        if (!porCarrera.has(key)) porCarrera.set(key, []);
+        porCarrera.get(key).push(clase);
+      }
+      return porCarrera;
+    };
+
+    const intercalarPorCarrera = (lista) => {
+      const colas = [...agruparPorCarrera(lista).values()];
+      const resultado = [];
+      let quedanPendientes = colas.some(cola => cola.length > 0);
+      while (quedanPendientes) {
+        quedanPendientes = false;
+        for (const cola of colas) {
+          if (cola.length > 0) {
+            resultado.push(cola.shift());
+            if (cola.length > 0) quedanPendientes = true;
+          }
+        }
+      }
+      return resultado;
+    };
+
+    const fase1Equitativa = intercalarPorCarrera(fase1);
+    const fase2Equitativa = intercalarPorCarrera(fase2);
+    const fase3Equitativa = intercalarPorCarrera(fase3);
+
+    const propuestas = [];
+
+    const intentarAsignar = (clase, estrictoCapacidad) => {
+      const resultado = this.buscarAulaOptima(clase, aulas, ocupacion, estrictoCapacidad);
+      if (!resultado) return false;
+      propuestas.push({
+        claseId: clase.id,
+        materia: clase.materia,
+        carrera: clase.carrera,
+        aulaId: resultado.aula.id,
+        aulaCodigo: resultado.aula.codigo,
+        dia: clase.dia,
+        horaInicio: clase.hora_inicio,
+        horaFin: clase.hora_fin,
+        isOvercapacity: !!resultado.isOvercapacity
+      });
+      registrarOcupacionEnMemoria(ocupacion, {
+        aulaCodigo: resultado.aula.codigo,
+        dia: clase.dia,
+        horaInicio: clase.hora_inicio,
+        horaFin: clase.hora_fin
+      });
+      return true;
+    };
+
+    const procesarFase = (lista, estrictoCapacidad) => {
+      for (const clase of lista) {
+        if (!intentarAsignar(clase, estrictoCapacidad)) {
+          clase._sinAsignarFillGaps = true;
+        }
+      }
+    };
+
+    procesarFase(fase1Equitativa, true);
+    procesarFase(fase2Equitativa, true);
+    procesarFase(fase3Equitativa, true);
+
+    // Reintento no estricto (mismo 25% de flexibilidad que el motor original).
+    // También intercalado por carrera — la flexibilidad de sobrecupo es un
+    // recurso escaso igual que las aulas, aplica la misma regla de equidad.
+    const sinAsignar = [];
+    const fallidasFase123 = intercalarPorCarrera(candidatas.filter(c => c._sinAsignarFillGaps));
+    for (const clase of fallidasFase123) {
+      if (!intentarAsignar(clase, false)) {
+        sinAsignar.push({ claseId: clase.id, materia: clase.materia, motivo: 'Sin aula disponible en el horario' });
+      }
+    }
+
+    return {
+      // Nombres del contrato de §5.3: las dos listas separadas con las que
+      // el admin aprueba. `propuestas` y `sinCambios` quedan como alias
+      // internos para no romper a los consumidores que ya existían.
+      nuevas_asignaciones: propuestas,
+      sin_cambios: sinCambios,
+      propuestas,
+      sinCambios,
+      sinAsignar,
+      estadisticas: {
+        totalClasesEnAlcance: todasLasClasesScope.length,
+        totalCandidatas: candidatas.length,
+        sinCambios: sinCambios.length,
+        propuestas: propuestas.length,
+        sinAsignar: sinAsignar.length
+      }
+    };
+  }
 }
 
 module.exports = new DistribucionService();

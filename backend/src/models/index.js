@@ -19,6 +19,17 @@ const EstudianteMateria = require('./EstudianteMateria');
 
 const DirectorCarrera = require('./DirectorCarrera');
 
+// Módulo de planificación colaborativa
+const AuditoriaBloqueDisponibilidad = require('./AuditoriaBloqueDisponibilidad');
+const PreviewDistribucion = require('./PreviewDistribucion');
+const ConfiguracionPlanificacion = require('./ConfiguracionPlanificacion');
+const FlujoPlanificacion = require('./FlujoPlanificacion');
+const FlujoPlanificacionVersion = require('./FlujoPlanificacionVersion');
+const BloqueDisponibilidad = require('./BloqueDisponibilidad');
+const ConflictoDeteccion = require('./ConflictoDeteccion');
+const ReasignacionExcepcional = require('./ReasignacionExcepcional');
+const FechaLimiteExtendida = require('./FechaLimiteExtendida');
+
 // ============================================
 // RELACIONES ENTRE MODELOS
 // ============================================
@@ -141,6 +152,69 @@ Incidencia.belongsTo(User, { foreignKey: 'usuario_id', as: 'reportadoPor' });
 Docente.belongsTo(User, { foreignKey: 'usuario_id', as: 'usuario' });
 User.hasOne(Docente, { foreignKey: 'usuario_id', as: 'docente' });
 
+// ============================================
+// MÓDULO DE PLANIFICACIÓN COLABORATIVA
+// ============================================
+
+// ConfiguracionPlanificacion <-> Periodo / User (admin que la fijó)
+Periodo.hasMany(ConfiguracionPlanificacion, { foreignKey: 'periodo_id', as: 'configuracionesPlanificacion' });
+ConfiguracionPlanificacion.belongsTo(Periodo, { foreignKey: 'periodo_id', as: 'periodo' });
+ConfiguracionPlanificacion.belongsTo(User, { foreignKey: 'asignado_por', as: 'asignadoPor' });
+
+// FlujoPlanificacion <-> ConfiguracionPlanificacion (ventana global vigente)
+ConfiguracionPlanificacion.hasMany(FlujoPlanificacion, { foreignKey: 'configuracion_planificacion_id', as: 'flujos' });
+FlujoPlanificacion.belongsTo(ConfiguracionPlanificacion, { foreignKey: 'configuracion_planificacion_id', as: 'configuracion' });
+
+// FlujoPlanificacion <-> Carrera / Periodo
+Carrera.hasMany(FlujoPlanificacion, { foreignKey: 'carrera_id', as: 'flujosPlanificacion' });
+FlujoPlanificacion.belongsTo(Carrera, { foreignKey: 'carrera_id', as: 'carrera' });
+Periodo.hasMany(FlujoPlanificacion, { foreignKey: 'periodo_id', as: 'flujosPlanificacion' });
+FlujoPlanificacion.belongsTo(Periodo, { foreignKey: 'periodo_id', as: 'periodo' });
+
+// FlujoPlanificacionVersion <-> FlujoPlanificacion / User
+FlujoPlanificacion.hasMany(FlujoPlanificacionVersion, { foreignKey: 'flujo_planificacion_id', as: 'versiones' });
+FlujoPlanificacionVersion.belongsTo(FlujoPlanificacion, { foreignKey: 'flujo_planificacion_id', as: 'flujoPlanificacion' });
+FlujoPlanificacionVersion.belongsTo(User, { foreignKey: 'creado_por', as: 'creador' });
+
+// BloqueDisponibilidad <-> Clase / Aula / FlujoPlanificacion
+Clase.hasOne(BloqueDisponibilidad, { foreignKey: 'clase_id', as: 'bloqueDisponibilidad' });
+BloqueDisponibilidad.belongsTo(Clase, { foreignKey: 'clase_id', as: 'clase' });
+Aula.hasMany(BloqueDisponibilidad, { foreignKey: 'aula_id', as: 'bloquesDisponibilidad' });
+BloqueDisponibilidad.belongsTo(Aula, { foreignKey: 'aula_id', as: 'aula' });
+FlujoPlanificacion.hasMany(BloqueDisponibilidad, { foreignKey: 'flujo_planificacion_id', as: 'bloques' });
+BloqueDisponibilidad.belongsTo(FlujoPlanificacion, { foreignKey: 'flujo_planificacion_id', as: 'flujoPlanificacion' });
+
+// PreviewDistribucion <-> Carrera / Periodo / User
+Carrera.hasMany(PreviewDistribucion, { foreignKey: 'carrera_id', as: 'previewsDistribucion' });
+PreviewDistribucion.belongsTo(Carrera, { foreignKey: 'carrera_id', as: 'carrera' });
+PreviewDistribucion.belongsTo(Periodo, { foreignKey: 'periodo_id', as: 'periodo' });
+PreviewDistribucion.belongsTo(User, { foreignKey: 'creado_por', as: 'creador' });
+PreviewDistribucion.belongsTo(User, { foreignKey: 'aplicado_por', as: 'aplicador' });
+
+// AuditoriaBloqueDisponibilidad <-> BloqueDisponibilidad / User / Flujo / Versión
+BloqueDisponibilidad.hasMany(AuditoriaBloqueDisponibilidad, { foreignKey: 'bloque_id', as: 'auditoria' });
+AuditoriaBloqueDisponibilidad.belongsTo(BloqueDisponibilidad, { foreignKey: 'bloque_id', as: 'bloque' });
+AuditoriaBloqueDisponibilidad.belongsTo(User, { foreignKey: 'usuario_id', as: 'usuario' });
+AuditoriaBloqueDisponibilidad.belongsTo(FlujoPlanificacion, { foreignKey: 'flujo_planificacion_id', as: 'flujoPlanificacion' });
+AuditoriaBloqueDisponibilidad.belongsTo(FlujoPlanificacionVersion, { foreignKey: 'version_planificacion_id', as: 'version' });
+
+// ConflictoDeteccion <-> BloqueDisponibilidad / Carrera
+BloqueDisponibilidad.hasMany(ConflictoDeteccion, { foreignKey: 'bloque_id', as: 'conflictos' });
+ConflictoDeteccion.belongsTo(BloqueDisponibilidad, { foreignKey: 'bloque_id', as: 'bloque' });
+ConflictoDeteccion.belongsTo(Carrera, { foreignKey: 'carrera_solicitante_id', as: 'carreraSolicitante' });
+
+// ReasignacionExcepcional <-> BloqueDisponibilidad / User (admin)
+BloqueDisponibilidad.hasMany(ReasignacionExcepcional, { foreignKey: 'bloque_id', as: 'reasignacionesExcepcionales' });
+ReasignacionExcepcional.belongsTo(BloqueDisponibilidad, { foreignKey: 'bloque_id', as: 'bloque' });
+ReasignacionExcepcional.belongsTo(User, { foreignKey: 'admin_id', as: 'admin' });
+
+// FechaLimiteExtendida <-> Carrera / User (admin)
+Carrera.hasMany(FechaLimiteExtendida, { foreignKey: 'carrera_id', as: 'fechasLimiteExtendidas' });
+FechaLimiteExtendida.belongsTo(Carrera, { foreignKey: 'carrera_id', as: 'carrera' });
+FechaLimiteExtendida.belongsTo(User, { foreignKey: 'autorizado_por', as: 'autorizadoPorUsuario' });
+Periodo.hasMany(FechaLimiteExtendida, { foreignKey: 'periodo_id', as: 'fechasLimiteExtendidas' });
+FechaLimiteExtendida.belongsTo(Periodo, { foreignKey: 'periodo_id', as: 'periodo' });
+
 module.exports = {
   sequelize,
   User,
@@ -160,5 +234,14 @@ module.exports = {
   Incidencia,
   HistorialCarga,
   EstudianteMateria,
-  DirectorCarrera
+  DirectorCarrera,
+  AuditoriaBloqueDisponibilidad,
+  PreviewDistribucion,
+  ConfiguracionPlanificacion,
+  FlujoPlanificacion,
+  FlujoPlanificacionVersion,
+  BloqueDisponibilidad,
+  ConflictoDeteccion,
+  ReasignacionExcepcional,
+  FechaLimiteExtendida
 };

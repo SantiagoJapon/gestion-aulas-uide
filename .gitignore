@@ -44,6 +44,16 @@ frontend/build/
 coverage/
 .nyc_output/
 
+# Playwright E2E artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/screenshots/
+
+# Test output captured to file (PowerShell/CLI redirection)
+test-output.txt
+test-*.txt
+*-test-output.txt
+
 # Temporary
 tmp/
 temp/

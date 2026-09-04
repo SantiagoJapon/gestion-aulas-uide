@@ -83,6 +83,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         { label: 'Reservas', icon: 'book_online', tab: 'reservas', roles: ['admin', 'director'], category: 'espacios' },
         { label: 'Gestión Aulas', icon: 'room_preferences', tab: 'espacios', roles: ['admin'], category: 'espacios' },
         { label: 'Gestión Académica', icon: 'school', tab: 'gestion_academica', roles: ['director'], category: 'academico' },
+        { label: 'Planificación Colaborativa', icon: 'edit_calendar', tab: 'planificacion_colaborativa', roles: ['director', 'admin'], category: 'academico' },
         { label: 'Docentes', icon: 'badge', tab: 'docentes', roles: ['admin'], category: 'personas' },
         { label: 'Estudiantes', icon: 'group', tab: 'estudiantes', roles: ['admin'], category: 'personas' },
         { label: 'Mis Clases', icon: 'calendar_month', tab: 'horario', roles: ['profesor', 'docente', 'estudiante'], category: 'panel' },

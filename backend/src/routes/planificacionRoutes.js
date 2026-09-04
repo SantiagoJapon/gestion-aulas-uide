@@ -16,6 +16,16 @@ router.post(
   planificacionController.subirPlanificacion
 );
 
+// Validar planificación ANTES de subir — pre-chequeo, no persiste nada
+// (Director o Admin)
+router.post(
+  '/validar',
+  verificarAuth,
+  verificarRol('director', 'admin'),
+  planificacionController.uploadMiddleware,
+  planificacionController.validarPlanificacion
+);
+
 // Ver estado de distribución (según rol) - todas las carreras
 router.get(
   '/distribucion',

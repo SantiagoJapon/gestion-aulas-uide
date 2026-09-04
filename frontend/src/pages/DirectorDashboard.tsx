@@ -21,6 +21,7 @@ import { ComunicadoModal } from '../components/director/ComunicadoModal';
 import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
 import IncidenciasView from '../components/IncidenciasView';
 import ReservasAdminView from '../components/reservas/ReservasAdminView';
+import PlanificacionColaborativa from '../components/director/planificacion/PlanificacionColaborativa';
 
 const DirectorDashboard = () => {
   const { user } = useContext(AuthContext);
@@ -596,6 +597,25 @@ const DirectorDashboard = () => {
           </div>
         );
 
+      case 'planificacion_colaborativa': {
+        const carreraSeleccionadaId = carreraFiltroId
+          ?? (carrerasDirector.length === 1 ? carrerasDirector[0].id : undefined)
+          ?? (carrerasDirector.length === 0 ? user?.carrera?.id : undefined);
+
+        if (carrerasDirector.length > 1 && !carreraSeleccionadaId) {
+          return (
+            <div className="p-10 text-center bg-amber-50 rounded-3xl border border-amber-200">
+              <p className="text-sm font-black text-amber-800 uppercase tracking-widest">Selecciona una carrera</p>
+              <p className="text-xs text-amber-700 mt-2">
+                Elegí una carrera específica en "Carrera Visualizada" (pestaña Inicio) antes de entrar a Planificación Colaborativa.
+              </p>
+            </div>
+          );
+        }
+
+        if (!carreraSeleccionadaId) return null;
+        return <PlanificacionColaborativa carreraId={carreraSeleccionadaId} />;
+      }
       case 'heatmap':
         return <MapaCalorDetallado carreraId={user?.carrera?.id} />;
       case 'disponibilidad':

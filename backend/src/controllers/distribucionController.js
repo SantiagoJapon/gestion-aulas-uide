@@ -1,14 +1,15 @@
 const { sequelize } = require('../config/database');
 const { QueryTypes } = require('sequelize');
 const distribucionService = require('../services/distribucion.service');
-const { Carrera, Clase, Aula, Docente, EstudianteMateria, Estudiante } = require('../models');
+const { Carrera, Clase, Aula, Docente, EstudianteMateria, Estudiante, BloqueDisponibilidad } = require('../models');
 const { Op } = require('sequelize');
+const { enriquecerConModuloColaborativo } = require('../utils/vistaClases');
 
 /**
  * Función centralizada para loggeo de errores 500
  */
 const handle500 = (res, error, context) => {
-  console.error(`❌ [500] Error en ${context}:`, error);
+  console.error(` [500] Error en ${context}:`, error);
   res.status(500).json({
     success: false,
     error: `Error en ${context}`,
@@ -457,6 +458,47 @@ const obtenerMapaCalorDetallado = async (req, res) => {
       type: QueryTypes.SELECT
     });
 
+    // 2.5) Fase 7b: fusionar lo CONFIRMADO en el módulo colaborativo dentro
+    // del mismo scope de aulas ya filtrado (aulaIds). bloques_disponibilidad
+    // es más reciente que Clase.aula_asignada cuando existe — puede apuntar
+    // a OTRA aula (el director la movió) o cubrir una clase que el legado
+    // nunca asignó. Sin esto el heatmap muestra ocupación que ya no es
+    // cierta. EN_REVISION queda afuera a propósito (mismo criterio que
+    // calcularDistribucionFillGaps): no es un compromiso institucional
+    // todavía, no debe pintar el mapa como ocupado.
+    const bloquesConfirmados = await BloqueDisponibilidad.findAll({
+      where: { estado: 'CONFIRMADO', aula_id: { [Op.in]: aulaIds } },
+      include: [
+        { model: Aula, as: 'aula', attributes: ['id', 'codigo'] },
+        { model: Clase, as: 'clase', attributes: ['id', 'materia', 'carrera', 'carrera_id', 'num_estudiantes', 'docente'] }
+      ]
+    });
+
+    const idsConBloqueConfirmado = new Set(bloquesConfirmados.filter(b => b.clase).map(b => b.clase_id));
+    const clasesLegadoVigentes = clases.filter(c => !idsConBloqueConfirmado.has(c.id));
+
+    const clasesDesdeColaborativo = bloquesConfirmados
+      .filter(b => b.clase && b.aula)
+      .filter(b => {
+        // Mismo scope de carrera que ya aplica la query legado de arriba.
+        if (esDirector) return carreraIdsDirector.includes(b.clase.carrera_id);
+        if (carreraId && !isNaN(Number(carreraId))) return b.clase.carrera_id === Number(carreraId);
+        return true;
+      })
+      .map(b => ({
+        id: b.clase.id,
+        materia: b.clase.materia,
+        carrera: b.clase.carrera,
+        dia: b.dia,
+        hora_inicio: b.hora_inicio ? b.hora_inicio.slice(0, 5) : null,
+        hora_fin: b.hora_fin ? b.hora_fin.slice(0, 5) : null,
+        num_estudiantes: b.clase.num_estudiantes,
+        docente: b.clase.docente,
+        aula_asignada: b.aula.codigo
+      }));
+
+    const clasesUnificadas = [...clasesLegadoVigentes, ...clasesDesdeColaborativo];
+
     // 3) Construir matriz: aulaId_hora -> { ocupacion, clase, docente, estudiantes, carrera }
     const datos = {};
     for (const dia of diasFiltro) {
@@ -468,7 +510,7 @@ const obtenerMapaCalorDetallado = async (req, res) => {
       }
     }
 
-    for (const clase of clases) {
+    for (const clase of clasesUnificadas) {
       if (!clase.dia || !clase.hora_inicio) continue;
       if (!diasFiltro.includes(clase.dia)) continue;
 
@@ -557,9 +599,16 @@ const getClasesDistribucion = async (req, res) => {
       ORDER BY c.carrera, c.ciclo, c.materia
     `, { type: QueryTypes.SELECT });
 
+    // Fase 7b: enriquecer con lo CONFIRMADO/EN_REVISION del módulo
+    // colaborativo ANTES de detectar conflictos/sobrecupo — así esos
+    // cálculos usan el aula/horario real (el que confirmó el director),
+    // no el legado desactualizado. Sin esto, el admin ve una clase como
+    // "asignada" en un aula que el director ya movió a otra.
+    const clasesEnriquecidas = await enriquecerConModuloColaborativo(clases);
+
     // Detectar conflictos: misma aula, mismo día, horarios solapados
     const conflictos = new Set();
-    const clasesConAula = clases.filter(c => c.aula_asignada);
+    const clasesConAula = clasesEnriquecidas.filter(c => c.aula_asignada);
 
     for (let i = 0; i < clasesConAula.length; i++) {
       for (let j = i + 1; j < clasesConAula.length; j++) {
@@ -580,16 +629,22 @@ const getClasesDistribucion = async (req, res) => {
       }
     }
 
-    // Agregar estado a cada clase (incluye sobrecupo, igual que getMiDistribucion)
-    const clasesConEstado = clases.map(c => {
+    // Agregar estado a cada clase (incluye sobrecupo, igual que getMiDistribucion).
+    // 'en_revision' es nuevo (Fase 7b): un director la está trabajando en el
+    // módulo colaborativo, todavía no confirmó. Se evalúa antes que
+    // pendiente/asignada para no mostrarla como silenciosamente resuelta ni
+    // silenciosamente pendiente; conflicto sigue primero porque ya opera
+    // sobre el aula real (enriquecida) y es la señal más grave.
+    const clasesConEstado = clasesEnriquecidas.map(c => {
       const numEst = c.num_estudiantes || 0;
       const capAula = c.aula_capacidad || 0;
       const esSobrecupo = c.aula_asignada && capAula > 0 && numEst > capAula;
       const porcentajeUso = capAula > 0 ? Math.round((numEst / capAula) * 100) : null;
 
       let estado;
-      if (!c.aula_asignada) estado = 'pendiente';
-      else if (conflictos.has(c.id)) estado = 'conflicto';
+      if (conflictos.has(c.id)) estado = 'conflicto';
+      else if (c.fuente === 'colaborativo_en_revision') estado = 'en_revision';
+      else if (!c.aula_asignada) estado = 'pendiente';
       else if (esSobrecupo) estado = 'sobrecupo';
       else estado = 'asignada';
 
@@ -604,9 +659,15 @@ const getClasesDistribucion = async (req, res) => {
       };
     });
 
-    const totalClases = clases.length;
-    const asignadas = clases.filter(c => c.aula_asignada).length;
-    const pendientes = totalClases - asignadas;
+    // Contadas desde clasesConEstado.estado (mutuamente excluyente por
+    // construcción arriba) en vez de recalcular desde aula_asignada crudo —
+    // una clase en_revision puede tener aula_asignada legado no-nulo (ej.
+    // A-C17 legado mientras el director la mueve a otra aula) y contarla
+    // dos veces daría estadísticas inconsistentes.
+    const totalClases = clasesConEstado.length;
+    const asignadas = clasesConEstado.filter(c => c.estado === 'asignada' || c.estado === 'sobrecupo').length;
+    const enRevision = clasesConEstado.filter(c => c.estado === 'en_revision').length;
+    const pendientes = clasesConEstado.filter(c => c.estado === 'pendiente').length;
     const totalConflictos = conflictos.size;
     const totalSobrecupos = clasesConEstado.filter(c => c.sobrecupo).length;
 
@@ -616,6 +677,7 @@ const getClasesDistribucion = async (req, res) => {
       estadisticas: {
         total_clases: totalClases,
         asignadas,
+        en_revision: enRevision,
         pendientes,
         conflictos: totalConflictos,
         sobrecupos: totalSobrecupos,

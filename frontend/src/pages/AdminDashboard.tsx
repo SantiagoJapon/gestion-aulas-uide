@@ -19,6 +19,7 @@ import GuidedTour from '../components/common/GuidedTour';
 import { Step } from 'react-joyride';
 import ReservasAdminView from '../components/reservas/ReservasAdminView';
 import MapaCalorDetallado from '../components/director/MapaCalorDetallado';
+import PlanificacionAdmin from '../components/admin/planificacion/PlanificacionAdmin';
 
 import DashboardWidget from '../components/dashboard/DashboardWidget';
 import ValidacionDistribucion from '../components/dashboard/ValidacionDistribucion';
@@ -33,7 +34,7 @@ export default function AdminDashboard() {
     capacidadTotal: 0,
   });
   const [horarioKey, setHorarioKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'reservas' | 'espacios' | 'gestion_academica' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'heatmap' | 'distribucion' | 'reservas' | 'espacios' | 'gestion_academica' | 'planificacion_colaborativa' | 'docentes' | 'estudiantes' | 'reportes' | 'incidencias' | 'settings'>('general');
 
   // --- Tour de Guia ---
   const [runTour, setRunTour] = useState(false);
@@ -278,6 +279,9 @@ export default function AdminDashboard() {
 
       case 'espacios':
         return <GestionEspacios />;
+
+      case 'planificacion_colaborativa':
+        return <PlanificacionAdmin />;
 
       case 'estudiantes':
         return (

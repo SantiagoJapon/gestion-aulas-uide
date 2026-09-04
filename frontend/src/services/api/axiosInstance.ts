@@ -24,11 +24,20 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+// Endpoints públicos de autenticación: un 401 aquí significa "credenciales
+// inválidas" (el usuario todavía no tiene sesión), NO "tu sesión expiró".
+// Deben quedar excluidos del redirect automático de abajo para que el
+// propio formulario de login pueda mostrar su mensaje de error normalmente.
+const AUTH_ENDPOINTS_SIN_REDIRECT = ['/auth/login', '/estudiantes/login/'];
+
 // Interceptor: maneja expiración de sesión (401)
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        const url: string = error.config?.url || '';
+        const esIntentoDeLogin = AUTH_ENDPOINTS_SIN_REDIRECT.some((endpoint) => url.includes(endpoint));
+
+        if (error.response?.status === 401 && !esIntentoDeLogin) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             sessionStorage.removeItem('token');

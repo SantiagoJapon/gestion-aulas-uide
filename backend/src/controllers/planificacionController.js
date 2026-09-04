@@ -98,6 +98,41 @@ exports.subirPlanificacion = async (req, res) => {
     console.log('📁 Procesando planificación de carrera:', nombreCarrera);
 
     // ==========================================
+    // 🛡️ GUARDIA: no borrar en cascada trabajo del módulo colaborativo (Fase 6b).
+    // Clase.destroy() más abajo tiene ON DELETE CASCADE hacia
+    // bloques_disponibilidad (FK clase_id). Sin este chequeo, re-subir un
+    // Excel borra en silencio cualquier bloque EN_REVISION/CONFIRMADO que
+    // un director ya haya trabajado vía Planificación Colaborativa — sin
+    // aviso, sin relación entre lo que hace un director y lo que ve el
+    // resto del sistema. Bloques LIBRE no cuentan: no representan trabajo
+    // confirmado, son seguros de perder junto con la clase que reemplazan.
+    // ==========================================
+    const { BloqueDisponibilidad: BloqueDisponibilidadGuard } = require('../models');
+    const bloquesEnRiesgo = await BloqueDisponibilidadGuard.findAll({
+      where: { estado: { [require('sequelize').Op.in]: ['EN_REVISION', 'CONFIRMADO'] } },
+      include: [{
+        model: require('../models').Clase,
+        as: 'clase',
+        where: { carrera_id: carrera_id },
+        attributes: ['id', 'materia']
+      }],
+      transaction
+    });
+
+    if (bloquesEnRiesgo.length > 0 && String(req.body.confirmarSobrescritura) !== 'true') {
+      await transaction.rollback();
+      return res.status(409).json({
+        success: false,
+        mensaje: `Esta carrera tiene ${bloquesEnRiesgo.length} clase(s) con planificación colaborativa en curso (enviada o confirmada por el director). Subir un nuevo Excel las va a borrar. Si estás seguro, reenviá la subida con confirmarSobrescritura=true.`,
+        bloquesEnRiesgo: bloquesEnRiesgo.map((b) => ({
+          claseId: b.clase_id,
+          materia: b.clase ? b.clase.materia : null,
+          estado: b.estado
+        }))
+      });
+    }
+
+    // ==========================================
     // 📊 PARSEAR EXCEL (Parser local determinista)
     // n8n ya NO participa en el flujo crítico de parseo.
     // ==========================================
@@ -518,6 +553,114 @@ exports.subirPlanificacion = async (req, res) => {
     res.status(500).json({
       success: false,
       mensaje: 'Error al procesar planificación',
+      error: error.message
+    });
+  }
+};
+
+// ============================================
+// VALIDAR PLANIFICACIÓN (pre-chequeo, Fase 6a — no persiste nada)
+// ============================================
+// Corre el mismo parser que subirPlanificacion() pero es 100% de solo
+// lectura: nunca borra/crea Clase, nunca crea Docente/User, nunca envía
+// WhatsApp, nunca dispara la distribución automática. subirPlanificacion()
+// sigue exactamente igual — este endpoint es puramente aditivo, pensado
+// para que el director vea sobrecupo/choques ANTES de decidir subir.
+exports.validarPlanificacion = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, mensaje: 'No se recibió archivo' });
+    }
+
+    const { carrera_id } = req.body;
+    if (!carrera_id) {
+      return res.status(400).json({ success: false, mensaje: 'carrera_id es requerido' });
+    }
+
+    if (req.usuario?.rol === 'director') {
+      const carreraIds = req.usuario.carreraIds || [];
+      if (!carreraIds.includes(Number(carrera_id))) {
+        return res.status(403).json({
+          success: false,
+          mensaje: 'No tiene permisos para validar planificaciones de esta carrera'
+        });
+      }
+    }
+
+    const { Carrera, Aula } = require('../models');
+    const carreraObj = await Carrera.findByPk(carrera_id);
+    if (!carreraObj) {
+      return res.status(400).json({ success: false, mensaje: 'Carrera no encontrada' });
+    }
+    const nombreCarrera = carreraObj.carrera || `Carrera ${carrera_id}`;
+
+    const parseResult = processExcel(req.file.buffer);
+    const clasesValidas = parseResult.clases.filter(c => c.materia && c.materia.trim().length > 0);
+
+    if (clasesValidas.length === 0) {
+      return res.json({
+        success: true,
+        ok: [],
+        conflictos: [],
+        estadisticas: { totalFilas: 0, sinConflicto: 0, conConflicto: 0 },
+        mensaje: 'El Excel no contiene clases con materia válida.'
+      });
+    }
+
+    // Resolución de aula en memoria (una sola carga de Aula.findAll, sin
+    // transacción — no persiste nada). Misma heurística de texto que
+    // subirPlanificacion, adaptada a lookup en memoria para no repetir
+    // 3 queries LIKE por fila en un endpoint que puede llamarse varias
+    // veces mientras el director ajusta su Excel.
+    const todasAulas = await Aula.findAll();
+    const filas = clasesValidas.map((c, i) => {
+      let aulaResuelta = null;
+      if (c.aula && c.aula.trim().length > 0) {
+        const aulaVal = c.aula.toLowerCase().trim();
+        aulaResuelta =
+          todasAulas.find(a => (a.codigo || '').toLowerCase() === aulaVal) ||
+          todasAulas.find(a => (a.nombre || '').toLowerCase().includes(aulaVal)) ||
+          todasAulas.find(a => (a.codigo || '').toLowerCase().includes(aulaVal.replace(/[\s.]+/g, '')));
+      }
+      return {
+        fila: i + 1,
+        materia: c.materia.trim(),
+        ciclo: c.ciclo || '',
+        paralelo: c.paralelo || 'A',
+        dia: c.dia || '',
+        hora_inicio: c.hora_inicio || '',
+        hora_fin: c.hora_fin || '',
+        num_estudiantes: c.num_estudiantes || 0,
+        carrera: nombreCarrera,
+        aulaCodigo: aulaResuelta ? aulaResuelta.codigo : null,
+        aulaCapacidad: aulaResuelta ? aulaResuelta.capacidad : null
+      };
+    });
+
+    const { construirOcupacionActual } = require('../utils/ocupacionAulas');
+    // PENDIENTE (I1): sin acotar por período. Este handler no recibe ni
+    // resuelve un período, así que la validación del Excel se compara
+    // contra la ocupación de TODOS los períodos y puede reportar
+    // conflictos falsos contra clases de un ciclo anterior. Es
+    // conservador (avisa de más, nunca de menos), por eso no bloquea,
+    // pero para arreglarlo hay que decidir de dónde sale el período:
+    // del body de la petición o del período activo.
+    const ocupacionExistente = await construirOcupacionActual({});
+    const aulasParaSugerencia = todasAulas.filter(a => (a.estado || '').toLowerCase() === 'disponible');
+
+    const { validarClasesExcel } = require('../services/validacionExcel.service');
+    const resultado = validarClasesExcel(filas, ocupacionExistente, aulasParaSugerencia);
+
+    res.json({
+      success: true,
+      ...resultado,
+      hojaUsada: parseResult.hojaUsada
+    });
+  } catch (error) {
+    console.error('❌ Error al validar planificación:', error);
+    res.status(500).json({
+      success: false,
+      mensaje: 'Error al validar planificación',
       error: error.message
     });
   }
